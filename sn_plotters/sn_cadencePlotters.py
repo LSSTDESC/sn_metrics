@@ -5,6 +5,19 @@ import numpy.lib.recfunctions as rf
 
 
 class Lims:
+    """
+    Test
+
+    Parameters
+    --------------
+    ooo
+
+    Returns
+    ----------
+    bbb
+
+    """
+
     def __init__(self, Li_files, mag_to_flux_files, band, SNR,
                  mag_range=(23., 27.5), dt_range=(0.5, 25.)):
 

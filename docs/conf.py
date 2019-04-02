@@ -23,7 +23,8 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../metrics'))
+sys.path.insert(0, os.path.abspath('../sn_metrics'))
+sys.path.insert(0, os.path.abspath('../sn_plotters'))
 
 # -- General configuration ------------------------------------------------
 

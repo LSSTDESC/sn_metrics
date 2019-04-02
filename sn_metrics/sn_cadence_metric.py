@@ -9,21 +9,14 @@ class SNCadenceMetric(BaseMetric):
     """
     Measure mean m5, cadence per band and per season for SN depth measurements.
     SN depth estimations are done in sn_plotter/sn_cadencePlotters.py
-    """
-    """Calculate the sum-of-squares energy of the input.
 
-    We use the following definition for energy:
-
-    .. math::
-
-       E_{s} = \left< x(t),x(t) \right> = \int_{-\infty}^{\infty}{|x(t)|^{2}}dt
-
-    Args:
+    Parameters
+    --------------
     x : ndarray
         Input signal.
 
     Returns
-    -------
+    ----------
     e : float
         Energy of the signal `x`.
     """
@@ -36,7 +29,7 @@ class SNCadenceMetric(BaseMetric):
                  uniqueBlocks=False, config=None, **kwargs):
         """
 
-        Parameters:
+        Parameters
         ---------------
         list of simulation variables considered
         coadd: coaddition per night (bool)
@@ -82,7 +75,7 @@ class SNCadenceMetric(BaseMetric):
         """
         Runs the metric for each dataSlice
 
-        Parameters:
+        Parameters
         ---------------
         dataSlice: simulation data
         slicePoint:  slicePoint (default None)

@@ -10,8 +10,10 @@ Welcome to sn_metrics's documentation!
    :maxdepth: 3
    :caption: Contents:
 
-   cadence metric <api/metrics.sn_cadence_metric>
-
+   cadence metric <api/sn_metrics.sn_cadence_metric>
+   SNR metric <api/sn_metrics.sn_snr_metric>
+   cadence plotter <api/sn_plotters.sn_cadencePlotters>
+   SNR plotter <api/sn_plotters.sn_snrPlotters>
 
 Indices and tables
 ==================
