@@ -1,10 +1,10 @@
 import numpy as np
 from lsst.sims.maf.metrics import BaseMetric
-from sn_maf.sn_stackers.coadd_stacker import CoaddStacker
+from sn_stackers.coadd_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
 import multiprocessing
-from sn_maf.sn_tools.sn_cadence_tools import Generate_Fake_Observations
+from sn_tools.sn_cadence_tools import GenerateFakeObservations
 import yaml
 from scipy import interpolate
 
@@ -342,7 +342,7 @@ class SNSNRMetric(BaseMetric):
         m5_nocoadd = m5-1.25*np.log10(float(Nvisits)*Tvisit/30.)
         config_fake['m5'] = [m5_nocoadd]
         config_fake['seasons'] = [season]
-        fake_obs_season = Generate_Fake_Observations(config_fake).Observations
+        fake_obs_season = GenerateFakeObservations(config_fake).Observations
 
         return fake_obs_season
 

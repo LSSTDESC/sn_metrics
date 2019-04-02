@@ -8,10 +8,10 @@ import lsst.utils.tests
 import yaml
 import matplotlib.pylab as plt
 
-from sn_metrics.metrics.sn_cadence_metric import SNCadenceMetric
-import sn_metrics.plotters.sn_cadencePlotters as sn_plot
-from sn_metrics.metrics import SNSNRMetric
-#from sn_maf.sn_tools.sn_cadence_tools import Reference_Data
+from sn_metrics.sn_metrics.sn_cadence_metric import SNCadenceMetric
+import sn_metrics.sn_plotters.sn_cadencePlotters as sn_plot
+from sn_metrics.sn_metrics.sn_snr_metric import SNSNRMetric
+from sn_tools.sn_cadence_tools import ReferenceData
 
 m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
@@ -23,7 +23,7 @@ class TestSNmetrics(unittest.TestCase):
         """Test the SN cadence metric """
 
         # Load required SN info to run the metric
-        config = yaml.load(open('sn_maf/input/param_cadence_metric.yaml'))
+        config = yaml.load(open('config/param_cadence_metric.yaml'))
         SNR = dict(zip(config['Observations']['bands'],
                        config['Observations']['SNR']))
         band = 'r'
@@ -81,12 +81,11 @@ class TestSNmetrics(unittest.TestCase):
         zres = res_z['zlim_{}'.format(config['names_ref'][0])]
         assert(np.abs(zlim-zres) < 1.e-5)
 
-    """
     def testSNRMetric(self):
         # Test the SN SNR metric
 
         # Load required SN info to run the metric
-        config = yaml.load(open('sn_maf/input/param_snr_metric.yaml'))
+        config = yaml.load(open('config/param_snr_metric.yaml'))
         band = 'r'
         z = 0.3
         season = 1.
@@ -98,7 +97,7 @@ class TestSNmetrics(unittest.TestCase):
         names_ref = config['names_ref']
         coadd = False
 
-        lim_sn = Reference_Data(Li_files, mag_to_flux_files, band, z)
+        lim_sn = ReferenceData(Li_files, mag_to_flux_files, band, z)
 
         # Define fake data
         names = ['observationStartMJD', 'fieldRA', 'fieldDec',
@@ -137,7 +136,6 @@ class TestSNmetrics(unittest.TestCase):
         result_metric = result['detec_frac']['frac_obs_{}'.format(
             config['names_ref'][0])]
         assert(np.abs(result_metric-result_ref) < 1.e-5)
-    """
 
 
 """
