@@ -11,5 +11,9 @@ setup(
     license='BSD',
     packages=['metrics', 'plotters'],
     python_requires='>=3.5',
-    zip_safe=False
+    zip_safe=False,
+    dependency_links=[
+        'git+https://github.com/lsstdesc/sn_tools.git@dev'
+    ],
+
 )
