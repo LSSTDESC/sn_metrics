@@ -13,7 +13,7 @@ setup(
     python_requires='>=3.5',
     zip_safe=False,
     install_requires=[
-        'another-git-dependency',
+        'sn_tools',
     ],
     dependency_links=[
         'git+https://github.com/lsstdesc/sn_tools.git@dev'
