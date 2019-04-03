@@ -12,13 +12,46 @@ class SNCadenceMetric(BaseMetric):
 
     Parameters
     --------------
-    x : ndarray
-        Input signal.
+    metricName : str, opt
+      metric name
+      Default : SNCadenceMetric
+    mjdCol : str, opt
+      mjd column name
+      Default : observationStartMJD, 
+    RaCol : str,opt
+      Right Ascension column name
+      Default : fieldRA
+    DecCol : str,opt
+      Declinaison column name
+      Default : fieldDec
+    filterCol : str,opt
+       filter column name
+       Default: filter
+    m5Col : str, opt
+       five-sigma depth column name
+       Default : fiveSigmaDepth
+    exptimeCol : str,opt
+       exposure time column name
+       Default : visitExposureTime
+    nightCol : str,opt
+       night column name
+       Default : night 
+    obsidCol : str,opt
+      observation id column name
+      Default : observationId
+    nexpCol : str,opt
+      number of exposure column name
+      Default : numExposures
+     vistimeCol : str,opt
+        visit time column name
+        Default : visitTime
+    coadd : bool,opt
+       coaddition per night (and per band)
+       Default : True
+    names_ref : str,opt
+       names of the simulator used to generate reference files
+       Default : None
 
-    Returns
-    ----------
-    e : float
-        Energy of the signal `x`.
     """
 
     def __init__(self, metricName='SNCadenceMetric',
@@ -27,15 +60,6 @@ class SNCadenceMetric(BaseMetric):
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', coadd=True, names_ref=None,
                  uniqueBlocks=False, config=None, **kwargs):
-        """
-
-        Parameters
-        ---------------
-        list of simulation variables considered
-        coadd: coaddition per night (bool)
-        names_ref: names of the simulator considered
-
-        """
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -81,15 +105,15 @@ class SNCadenceMetric(BaseMetric):
         slicePoint:  slicePoint (default None)
 
 
-        Returns:
+        Returns
         -----------
         record array with the following fields:
-        fieldRA: RA of the field considered
-        fieldDec: Dec of the field considered
-        season:  season num
-        band:  band
-        m5_mean: mean five sigma depth (over the season)
-        cadence_mean: mean cadence (over the season)
+        fieldRA: RA of the field considered (float)
+        fieldDec: Dec of the field considered (float)
+        season:  season num (float)
+        band:  band (str)
+        m5_mean: mean five sigma depth (over the season) (float)
+        cadence_mean: mean cadence (over the season) (float)
 
         """
 

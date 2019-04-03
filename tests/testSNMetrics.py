@@ -8,9 +8,9 @@ import lsst.utils.tests
 import yaml
 import matplotlib.pylab as plt
 
-from sn_metrics.sn_metrics.sn_cadence_metric import SNCadenceMetric
-import sn_metrics.sn_plotters.sn_cadencePlotters as sn_plot
-from sn_metrics.sn_metrics.sn_snr_metric import SNSNRMetric
+from sn_metrics.sn_cadence_metric import SNCadenceMetric
+import sn_plotters.sn_cadencePlotters as sn_plot
+from sn_metrics.sn_snr_metric import SNSNRMetric
 from sn_tools.sn_cadence_tools import ReferenceData
 
 m5_ref = dict(
@@ -126,8 +126,8 @@ class TestSNmetrics(unittest.TestCase):
 
         # Run the metric with these fake data
         slicePoint = [0]
-        metric = SNSNRMetric(config=config, coadd=config['Observations']
-                             ['coadd'], lim_sn=lim_sn, names_ref=config['names_ref'], z=z)
+        metric = SNSNRMetric(lim_sn, config['names_ref'], config, coadd=config['Observations']
+                             ['coadd'],  z=z)
 
         result = metric.run(data, slicePoint)
 
@@ -135,6 +135,7 @@ class TestSNmetrics(unittest.TestCase):
         result_ref = 0.5234375
         result_metric = result['detec_frac']['frac_obs_{}'.format(
             config['names_ref'][0])]
+
         assert(np.abs(result_metric-result_ref) < 1.e-5)
 
 

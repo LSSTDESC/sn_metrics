@@ -11,15 +11,66 @@ from scipy import interpolate
 
 class SNSNRMetric(BaseMetric):
     """
-    Measure SN-SNR as a function of time.
+    Measure SN-Signal-to-Noise Ratio as a function of time.
+    Extract the detection rate from these measurements
+
+    Parameters
+    --------------
+    lim_sn : str
+       SN reference data (LC)
+    names_ref : str
+       names of the simulator used to generate reference files
+    config : dict
+       configuration parameters (SN parameters, ...)
+    metricName : str, opt
+      metric name
+      Default : SNSNRMetric
+    mjdCol : str, opt
+      mjd column name
+      Default : observationStartMJD,
+    RaCol : str,opt
+      Right Ascension column name
+      Default : fieldRA
+    DecCol : str,opt
+      Declinaison column name
+      Default : fieldDec
+    filterCol : str,opt
+       filter column name
+       Default: filter
+    m5Col : str, opt
+       five-sigma depth column name
+       Default : fiveSigmaDepth
+    exptimeCol : str,opt
+       exposure time column name
+       Default : visitExposureTime
+    nightCol : str,opt
+       night column name
+       Default : night
+    obsidCol : str,opt
+      observation id column name
+      Default : observationId
+    nexpCol : str,opt
+      number of exposure column name
+      Default : numExposures
+     vistimeCol : str,opt
+        visit time column name
+        Default : visitTime
+    coadd : bool,opt
+       coaddition per night (and per band)
+       Default : True
+    z : float,opt
+       redshift for the study
+       Default : 0.01
+
+
     """
 
-    def __init__(self, metricName='SNSNRMetric',
+    def __init__(self, lim_sn, names_ref,
+                 config, metricName='SNSNRMetric',
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', coadd=True, lim_sn=None, names_ref=None, z=0.01,
-                 uniqueBlocks=False, config=None, **kwargs):
+                 vistimeCol='visitTime', coadd=True, z=0.01, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -47,12 +98,7 @@ class SNSNRMetric(BaseMetric):
         self.min_rf_phase = -20.
         self.max_rf_phase = 60.
         self.z = z
-        # this is for output
-        """
-        save_status = config['Output']['save']
-        outdir = config['Output']['directory']
-        prodid = config['ProductionID']
-        """
+
         # sn parameters
         sn_parameters = config['SN parameters']
 
@@ -93,9 +139,9 @@ class SNSNRMetric(BaseMetric):
         # get infos on seasons
         self.info_season = self.SeasonInfo(dataSlice, seasons)
 
-        snr_obs = self.SNR_Season(dataSlice, seasons)  # SNR for observations
-        snr_fakes = self.SNR_Fakes(dataSlice, seasons)  # SNR for fakes
-        detect_frac = self.Detecting_Fraction(
+        snr_obs = self.SNRSeason(dataSlice, seasons)  # SNR for observations
+        snr_fakes = self.SNRFakes(dataSlice, seasons)  # SNR for fakes
+        detect_frac = self.DetectingFraction(
             snr_obs, snr_fakes)  # Detection fraction
 
         snr_obs = np.asarray(snr_obs)
@@ -104,12 +150,17 @@ class SNSNRMetric(BaseMetric):
 
         return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
 
-    def SNR_Season(self, dataSlice, seasons, j=-1, output_q=None):
+    def SNRSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
-        Estimate SNR for all seasons
-        Input: dataSlice, seasons
-        Output: array with the following fields all are of f8 type, except band which is of U1
-        SNR_SNCosmo , SNR_SNSim :  Signal-To-Noise Ratio estimator
+        Estimate SNR for a dataSlice
+
+        Parameters
+        ---------
+        Input: dataSlice
+        Returns
+        -----
+        array with the following fields (all are of f8 type, except band which is of U1)
+        SNR_name_ref:  Signal-To-Noise Ratio estimator
         season : season
         cadence: cadence of the season
         season_length: length of the season
@@ -166,7 +217,6 @@ class SNSNRMetric(BaseMetric):
         phase = time_for_lc/(1.+self.z)  # phases of LC points
         # flag: select LC points only in between min_rf_phase and max_phase
         phase_max = self.shift/(1.+self.z)
-        # flag = (phase >= self.min_rf_phase) & (phase <= self.max_rf_phase)
         flag = (phase >= self.min_rf_phase) & (phase <= phase_max)
 
         # tile m5, MJDs, and seasons to estimate all fluxes and SNR at once
@@ -209,8 +259,13 @@ class SNSNRMetric(BaseMetric):
     def SeasonInfo(self, dataSlice, seasons):
         """
         Get info on seasons for each dataSlice
-        input : dataSlice
-        output: recordarray with the following:
+        Parameters
+        -----
+        dataSlice : array
+          array of observations
+        Returns
+        -----
+        recordarray with the following fields:
         season, cadence, season_length, MJDmin, MJDmax
         """
 
@@ -234,11 +289,24 @@ class SNSNRMetric(BaseMetric):
     def SNR(self, time_lc, m5_vals, flag, season_vals, T0_lc):
         """
         Estimate SNR vs time
-        Input: time(MJDS-T0), m5, seasons of observations
-        flag: selection of LC points
-        Output:
-        estimated fluxes
-        array of snr
+        Parameters
+        -----------
+        time_lc :
+        m5_vals : list(float)
+           five-sigme depth values
+        flag : array(bool)
+          flag to be applied (example: selection from phase cut)
+        season_vals : array(float)
+          season values
+        T0_lc : array(float)
+           array of T0 for supernovae
+        Returns
+        -----
+        fluxes_tot : list(float)
+         list of (interpolated) fluxes
+        snr_tab : array with the following fields:
+          snr_name_ref (float) : Signal-to-Noise values
+          season (float) : season num.
         """
         seasons = np.ma.array(season_vals, mask=~flag)
         fluxes_tot = {}
@@ -279,8 +347,13 @@ class SNSNRMetric(BaseMetric):
     def GetSeason(self, T0):
         """
         Estimate the seasons corresponding to T0 values
-        Input: set of T0s
-        Output: set of correspondinf seasons
+        Parameters
+        -------
+        T0 : list(float)
+           set of T0 values
+        Returns
+        -----
+        list (float) of corresponding seasons
         """
 
         diff_min = T0[:, None]-self.info_season['MJD_min']
@@ -291,11 +364,21 @@ class SNSNRMetric(BaseMetric):
 
         return np.mean(seasons, axis=1)
 
-    def SNR_Fakes(self, dataSlice, seasons):
+    def SNRFakes(self, dataSlice, seasons):
         """
         Estimate SNR for fake observations
         in the same way as for observations (using SNR_Season)
+        Parameters:
+        -------
+        dataSlice : array
+           array of observations
+        Returns
+        -----
+        snr_tab : array with the following fields:
+          snr_name_ref (float) : Signal-to-Noise values
+          season (float) : season num.
         """
+
         # generate fake observations
         fake_obs = None
         for season in seasons:
@@ -303,22 +386,40 @@ class SNSNRMetric(BaseMetric):
             idx = (dataSlice[self.seasonCol] == season)
             band = np.unique(dataSlice[idx][self.filterCol])[0]
             if fake_obs is None:
-                fake_obs = self.Gen_Fakes(dataSlice[idx], band, season)
+                fake_obs = self.GenFakes(dataSlice[idx], band, season)
             else:
                 fake_obs = np.concatenate(
-                    (fake_obs, self.Gen_Fakes(dataSlice[idx], band, season)))
+                    (fake_obs, self.GenFakes(dataSlice[idx], band, season)))
 
         # estimate SNR vs MJD
 
-        snr_fakes = self.SNR_Season(
+        snr_fakes = self.SNRSeason(
             fake_obs[fake_obs['filter'] == band], seasons=seasons)
 
         return snr_fakes
 
-    def Gen_Fakes(self, slice_sel, band, season):
+    def GenFakes(self, slice_sel, band, season):
         """
         Generate fake observations
         according to observing values extracted from simulations
+        Parameters
+        -----
+        slice_sel : array
+          array of observations
+        band : str
+          band to consider
+        Returns
+        -----
+        fake_obs_season : array
+          array of observations with the following fields
+          observationStartMJD (float)
+          fieldRA (float)
+          fieldDec (float)
+          filter (U1)
+          fiveSigmaDepth (float)
+          numExposures (float)
+          visitExposureTime (float)
+          season (int)
         """
         fieldRA = np.mean(slice_sel[self.RaCol])
         fieldDec = np.mean(slice_sel[self.DecCol])
@@ -418,12 +519,25 @@ class SNSNRMetric(BaseMetric):
 
         # print(test)
 
-    def Detecting_Fraction(self, snr_obs, snr_fakes):
+    def DetectingFraction(self, snr_obs, snr_fakes):
         """
-        Estimate the time fraction (per season) for which
-        snr_obs > snr_fakes
-        This would correspond to a fraction of detectability.
+        Estimate the time fraction(per season) for which
+        snr_obs > snr_fakes = detection rate
         For regular cadences one should get a result close to 1
+        Parameters
+        -------
+        snr_obs : array
+         array estimated using SNRSeason(observations)
+         snr_fakes: array
+           array estimated using SNRSeason(fakes)
+        Returns
+        -----
+        record array with the following fields:
+          fieldRA (float)
+          fieldDec (float)
+          season (float)
+         band (str)
+         frac_obs_name_ref (float)
         """
 
         ra = np.mean(snr_obs['fieldRA'])
