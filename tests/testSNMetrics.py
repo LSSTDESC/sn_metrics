@@ -9,7 +9,8 @@ import yaml
 import matplotlib.pylab as plt
 
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
-import sn_plotters.sn_cadencePlotters as sn_plot
+import sn_plotters.sn_cadencePlotters as sn_cadence_plot
+import sn_plotters.sn_snrPlotters as sn_snr_plot
 from sn_metrics.sn_snr_metric import SNSNRMetric
 from sn_tools.sn_cadence_tools import ReferenceData
 
@@ -71,11 +72,11 @@ class TestSNmetrics(unittest.TestCase):
         assert((np.abs(m5_mean-result['m5_mean']) < 1.e-5) &
                (np.abs(cadence_mean-result['cadence_mean']) < 1.e-5))
 
-        res_z = sn_plot.Plot_Cadence(band, config['Li file'], config['Mag_to_flux file'],
-                                     SNR[band],
-                                     result,
-                                     config['names_ref'],
-                                     mag_range=mag_range, dt_range=dt_range)
+        res_z = sn_cadence_plot.PlotCadence(band, config['Li file'], config['Mag_to_flux file'],
+                                            SNR[band],
+                                            result,
+                                            config['names_ref'],
+                                            mag_range=mag_range, dt_range=dt_range)
 
         zlim = 0.3743514031001232
         zres = res_z['zlim_{}'.format(config['names_ref'][0])]
@@ -137,6 +138,27 @@ class TestSNmetrics(unittest.TestCase):
             config['names_ref'][0])]
 
         assert(np.abs(result_metric-result_ref) < 1.e-5)
+
+        # now let us test the plotter
+        snr_obs = result['snr_obs']
+        snr_fakes = result['snr_fakes']
+        detec_frac = result['detec_frac']
+
+        for inum, (Ra, Dec, season) in enumerate(np.unique(snr_obs[['fieldRA', 'fieldDec', 'season']])):
+            idx = (snr_obs['fieldRA'] == Ra) & (
+                snr_obs['fieldDec'] == Dec) & (snr_obs['season'] == season)
+            sel_obs = snr_obs[idx]
+            idxb = (np.abs(snr_fakes['fieldRA'] - Ra) < 1.e-5) & (np.abs(
+                snr_fakes['fieldDec'] - Dec) < 1.e-5) & (snr_fakes['season'] == season)
+            sel_fakes = snr_fakes[idxb]
+            sn_snr_plot.SNRPlot(Ra, Dec, season, sel_obs,
+                                sel_fakes, config, metric, z)
+
+        sn_snr_plot.DetecFracPlot(detec_frac, config['Pixelisation']
+                                  ['nside'], config['names_ref'])
+
+        sn_snr_plot.DetecFracHist(
+            detec_frac, config['names_ref'])
 
 
 """

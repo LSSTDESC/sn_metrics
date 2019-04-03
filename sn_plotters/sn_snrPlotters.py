@@ -6,13 +6,42 @@ import numpy.lib.recfunctions as rf
 
 def SNRPlot(Ra, Dec, season, data, data_fakes, config, metric, z, draw_fakes=True):
     """
-    Signal-to-Ratio vs MJD plot
+    Signal-to-Ratio vs MJD plot for one field and one season
     SNR of  a SN with T0=MJD-10 days
-    (x1,color) chosen in the input yaml file
-    Fake observations can be superimposed
-    One plot per field, per season.
-    """
 
+    Parameters
+    -------------
+    Ra : float
+      right ascension of the field
+    Dec : float
+       declination of the field
+    data : array
+        data (obs) with the fields
+        SNR_name_ref : SNR (float)
+        season : season  num(float)
+        cadence: cadence (float)
+        season_length: season length (float)
+        MJD_min: min MJD (float)
+        DayMax: SN T0 (float)
+        MJD: MJD (float) 
+        m5_eff: effective 5-sigma depth (float)
+        fieldRA: right ascension (float)
+        fieldDec: declination (float)
+        band: filter (str)
+        m5: five-sigma depth (float)
+        Nvisits: number of visits (int)
+        ExposureTime: exposure time (float)
+    data_fakes : array 
+         fake data (same fields as data)
+    config : dict
+         configuration parameters
+    metric : 
+    z : float
+       redshift
+    draw_fakes : bool,opt
+       if True : fake data are superimposed
+
+    """
     colors = ['b', 'r']
     fontsize = 15
     bands_ref = 'ugrizy'
@@ -80,10 +109,22 @@ def SNRPlot(Ra, Dec, season, data, data_fakes, config, metric, z, draw_fakes=Tru
 
 
 def DetecFracPlot(data, nside, names_ref):
+    """
+    Plot Mollweid view of detection rates
 
+    Parameters
+    --------------
+    data : array with the following fields:
+    fieldRA : right ascension (float)
+    fieldDec : declination (float)
+    season : season num (float)
+    band : filter (str)
+    frac_obs_name_ref : fraction of detection (detection rate) (float)
+    name_ref : list(str)
+      name of the simulator used to produce the reference files
+    """""
     data_heal = GetHealpix(data, nside)
     npix = hp.nside2npix(nside)
-    # print(data_heal)
     for band, season in np.unique(data_heal[['band', 'season']]):
         idx = (data_heal['band'] == band) & (data_heal['season'] == season)
         sel = data_heal[idx]
@@ -103,8 +144,97 @@ def DetecFracPlot(data, nside, names_ref):
     plt.show()
 
 
-def GetHealpix(data, nside):
+def DetecFracHist(data, names_ref):
+    """
+    Plot histogram of detection rates 
 
+    Parameters
+    --------------
+    data : array with the following fields:
+    fieldRA : right ascension (float)
+    fieldDec : declination (float)
+    season : season num (float)
+    band : filter (str)
+    frac_obs_name_ref : fraction of detection (detection rate) (float)
+    name_ref : list(str)
+      name of the simulator used to produce the reference files
+    """""
+
+    for band, season in np.unique(data[['band', 'season']]):
+        idx = (data['band'] == band) & (np.abs(data['season']-season) < 1.e-5)
+        DetecFracHist_bandseason(data[idx], band, season, names_ref)
+
+
+def DetecFracHist_bandseason(data, band, season, names_ref):
+    """
+    Plot histogram of detection rates per band and per season
+
+    Parameters
+    -------------- 
+    data : array with the following fields:
+    fieldRA : right ascension (float)
+    fieldDec : declination (float)
+    season : season num (float)
+    band : filter (str)
+    frac_obs_name_ref : fraction of detection (detection rate) (float)
+    name_ref : list(str)
+      name of the simulator used to produce the reference files
+    """
+    r = []
+    fontsize = 15
+    colors = dict(zip(range(0, 4), ['r', 'k', 'b', 'g']))
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    title = '{} band - season {}'.format(band, season)
+    fig.suptitle(title, fontsize=fontsize)
+    label = []
+    xminv = []
+    xmaxv = []
+
+    for j, name in enumerate(names_ref):
+        xminv.append(np.min(data['frac_obs_'+name]))
+        xmaxv.append(np.max(data['frac_obs_'+name]))
+
+        xmin = np.min(xminv)
+        xmax = np.max(xmaxv)
+        xstep = 0.025
+        bins = np.arange(xmin, xmax+xstep, xstep)
+
+        for j, name in enumerate(names_ref):
+            label.append(
+                name + '  Detection rate = ' + str(np.median(np.round(data['frac_obs_'+name], 2))))
+            ax.hist(data['frac_obs_'+name], range=[xmin, xmax],
+                    bins=bins, histtype='step', color=colors[j], linewidth=2)
+
+        ax.set_xlabel('Detection Rate', fontsize=fontsize)
+        ax.set_ylabel(r'Number of Entries', fontsize=fontsize)
+        # ax.set_xticks(np.arange(0.5,0.75,0.05))
+        ax.tick_params(labelsize=fontsize)
+        ax.grid()
+        plt.legend(label, fontsize=fontsize-2., loc='upper left')
+        plt.grid(1)
+        plt.savefig('test.png')
+
+
+def GetHealpix(data, nside):
+    """
+    Get Healpix map of data
+
+    Parameters
+    --------------
+    data : array with the following fields
+    fieldRA : float
+      right ascension
+    fieldDec : float
+      declination
+
+    Returns
+    ---------
+    array with the following fields:
+      fieldRA: right ascension (float)
+      fieldDec : declination (float)
+      healpixID : healpix id (int)
+    """
     res = data.copy()
     npix = hp.nside2npix(nside)
     table = hp.ang2vec(data['fieldRA'], data['fieldDec'], lonlat=True)
