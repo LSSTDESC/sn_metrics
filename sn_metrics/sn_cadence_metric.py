@@ -48,9 +48,9 @@ class SNCadenceMetric(BaseMetric):
     coadd : bool,opt
        coaddition per night (and per band)
        Default : True
-    names_ref : str,opt
-       names of the simulator used to generate reference files
-       Default : None
+    season : list,opt
+       list of seasons to process
+       Default : -1 (all seasons)
 
     """
 
@@ -58,7 +58,7 @@ class SNCadenceMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', coadd=True, names_ref=None,
+                 vistimeCol='visitTime', coadd=True, season=-1,
                  uniqueBlocks=False, config=None, **kwargs):
 
         self.mjdCol = mjdCol
@@ -81,19 +81,20 @@ class SNCadenceMetric(BaseMetric):
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         self.filterNames = np.array(['u', 'g', 'r', 'i', 'z', 'y'])
-        self.config = config
+        #self.config = config
 
         # sn parameters
-        sn_parameters = config['SN parameters']
+        #sn_parameters = config['SN parameters']
 
-        self.field_type = config['Observations']['fieldtype']
-        self.season = config['Observations']['season']
+        self.season = season
+        #self.field_type = config['Observations']['fieldtype']
+        #self.season = config['Observations']['season']
         #self.season = season
-        area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
-        if self.field_type == 'WFD':
+        #area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
+        #if self.field_type == 'WFD':
             # in that case the survey area is the healpix area
-            area = hp.nside2pixarea(
-                config['Pixelisation']['nside'], degrees=True)
+            #area = hp.nside2pixarea(
+                #config['Pixelisation']['nside'], degrees=True)
 
     def run(self, dataSlice, slicePoint=None):
         """
@@ -118,7 +119,7 @@ class SNCadenceMetric(BaseMetric):
         """
 
         # Cut down to only include filters in correct wave range.
-        goodFilters = np.in1d(dataSlice['filter'], self.filterNames)
+        goodFilters = np.in1d(dataSlice[self.filterCol], self.filterNames)
         dataSlice = dataSlice[goodFilters]
         if dataSlice.size == 0:
             return None
@@ -128,23 +129,42 @@ class SNCadenceMetric(BaseMetric):
         r = []
         fieldRA = np.mean(dataSlice[self.RaCol])
         fieldDec = np.mean(dataSlice[self.DecCol])
-        band = np.unique(dataSlice[self.filterCol])[0]
+        band = "".join([val for val in np.unique(dataSlice[self.filterCol])])
 
-        seasons = [self.season]
+        seasons = self.season
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
         for season in seasons:
             idx = dataSlice[self.seasonCol] == season
             sel = dataSlice[idx]
-            bins = np.arange(np.floor(sel[self.mjdCol].min()), np.ceil(
-                sel[self.mjdCol].max()), 1.)
-            c, b = np.histogram(sel[self.mjdCol], bins=bins)
-            cadence = 1. / c.mean()
-            #time_diff = sel[self.mjdCol][1:]-sel[self.mjdCol][:-1]
+            if 'healpixID' in sel.dtype.names:
+                healpixID = np.unique(sel['healpixID'])[0]
+                pixRa = np.unique(sel['pixRa'])[0]
+                pixDec = np.unique(sel['pixDec'])[0]
+            else:
+                healpixID = -1
+                pixRa = -1
+                pixDec = -1
+            if len(sel) > 0:
+                m5_mean = np.mean(sel[self.m5Col])
+            else:
+                m5_mean = 0
+            if len(sel) < 5:
+                cadence = 0.
+            else:
+                bins = np.arange(np.floor(sel[self.mjdCol].min()), np.ceil(
+                    sel[self.mjdCol].max()), 1.)
+                c, b = np.histogram(sel[self.mjdCol], bins=bins)
+                if len(c)>= 2:
+                    cadence = 1. / c.mean()
+                else:
+                    cadence = 0.
+                
             r.append((fieldRA, fieldDec, season, band,
-                      np.mean(sel[self.m5Col]), cadence))
+                      m5_mean, cadence, len(sel), healpixID, pixRa, pixDec))
 
+        
         res = np.rec.fromrecords(
-            r, names=['fieldRA', 'fieldDec', 'season', 'band', 'm5_mean', 'cadence_mean'])
+            r, names=['fieldRA', 'fieldDec', 'season', 'band', 'm5_mean', 'cadence_mean','Nobs','healpixID','pixRa','pixDec'])
 
         return res

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import interpolate
 import numpy.lib.recfunctions as rf
-
+import healpy as hp
 
 class Lims:
 
@@ -289,7 +289,7 @@ class Lims:
         # plt.grid(1)
 
 
-def PlotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range):
+def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range):
     """
     Main cadence plot
     Will display two plots: cadence plot and histogram of redshift limits
@@ -328,9 +328,12 @@ def PlotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
     """
 
-    if len(metricValues) > 1:
-        res = np.concatenate(metricValues)
-        res = np.unique(res)
+    if not isinstance(metricValues, np.ndarray):
+        if len(metricValues) > 1:
+            res = np.concatenate(metricValues)
+            res = np.unique(res)
+        else:
+            res = metricValues
     else:
         res = metricValues
     lim_sn = Lims(Li_files, mag_to_flux_files,
@@ -361,3 +364,42 @@ def PlotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
         lim_sn.PlotHistzlim(names_ref, restot)
 
     return restot
+
+def plotMollview(nside, tab, xval, legx, unitx, minx, band, seasons=-1):
+    
+    print(tab.dtype)
+    if seasons == -1:
+        plotMollviewIndiv(nside, tab, xval, legx, unitx,minx, band, season=seasons)
+    else:
+        for season in seasons:
+            idx = tab['season'] == season
+            sel = tab[idx]
+            plotMollviewIndiv(nside, sel, xval, legx, unitx,minx, band, season=seasons)
+
+def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
+
+    med = np.median(tab[xval])
+    print(np.min(tab[xval]))
+    leg = 'band {} - {} \n {}: {} {}'.format(band,'season {}'.format(season),legx,np.round(med,1),unitx)
+    if season == -1:
+        leg = 'band {} - {} \n {}: {} {}'.format(band,'all seasons',legx,np.round(med,1),unitx)
+
+    npix = hp.nside2npix(nside=nside)
+    cmap = plt.cm.jet
+ 
+    cmap.set_under('w')
+    #cmap.set_bad('w')
+
+    hpxmap = np.zeros(npix, dtype=np.float)
+    if season > 0.:
+        hpxmap[tab['healpixID']] = tab[xval]
+    else:
+        r = []
+        for healpixID in np.unique(tab['healpixID']):
+            ii = tab['healpixID']==healpixID
+            sel = tab[ii]
+            r.append((healpixID,np.median(sel[xval])))
+        rt = np.rec.fromrecords(r, names=['healpixID',xval])
+        hpxmap[rt['healpixID']] = rt[xval]
+    hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True)
+    hp.graticule()
