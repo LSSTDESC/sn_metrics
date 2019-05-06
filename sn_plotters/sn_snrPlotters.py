@@ -108,7 +108,7 @@ def SNRPlot(Ra, Dec, season, data, data_fakes, config, metric, z, draw_fakes=Tru
                 fontsize=fontsize)
 
 
-def DetecFracPlot(data, nside, names_ref):
+def detecFracPlot(data, nside, names_ref):
     """
     Plot Mollweid view of detection rates
 
@@ -144,7 +144,7 @@ def DetecFracPlot(data, nside, names_ref):
     plt.show()
 
 
-def DetecFracHist(data, names_ref):
+def detecFracHist(data, names_ref):
     """
     Plot histogram of detection rates 
 
@@ -162,10 +162,10 @@ def DetecFracHist(data, names_ref):
 
     for band, season in np.unique(data[['band', 'season']]):
         idx = (data['band'] == band) & (np.abs(data['season']-season) < 1.e-5)
-        DetecFracHist_bandseason(data[idx], band, season, names_ref)
+        detecFracHist_bandseason(data[idx], band, season, names_ref)
 
 
-def DetecFracHist_bandseason(data, band, season, names_ref):
+def detecFracHist_bandseason(data, band, season, names_ref):
     """
     Plot histogram of detection rates per band and per season
 

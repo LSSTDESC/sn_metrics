@@ -39,12 +39,12 @@ class Lims:
         self.dt_range = dt_range
 
         for val in Li_files:
-            self.lims.append(self.GetLims(self.band, np.load(val), SNR))
+            self.lims.append(self.getLims(self.band, np.load(val), SNR))
         for val in mag_to_flux_files:
             self.mag_to_flux.append(np.load(val))
-        self.Interp()
+        self.interp()
 
-    def GetLims(self, band, tab, SNR):
+    def getLims(self, band, tab, SNR):
         """
         Estimations of the limits
 
@@ -80,7 +80,7 @@ class Lims:
 
         return lims
 
-    def Mesh(self, mag_to_flux):
+    def mesh(self, mag_to_flux):
         """
         Mesh grid to estimate five-sigma depth values (m5) from mags input.
 
@@ -108,7 +108,7 @@ class Lims:
 
         return M5, DT, metric
 
-    def Interp(self):
+    def interp(self):
         """
         Estimate a grid of interpolated values
         in the plane (m5, cadence, metric)
@@ -124,7 +124,7 @@ class Lims:
         metric_all = []
 
         for val in self.mag_to_flux:
-            M5, DT, metric = self.Mesh(val)
+            M5, DT, metric = self.mesh(val)
             M5_all.append(M5)
             DT_all.append(DT)
             metric_all.append(metric)
@@ -156,7 +156,7 @@ class Lims:
 
         plt.close(figa)  # do not display
 
-    def InterpGriddata(self, index, data):
+    def interpGriddata(self, index, data):
         """
         Estimate metric interpolation for data (m5,cadence)
 
@@ -176,7 +176,7 @@ class Lims:
             data['m5_mean'], data['cadence_mean']), method='cubic')
         return res
 
-    def PlotCadenceMetric(self, restot,
+    def plotCadenceMetric(self, restot,
                           target={  # 'g': (26.91, 3.), # was 25.37
                               'r': (26.5, 3.),  # was 26.43
                               # was 25.37      # could be 25.3 (400-s)
@@ -204,7 +204,7 @@ class Lims:
         metric_all = []
 
         for val in self.mag_to_flux:
-            M5, DT, metric = self.Mesh(val)
+            M5, DT, metric = self.mesh(val)
             M5_all.append(M5)
             DT_all.append(DT)
             metric_all.append(metric)
@@ -243,7 +243,7 @@ class Lims:
         plt.ylim(self.dt_range)
         plt.grid(1)
 
-    def PlotHistzlim(self, names_ref, restot):
+    def plotHistzlim(self, names_ref, restot):
         """
         Plot histogram of redshift limits
 
@@ -289,7 +289,7 @@ class Lims:
         # plt.grid(1)
 
 
-def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range):
+def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range, display=True):
     """
     Main cadence plot
     Will display two plots: cadence plot and histogram of redshift limits
@@ -339,7 +339,8 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     lim_sn = Lims(Li_files, mag_to_flux_files,
                   band, SNR, mag_range=mag_range, dt_range=dt_range)
 
-    lim_sn.PlotCadenceMetric(res)
+    if display:
+        lim_sn.plotCadenceMetric(res)
 
     restot = None
 
@@ -352,7 +353,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     if len(res) > 0:
         resu = np.copy(res)
         for io, interp in enumerate(names_ref):
-            zlims = lim_sn.InterpGriddata(io, res)
+            zlims = lim_sn.interpGriddata(io, res)
             zlims[np.isnan(zlims)] = -1
             print(io, zlims)
             resu = rf.append_fields(resu, 'zlim_'+names_ref[io], zlims)
@@ -361,7 +362,8 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
         else:
             restot = np.concatenate((restot, resu))
 
-        lim_sn.PlotHistzlim(names_ref, restot)
+        if display:
+            lim_sn.plotHistzlim(names_ref, restot)
 
     return restot
 
