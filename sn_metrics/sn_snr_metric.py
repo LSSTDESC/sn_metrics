@@ -9,6 +9,7 @@ import yaml
 from scipy import interpolate
 import os
 
+
 class SNSNRMetric(BaseMetric):
     """
     Measure SN-Signal-to-Noise Ratio as a function of time.
@@ -74,7 +75,7 @@ class SNSNRMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=-1,shift=10.,coadd=True, z=0.01, display=False, **kwargs):
+                 vistimeCol='visitTime', season=-1, shift=10., coadd=True, z=0.01, display=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -113,7 +114,7 @@ class SNSNRMetric(BaseMetric):
         #self.field_type = config['Observations']['fieldtype']
         #self.season = config['Observations']['season']
         # self.season = season
-        #area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
+        # area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
         """
         if self.field_type == 'WFD':
             # in that case the survey area is the healpix area
@@ -123,14 +124,13 @@ class SNSNRMetric(BaseMetric):
         # Load the reference Li file
 
         # self.Li = np.load(config['Reference File'])
-        
+
         self.lim_sn = lim_sn
         self.names_ref = names_ref
 
         self.display = display
 
     def run(self, dataSlice,  slicePoint=None):
-
         """
         goodFilters = np.in1d(dataSlice[self.filterCol], self.filterNames)
         dataSlice = dataSlice[goodFilters]
@@ -142,31 +142,31 @@ class SNSNRMetric(BaseMetric):
         """
 
         seasons = self.season
-        
+
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
 
         # get infos on seasons
-        self.info_season = self.SeasonInfo(dataSlice, seasons)
+        self.info_season = self.seasonInfo(dataSlice, seasons)
         if self.info_season is None:
             return None
 
         seasons = self.info_season['season']
 
-        #print('fibnally',self.info_season)
-        snr_obs = self.SNRSeason(dataSlice, seasons)  # SNR for observations
-        snr_fakes = self.SNRFakes(dataSlice, seasons)  # SNR for fakes
-        detect_frac = self.DetectingFraction(
+        # print('fibnally',self.info_season)
+        snr_obs = self.snrSeason(dataSlice, seasons)  # SNR for observations
+        snr_fakes = self.snrFakes(dataSlice, seasons)  # SNR for fakes
+        detect_frac = self.detectingFraction(
             snr_obs, snr_fakes)  # Detection fraction
 
         snr_obs = np.asarray(snr_obs)
         snr_fakes = np.asarray(snr_fakes)
         detect_frac = np.asarray(detect_frac)
 
-        #return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
+        # return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
         return detect_frac
-        
-    def SNRSeason(self, dataSlice, seasons, j=-1, output_q=None):
+
+    def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
         Estimate SNR for a dataSlice
 
@@ -275,14 +275,14 @@ class SNSNRMetric(BaseMetric):
 
        # Display LC and SNR at the same time
         if self.display:
-            self.Plot(fluxes_tot, mjd_vals, flag, snr, T0_lc, dates)
+            self.plot(fluxes_tot, mjd_vals, flag, snr, T0_lc, dates)
 
         if output_q is not None:
             output_q.put({j: snr})
         else:
             return snr
 
-    def SeasonInfo(self, dataSlice, seasons):
+    def seasonInfo(self, dataSlice, seasons):
         """
         Get info on seasons for each dataSlice
         Parameters
@@ -368,14 +368,14 @@ class SNSNRMetric(BaseMetric):
         idmask = np.where(snr_tab.mask)
         if len(idmask) > 0:
             tofill = np.copy(snr_tab['season'])
-            season_recover = self.GetSeason(
+            season_recover = self.getSeason(
                 T0_lc[np.where(snr_tab.mask)])
             tofill[idmask] = season_recover
             snr_tab = np.ma.filled(snr_tab, fill_value=tofill)
 
         return fluxes_tot, snr_tab
 
-    def GetSeason(self, T0):
+    def getSeason(self, T0):
         """
         Estimate the seasons corresponding to T0 values
         Parameters
@@ -395,7 +395,7 @@ class SNSNRMetric(BaseMetric):
 
         return np.mean(seasons, axis=1)
 
-    def SNRFakes(self, dataSlice, seasons):
+    def snrFakes(self, dataSlice, seasons):
         """
         Estimate SNR for fake observations
         in the same way as for observations (using SNR_Season)
@@ -416,22 +416,22 @@ class SNSNRMetric(BaseMetric):
 
             idx = (dataSlice[self.seasonCol] == season)
             band = np.unique(dataSlice[idx][self.filterCol])[0]
-            fakes = self.GenFakes(dataSlice[idx], band, season)
-            
+            fakes = self.genFakes(dataSlice[idx], band, season)
+
             if fake_obs is None:
                 fake_obs = fakes
             else:
-                #print(season,fake_obs,fakes)
+                # print(season,fake_obs,fakes)
                 fake_obs = np.concatenate((fake_obs, fakes))
 
         # estimate SNR vs MJD
 
-        snr_fakes = self.SNRSeason(
+        snr_fakes = self.snrSeason(
             fake_obs[fake_obs['filter'] == band], seasons=seasons)
 
         return snr_fakes
 
-    def GenFakes(self, slice_sel, band, season):
+    def genFakes(self, slice_sel, band, season):
         """
         Generate fake observations
         according to observing values extracted from simulations
@@ -466,7 +466,7 @@ class SNSNRMetric(BaseMetric):
         m5 = np.median(slice_sel[self.m5Col])
         Tvisit = 30.
 
-        #print(season,cadence,mjd_min,mjd_max,season_length,Nvisits)
+        # print(season,cadence,mjd_min,mjd_max,season_length,Nvisits)
         config_fake = yaml.load(open(self.fakeFile))
         config_fake['Ra'] = fieldRA
         config_fake['Dec'] = fieldDec
@@ -482,7 +482,7 @@ class SNSNRMetric(BaseMetric):
 
         return fake_obs_season
 
-    def Plot(self, fluxes, mjd, flag, snr, T0_lc, dates):
+    def plot(self, fluxes, mjd, flag, snr, T0_lc, dates):
 
         dirSave = 'Plots'
         if not os.path.isdir(dirSave):
@@ -556,7 +556,7 @@ class SNSNRMetric(BaseMetric):
 
         # print(test)
 
-    def DetectingFraction(self, snr_obs, snr_fakes):
+    def detectingFraction(self, snr_obs, snr_fakes):
         """
         Estimate the time fraction(per season) for which
         snr_obs > snr_fakes = detection rate
@@ -564,9 +564,9 @@ class SNSNRMetric(BaseMetric):
         Parameters
         -------
         snr_obs : array
-         array estimated using SNRSeason(observations)
+         array estimated using snrSeason(observations)
          snr_fakes: array
-           array estimated using SNRSeason(fakes)
+           array estimated using snrSeason(fakes)
         Returns
         -----
         record array with the following fields:

@@ -62,8 +62,7 @@ class TestSNmetrics(unittest.TestCase):
 
         # Run the metric with these fake data
         slicePoint = [0]
-        metric = SNCadenceMetric(
-            config=config, coadd=config['Observations']['coadd'], names_ref=config['names_ref'])
+        metric = SNCadenceMetric(coadd=config['Observations']['coadd'])
         result = metric.run(data, slicePoint)
 
         # And the result should be...
@@ -72,7 +71,7 @@ class TestSNmetrics(unittest.TestCase):
         assert((np.abs(m5_mean-result['m5_mean']) < 1.e-5) &
                (np.abs(cadence_mean-result['cadence_mean']) < 1.e-5))
 
-        res_z = sn_cadence_plot.PlotCadence(band, config['Li file'], config['Mag_to_flux file'],
+        res_z = sn_cadence_plot.plotCadence(band, config['Li file'], config['Mag_to_flux file'],
                                             SNR[band],
                                             result,
                                             config['names_ref'],
@@ -134,16 +133,20 @@ class TestSNmetrics(unittest.TestCase):
 
         # And the result should be...
         result_ref = 0.5234375
-        result_metric = result['detec_frac']['frac_obs_{}'.format(
-            config['names_ref'][0])]
+        # result_metric = result['detec_frac']['frac_obs_{}'.format(
+        #    config['names_ref'][0])]
+        result_metric = result['frac_obs_{}'.format(config['names_ref'][0])]
 
         assert(np.abs(result_metric-result_ref) < 1.e-5)
 
         # now let us test the plotter
+        """
         snr_obs = result['snr_obs']
         snr_fakes = result['snr_fakes']
         detec_frac = result['detec_frac']
-
+        """
+        detec_frac = result
+        """
         for inum, (Ra, Dec, season) in enumerate(np.unique(snr_obs[['fieldRA', 'fieldDec', 'season']])):
             idx = (snr_obs['fieldRA'] == Ra) & (
                 snr_obs['fieldDec'] == Dec) & (snr_obs['season'] == season)
@@ -153,11 +156,11 @@ class TestSNmetrics(unittest.TestCase):
             sel_fakes = snr_fakes[idxb]
             sn_snr_plot.SNRPlot(Ra, Dec, season, sel_obs,
                                 sel_fakes, config, metric, z)
-
-        sn_snr_plot.DetecFracPlot(detec_frac, config['Pixelisation']
+        """
+        sn_snr_plot.detecFracPlot(detec_frac, config['Pixelisation']
                                   ['nside'], config['names_ref'])
 
-        sn_snr_plot.DetecFracHist(
+        sn_snr_plot.detecFracHist(
             detec_frac, config['names_ref'])
 
 
