@@ -153,7 +153,6 @@ class SNSNRMetric(BaseMetric):
 
         seasons = self.info_season['season']
 
-        # print('fibnally',self.info_season)
         snr_obs = self.snrSeason(dataSlice, seasons)  # SNR for observations
         snr_fakes = self.snrFakes(dataSlice, seasons)  # SNR for fakes
         detect_frac = self.detectingFraction(
@@ -237,9 +236,11 @@ class SNSNRMetric(BaseMetric):
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates-self.shift
 
+        
         # for these DayMax, estimate the phases of LC points corresponding to the current dataSlice MJDs
         diff_time = dates[:, np.newaxis]-mjds
         time_for_lc = -T0_lc[:, None]+mjds
+        
         phase = time_for_lc/(1.+self.z)  # phases of LC points
         # flag: select LC points only in between min_rf_phase and max_phase
         phase_max = self.shift/(1.+self.z)
@@ -249,6 +250,9 @@ class SNSNRMetric(BaseMetric):
         m5_vals = np.tile(sel[self.m5Col], (len(time_for_lc), 1))
         mjd_vals = np.tile(sel[self.mjdCol], (len(time_for_lc), 1))
         season_vals = np.tile(sel[self.seasonCol], (len(time_for_lc), 1))
+       
+        
+
 
         # estimate fluxes and snr in SNR function
         fluxes_tot, snr = self.SNR(
@@ -299,7 +303,6 @@ class SNSNRMetric(BaseMetric):
         for season in seasons:
             idx = (dataSlice[self.seasonCol] == season)
             slice_sel = dataSlice[idx]
-            #print(season, len(slice_sel))
             if len(slice_sel) < 5:
                 continue
             slice_sel.sort(order=self.mjdCol)
@@ -340,6 +343,7 @@ class SNSNRMetric(BaseMetric):
           season (float) : season num.
         """
         seasons = np.ma.array(season_vals, mask=~flag)
+        
         fluxes_tot = {}
         snr_tab = None
 
@@ -421,7 +425,6 @@ class SNSNRMetric(BaseMetric):
             if fake_obs is None:
                 fake_obs = fakes
             else:
-                # print(season,fake_obs,fakes)
                 fake_obs = np.concatenate((fake_obs, fakes))
 
         # estimate SNR vs MJD
@@ -466,7 +469,6 @@ class SNSNRMetric(BaseMetric):
         m5 = np.median(slice_sel[self.m5Col])
         Tvisit = 30.
 
-        # print(season,cadence,mjd_min,mjd_max,season_length,Nvisits)
         config_fake = yaml.load(open(self.fakeFile))
         config_fake['Ra'] = fieldRA
         config_fake['Dec'] = fieldDec
