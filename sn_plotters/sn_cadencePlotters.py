@@ -4,6 +4,7 @@ from scipy import interpolate
 import numpy.lib.recfunctions as rf
 import healpy as hp
 
+
 class Lims:
 
     """
@@ -306,7 +307,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
         band considered
     SNR : float
         Signal-To-Noise Ratio cut
-    metricValues: 
+    metricValues:
         values for the metric
     names_ref : list(str)
         name of the simulator used to generate reference files
@@ -328,17 +329,19 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
     """
 
+    print(type(metricValues), len(metricValues))
+    print(len(metricValues[0]))
     if not isinstance(metricValues, np.ndarray):
-        if len(metricValues) > 1:
-            res = np.concatenate(metricValues)
+        if len(metricValues) >= 1:
+            for val in metricValues:
+                res = np.concatenate(val)
             res = np.unique(res)
-        else:
-            res = metricValues
     else:
         res = metricValues
     lim_sn = Lims(Li_files, mag_to_flux_files,
                   band, SNR, mag_range=mag_range, dt_range=dt_range)
 
+    # print('there man', res)
     if display:
         lim_sn.plotCadenceMetric(res)
 
@@ -367,30 +370,36 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
     return restot
 
+
 def plotMollview(nside, tab, xval, legx, unitx, minx, band, seasons=-1):
-    
+
     print(tab.dtype)
     if seasons == -1:
-        plotMollviewIndiv(nside, tab, xval, legx, unitx,minx, band, season=seasons)
+        plotMollviewIndiv(nside, tab, xval, legx, unitx,
+                          minx, band, season=seasons)
     else:
         for season in seasons:
             idx = tab['season'] == season
             sel = tab[idx]
-            plotMollviewIndiv(nside, sel, xval, legx, unitx,minx, band, season=seasons)
+            plotMollviewIndiv(nside, sel, xval, legx, unitx,
+                              minx, band, season=seasons)
+
 
 def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
 
     med = np.median(tab[xval])
     print(np.min(tab[xval]))
-    leg = 'band {} - {} \n {}: {} {}'.format(band,'season {}'.format(season),legx,np.round(med,1),unitx)
+    leg = 'band {} - {} \n {}: {} {}'.format(
+        band, 'season {}'.format(season), legx, np.round(med, 1), unitx)
     if season == -1:
-        leg = 'band {} - {} \n {}: {} {}'.format(band,'all seasons',legx,np.round(med,1),unitx)
+        leg = 'band {} - {} \n {}: {} {}'.format(
+            band, 'all seasons', legx, np.round(med, 1), unitx)
 
     npix = hp.nside2npix(nside=nside)
     cmap = plt.cm.jet
- 
+
     cmap.set_under('w')
-    #cmap.set_bad('w')
+    # cmap.set_bad('w')
 
     hpxmap = np.zeros(npix, dtype=np.float)
     if season > 0.:
@@ -398,10 +407,10 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
     else:
         r = []
         for healpixID in np.unique(tab['healpixID']):
-            ii = tab['healpixID']==healpixID
+            ii = tab['healpixID'] == healpixID
             sel = tab[ii]
-            r.append((healpixID,np.median(sel[xval])))
-        rt = np.rec.fromrecords(r, names=['healpixID',xval])
+            r.append((healpixID, np.median(sel[xval])))
+        rt = np.rec.fromrecords(r, names=['healpixID', xval])
         hpxmap[rt['healpixID']] = rt[xval]
     hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True)
     hp.graticule()
