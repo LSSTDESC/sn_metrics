@@ -70,7 +70,7 @@ class SNSNRMetric(BaseMetric):
 
     """
 
-    def __init__(self, lim_sn, names_ref,
+    def __init__(self, lim_sn, names_ref, fake_file,
                  metricName='SNSNRMetric',
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
@@ -105,7 +105,7 @@ class SNSNRMetric(BaseMetric):
         self.z = z
         self.shift = shift
         self.season = season
-        self.fakeFile = 'input/Fake_cadence.yaml'
+        self.fakeFile = fake_file
         # sn parameters
         #sn_parameters = config['SN parameters']
 
