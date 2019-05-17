@@ -90,7 +90,13 @@ class SNGlobalMetric(BaseMetric):
         obs_area_i: i-band observed area (float) in deg2
         obs_area_z: z-band observed area (float) in deg2
         obs_area_y: y-band observed area (float) in deg2
-
+        nvisits: total number of visits
+        nvisits_u: u-band total number of visits
+        nvisits_g: g-band total number of visits
+        nvisits_r: r-band total number of visits
+        nvisits_i: i-band total number of visits 
+        nvisits_z: z-band total number of visits
+        nvisits_y: y-band total number of visits
         """
 
         #sort data
@@ -108,23 +114,26 @@ class SNGlobalMetric(BaseMetric):
         # in total and per filter
         
         obs_area = {}
-
+        nvisits = {}
         obs_area['all'] = self.area(dataSlice)
-
+        nvisits['all'] = len(dataSlice)
         for band in 'ugrizy':
             idx = dataSlice[self.filterCol] == band
             sel = dataSlice[idx]
             obs_area[band] = 0.0
+            nvisits[band] = 0
             if len(sel) > 0:
                 obs_area[band] = self.area(sel)
+                nvisits[band] = len(sel)
 
         r = []
         names = []
-        r = [night,nfc,obs_area['all']]
-        names = ['night','nfc','obs_area']
+        r = [night,nfc,obs_area['all'],nvisits['all']]
+        names = ['night','nfc','obs_area','nvisits']
         r += [obs_area[band] for band in 'ugrizy']
         names += ['obs_area_{}'.format(band) for band in 'ugrizy']
-        
+        r += [nvisits[band] for band in 'ugrizy']
+        names += ['nvisits_{}'.format(band) for band in 'ugrizy']
         
         res = np.rec.fromrecords([tuple(r)], names=names)
 
