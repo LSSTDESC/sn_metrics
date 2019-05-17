@@ -141,8 +141,6 @@ def detecFracPlot(data, nside, names_ref):
             hp.mollview(hpxmap, min=0, max=1., cmap=cmap,
                         title='{} - season {} \n median: {}'.format(band, int(season), np.round(median_value, 2)), hold=True)
 
-    plt.show()
-
 
 def detecFracHist(data, names_ref):
     """

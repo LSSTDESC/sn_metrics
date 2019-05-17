@@ -265,7 +265,7 @@ class Lims:
         label = []
         xminv = []
         xmaxv = []
-        print('alors', names_ref)
+
         for j, name in enumerate(names_ref):
             xminv.append(np.min(restot['zlim_'+name]))
             xmaxv.append(np.max(restot['zlim_'+name]))
@@ -329,8 +329,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
     """
 
-    print(type(metricValues), len(metricValues))
-    print(len(metricValues[0]))
+    """
     if not isinstance(metricValues, np.ndarray):
         if len(metricValues) >= 1:
             for val in metricValues:
@@ -338,10 +337,11 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
             res = np.unique(res)
     else:
         res = metricValues
+    """
+    res = metricValues
     lim_sn = Lims(Li_files, mag_to_flux_files,
                   band, SNR, mag_range=mag_range, dt_range=dt_range)
 
-    # print('there man', res)
     if display:
         lim_sn.plotCadenceMetric(res)
 
@@ -352,13 +352,12 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     idx &= (res['cadence_mean'] >= dt_range[0]) & (
         res['cadence_mean'] <= dt_range[1])
     res = res[idx]
-    # print(len(res))
+
     if len(res) > 0:
         resu = np.copy(res)
         for io, interp in enumerate(names_ref):
             zlims = lim_sn.interpGriddata(io, res)
             zlims[np.isnan(zlims)] = -1
-            print(io, zlims)
             resu = rf.append_fields(resu, 'zlim_'+names_ref[io], zlims)
         if restot is None:
             restot = resu
