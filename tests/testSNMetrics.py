@@ -66,11 +66,12 @@ class TestSNmetrics(unittest.TestCase):
         result = metric.run(data, slicePoint)
 
         # And the result should be...
-        m5_mean = 24.38
-        cadence_mean = 4.97959184
-        assert((np.abs(m5_mean-result['m5_mean']) < 1.e-5) &
-               (np.abs(cadence_mean-result['cadence_mean']) < 1.e-5))
-
+        refResult = dict(zip(['m5_mean','cadence_mean','dT_max','frac_dT_5',
+                              'frac_dT_10','frac_dT_15','frac_dT_20','season_length'],
+                             [24.38,4.97959184,5.,1.,0.,0.,0.,245.]))
+        for key in refResult.keys():
+            assert((np.abs(refResult[key]-result[key]) < 1.e-5))
+       
         res_z = sn_cadence_plot.plotCadence(band, config['Li file'], config['Mag_to_flux file'],
                                             SNR[band],
                                             result,
@@ -126,7 +127,7 @@ class TestSNmetrics(unittest.TestCase):
 
         # Run the metric with these fake data
         slicePoint = [0]
-        metric = SNSNRMetric(lim_sn, config['names_ref'], config, coadd=config['Observations']
+        metric = SNSNRMetric(lim_sn, config['names_ref'], fake_file = config['Fake_file'], coadd=config['Observations']
                              ['coadd'],  z=z)
 
         result = metric.run(data, slicePoint)
