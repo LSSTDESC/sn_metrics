@@ -136,6 +136,8 @@ class SNCadenceMetric(BaseMetric):
         fieldRA = np.mean(dataSlice[self.RaCol])
         fieldDec = np.mean(dataSlice[self.DecCol])
         band = "".join([val for val in np.unique(dataSlice[self.filterCol])])
+        band = band.ljust(6)
+        
 
         seasons = self.season
         internights = [5,10,15,20]
