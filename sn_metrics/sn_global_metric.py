@@ -4,6 +4,7 @@ import itertools
 from sn_tools.sn_obs import LSSTPointing
 from shapely.ops import unary_union
 from shapely.geometry import MultiPolygon
+import numpy.lib.recfunctions as rf
 
 class SNGlobalMetric(BaseMetric):
     def __init__(self, metricName='SNGlobalMetric',
@@ -105,10 +106,14 @@ class SNGlobalMetric(BaseMetric):
         #get the night number
         night = np.unique(dataSlice['night'])[0]
 
+        dataSlice, nddf = self.fieldType(dataSlice)
+
         #estimate the number of filter changes this night
 
-        nfc = len(list(itertools.groupby(dataSlice['filter'])))-1
-    
+        nfc = len(list(itertools.groupby(dataSlice[self.filterCol])))-1
+        iwfd = dataSlice['fieldType'] == 'WFD'
+        selwfd = dataSlice[iwfd]
+        nfc_noddf = len(list(itertools.groupby(selwfd[self.filterCol])))-1
         
         #estimate the area observed that night (LSST focal plane)
         # in total and per filter
@@ -128,13 +133,18 @@ class SNGlobalMetric(BaseMetric):
 
         r = []
         names = []
-        r = [night,nfc,obs_area['all'],nvisits['all']]
-        names = ['night','nfc','obs_area','nvisits']
+        r = [night,nfc,nfc_noddf,obs_area['all'],nvisits['all'],nddf]
+        names = ['night','nfc','nfc_noddf','obs_area','nvisits','nddf']
         r += [obs_area[band] for band in 'ugrizy']
         names += ['obs_area_{}'.format(band) for band in 'ugrizy']
         r += [nvisits[band] for band in 'ugrizy']
         names += ['nvisits_{}'.format(band) for band in 'ugrizy']
         
+        #get Moon vals
+        for val in ['moonRA','moonDec','moonAlt','moonAz','moonDistance','moonPhase']:
+            r += [np.median(dataSlice[val])]
+            names += ['med_{}'.format(val)]
+
         res = np.rec.fromrecords([tuple(r)], names=names)
 
         return res
@@ -147,3 +157,23 @@ class SNGlobalMetric(BaseMetric):
 
         return unary_union(MultiPolygon(polylist)).area
         
+    def fieldType(self,obs):
+        
+        rDDF = []
+        for ra, dec in np.unique(obs[[self.RaCol, self.DecCol]]):
+            idx = np.abs(obs[self.RaCol]-ra) < 1.e-5
+            idx &= np.abs(obs[self.DecCol]-dec) < 1.e-5
+            sel = obs[idx]
+            if len(sel) >= 10:
+                rDDF.append((ra,dec))
+
+        nddf = len(rDDF)
+        rtype = np.array(['WFD']*len(obs))
+        if len(rDDF) > 0:
+            RaDecDDF = np.rec.fromrecords(rDDF, names=[self.RaCol, self.DecCol])
+            for (ra,dec) in RaDecDDF[[self.RaCol, self.DecCol]]:
+                idx = np.argwhere((np.abs(obs[self.RaCol]-ra)<1.e-5)&(np.abs(obs[self.DecCol]-dec)<1.e-5))
+                rtype[idx] = 'DD'
+
+        obs = rf.append_fields(obs,'fieldType',rtype)
+        return obs, nddf
