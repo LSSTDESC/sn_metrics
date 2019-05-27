@@ -16,9 +16,4 @@ setup(
         'sn_tools>=0.1',
         'sn_stackers>=0.1'
     ],
-    dependency_links=[
-        'git+https://github.com/lsstdesc/sn_tools.git@dev#egg=sn_tools-0.1',
-        'git+https://github.com/lsstdesc/sn_stackers.git@dev#egg=sn_stackers-0.1',
-    ],
-
 )
