@@ -347,13 +347,13 @@ class SNSNRMetric(BaseMetric):
         snr_tab = None
 
         for ib, name in enumerate(self.names_ref):
-            fluxes = self.lim_sn.fluxes[ib](time_lc)
+            fluxes = self.lim_sn.fluxes[ib](np.copy(time_lc))
             if name not in fluxes_tot.keys():
                 fluxes_tot[name] = fluxes
             else:
                 fluxes_tot[name] = np.concatenate((fluxes_tot[name], fluxes))
 
-            flux_5sigma = self.lim_sn.mag_to_flux[ib](m5_vals)
+            flux_5sigma = self.lim_sn.mag_to_flux[ib](np.copy(m5_vals))
             snr = fluxes**2/flux_5sigma**2
             snr_season = 5.*np.sqrt(np.sum(snr*flag, axis=1))
             if snr_tab is None:
@@ -469,7 +469,7 @@ class SNSNRMetric(BaseMetric):
         m5 = np.median(slice_sel[self.m5Col])
         Tvisit = 30.
 
-        config_fake = yaml.load(open(self.fakeFile))
+        config_fake = yaml.load(open(self.fakeFile), Loader=yaml.FullLoader)
         config_fake['Ra'] = fieldRA
         config_fake['Dec'] = fieldDec
         config_fake['bands'] = [band]
