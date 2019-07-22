@@ -9,6 +9,7 @@ from scipy import interpolate
 import os
 import pandas as pd
 import random
+from sn_tools.sn_obs import season as seasonCalc
 
 
 class SNSNRRateMetric(BaseMetric):
@@ -89,6 +90,7 @@ class SNSNRRateMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.daystep = 1.
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -122,33 +124,37 @@ class SNSNRRateMetric(BaseMetric):
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
 
+        dataSlice = rf.drop_fields(dataSlice, ['season'])
+
+        dataSlice = seasonCalc(dataSlice)
+        self.fieldRA = np.mean(dataSlice[self.RaCol])
+        self.fieldDec = np.mean(dataSlice[self.DecCol])
+        #print('there we fo', self.fieldRA, self.fieldDec)
         seasons = self.season
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
 
+        # print(np.unique(dataSlice[self.filterCol]),
+        #      np.unique(dataSlice[self.seasonCol]))
         # get infos on seasons
 
         self.info_season = self.seasonInfo(dataSlice, seasons)
-        fieldRA = np.mean(dataSlice[self.RaCol])
-        fieldDec = np.mean(dataSlice[self.DecCol])
-        if self.info_season is None:
-            res = np.array(seasons, dtype=[('season', 'f8')])
-            res = rf.append_fields(
-                res, 'fieldRA', [fieldRA]*len(res), usemask=False)
-            res = rf.append_fields(
-                res, 'fieldDec', [fieldDec]*len(res), usemask=False)
-            res = rf.append_fields(res, 'frac_obs_SNCosmo', [
-                                   0.]*len(res), usemask=False)
-            res = rf.append_fields(
-                res, 'band', [self.bands]*len(res), usemask=False)
 
-            return res
+        #print('info seasons', self.info_season)
+        if self.info_season is None:
+            r = []
+            for seas in seasons:
+                r.append((seas, self.fieldRA, self.fieldDec, 0., self.bands))
+
+            return np.rec.fromrecords(r, names=[
+                'season', 'fieldRA', 'fieldDec', 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         seasons = self.info_season['season']
+        #print('there', seasons)
         snr_tot = None
         for band in self.bands:
             idx = dataSlice[self.filterCol] == band
-
+            #print(band, len(dataSlice[idx]))
             if len(dataSlice[idx]) > 0:
                 snr_rate = self.snrRateSeason(
                     dataSlice[idx], seasons)  # SNR for observations
@@ -159,11 +165,30 @@ class SNSNRRateMetric(BaseMetric):
                         snr_tot = np.concatenate((snr_tot, snr_rate))
 
         res = None
+        #print(snr_tot, snr_tot.dtype)
+
         if snr_tot is not None:
             res = self.groupInfo(snr_tot)
+        # print(res)
 
-        print(res)
-        return res
+        r = []
+        for val in self.info_season:
+            season = val['season']
+            dates = np.arange(val['MJD_min'], val['MJD_max'], self.daystep)
+            nsn = len(dates)
+            rat = 0.
+            if res is not None:
+                idx = res['season'] == season
+                nsn_snrcut = len(res[idx])
+                rat = nsn_snrcut/nsn
+            r.append((season, self.fieldRA, self.fieldDec, rat, self.bands))
+
+        final_resu = np.rec.fromrecords(r, names=[
+                                        'season', 'fieldRA', 'fieldDec', 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
+
+        # print(final_resu)
+        # print(test)
+        return final_resu
 
     def snrRateSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
@@ -202,6 +227,7 @@ class SNSNRRateMetric(BaseMetric):
         """
 
         # check whether we do have data for the considered season for this dataSlice
+
         sel = None
         for season in seasons:
             idx = dataSlice[self.seasonCol] == season
@@ -213,9 +239,7 @@ class SNSNRRateMetric(BaseMetric):
         if len(sel) == 0:
             return None
 
-        # Get few infos: RA, Dec, Nvisits, m5, exptime
-        fieldRA = np.mean(sel[self.RaCol])
-        fieldDec = np.mean(sel[self.DecCol])
+        # Get few infos: Nvisits, m5, exptime
         Nvisits = np.median(sel[self.nexpCol]/2.)  # one visit = 2 exposures
         m5 = np.mean(sel[self.m5Col])
         exptime = np.median(sel[self.exptimeCol])
@@ -228,10 +252,10 @@ class SNSNRRateMetric(BaseMetric):
         dates = None
         for val in self.info_season:
             if dates is None:
-                dates = np.arange(val['MJD_min'], val['MJD_max'], 1.)
+                dates = np.arange(val['MJD_min'], val['MJD_max'], self.daystep)
             else:
                 dates = np.concatenate(
-                    (dates, np.arange(val['MJD_min'], val['MJD_max'], 1.)))
+                    (dates, np.arange(val['MJD_min'], val['MJD_max'], self.daystep)))
 
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates
@@ -244,7 +268,6 @@ class SNSNRRateMetric(BaseMetric):
         # flag: select LC points only in between min_rf_phase and max_phase
         # phase_max = self.shift/(1.+self.z)
         flag = (phase >= self.min_rf_phase) & (phase <= self.max_rf_phase)
-
         # tile m5, MJDs, and seasons to estimate all fluxes and SNR at once
         m5_vals = np.tile(sel[self.m5Col], (len(time_for_lc), 1))
         mjd_vals = np.tile(sel[self.mjdCol], (len(time_for_lc), 1))
@@ -258,6 +281,8 @@ class SNSNRRateMetric(BaseMetric):
         snr_nomask = np.ma.copy(snr)
         _, idx = np.unique(snr['season'], return_inverse=True)
 
+        #print('seas', np.unique(snr['season']))
+        #print(band, idx)
         infos = self.info_season[idx]
         vars_info = ['cadence', 'season_length', 'MJD_min']
         snr = rf.append_fields(
@@ -266,13 +291,18 @@ class SNSNRRateMetric(BaseMetric):
         snr = rf.append_fields(snr, 'MJD', dates)
         snr = rf.append_fields(snr, 'm5_eff', np.mean(
             np.ma.array(m5_vals, mask=~flag), axis=1))
-        global_info = [(fieldRA, fieldDec, band, m5,
+        global_info = [(self.fieldRA, self.fieldDec, band, m5,
                         Nvisits, exptime)]*len(snr)
         names = ['fieldRA', 'fieldDec', 'band',
                  'm5', 'Nvisits', 'ExposureTime']
         global_info = np.rec.fromrecords(global_info, names=names)
         snr = rf.append_fields(
             snr, names, [global_info[name] for name in names])
+
+        # print('there pal', snr[['band', 'daymax',
+        #                        'SNR_{}'.format(self.names_ref[0])]])
+        idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
+        snr = np.copy(snr[idx])
 
         if output_q is not None:
             output_q.put({j: snr})
@@ -294,8 +324,9 @@ class SNSNRRateMetric(BaseMetric):
 
         rv = []
         for season in seasons:
-            idx = (dataSlice[self.seasonCol] == season)
+            idx = np.abs(dataSlice[self.seasonCol]-season) < 1.e-5
             slice_sel = dataSlice[idx]
+            #print(season, len(slice_sel))
             if len(slice_sel) < 5:
                 continue
             slice_sel.sort(order=self.mjdCol)
@@ -393,61 +424,8 @@ class SNSNRRateMetric(BaseMetric):
         seasons = np.tile(self.info_season['season'], (len(diff_min), 1))
         flag = (diff_min >= 0) & (diff_max >= 0)
         seasons = np.ma.array(seasons, mask=~flag)
-
+        #print('hello', seasons)
         return np.mean(seasons, axis=1)
-
-    def detectingFraction(self, snr_obs, snr_fakes):
-        """
-        Estimate the time fraction(per season) for which
-        snr_obs > snr_fakes = detection rate
-        For regular cadences one should get a result close to 1
-        Parameters
-        -------
-        snr_obs : array
-         array estimated using snrSeason(observations)
-         snr_fakes: array
-           array estimated using snrSeason(fakes)
-        Returns
-        -----
-        record array with the following fields:
-          fieldRA (float)
-          fieldDec (float)
-          season (float)
-         band (str)
-         frac_obs_name_ref (float)
-        """
-
-        ra = np.mean(snr_obs['fieldRA'])
-        dec = np.mean(snr_obs['fieldDec'])
-        # band = np.unique(snr_obs['band'])[0]
-
-        rtot = []
-
-        for season in np.unique(snr_obs['season']):
-            idx = snr_obs['season'] == season
-            sel_obs = snr_obs[idx]
-            idxb = snr_fakes['season'] == season
-            sel_fakes = snr_fakes[idxb]
-            sel_obs.sort(order='MJD')
-            sel_fakes.sort(order='MJD')
-            r = [ra, dec, season, band]
-            names = [self.RaCol, self.DecCol, 'season', 'band']
-            for sim in self.names_ref:
-                fakes = interpolate.interp1d(
-                    sel_fakes['MJD'], sel_fakes['SNR_'+sim])
-                obs = interpolate.interp1d(sel_obs['MJD'], sel_obs['SNR_'+sim])
-                mjd_min = np.max(
-                    [np.min(sel_obs['MJD']), np.min(sel_fakes['MJD'])])
-                mjd_max = np.min(
-                    [np.max(sel_obs['MJD']), np.max(sel_fakes['MJD'])])
-                mjd = np.arange(mjd_min, mjd_max, 1.)
-
-                diff_res = obs(mjd)-fakes(mjd)
-                idx = diff_res >= 0
-                r += [len(diff_res[idx])/len(diff_res)]
-                names += ['frac_obs_'+sim]
-            rtot.append(tuple(r))
-        return np.rec.fromrecords(rtot, names=names)
 
     def groupInfo(self, snr):
 
@@ -457,9 +435,13 @@ class SNSNRRateMetric(BaseMetric):
         # so we have to group them according to (daymax,season)
 
         r = []
-        for key, grp_season in df.groupby(['season']):
-            # print(grp_season.columns)
-
+        for key, grp_season in df.groupby(['season', 'daymax']):
+            #print(grp_season[['season', 'daymax']], len(grp_season))
+            if len(grp_season) == len(self.bands):
+                season = np.mean(grp_season['season'])
+                daymax = np.mean(grp_season['daymax'])
+                r.append((season, self.fieldRA, self.fieldDec, daymax))
+            """
             select = grp_season.groupby('daymax').apply(
                 self.selectSNR).value_counts()
 
@@ -470,15 +452,8 @@ class SNSNRRateMetric(BaseMetric):
                 nGood = counts[values.index(True)]
             r.append((np.mean(grp_season['season']), np.mean(grp_season['fieldRA']), np.mean(
                 grp_season['fieldDec']), nGood/len(grp_season), self.bands))
-        return np.rec.fromrecords(r, names=['season', 'fieldRA', 'fieldDec', 'frac_obs_SNCosmo', 'band'])
-
-    def selectSNR(self, grp):
-
-        res = True
-        for band in grp['band']:
-            idx = grp['band'] == band
-            print(band, grp['SNR_SNCosmo'][idx], self.snr_ref[band])
-            res &= (grp['SNR_SNCosmo'][idx] >= self.snr_ref[band])
-
-        print(test)
-        return res
+            """
+            if len(r) > 0:
+                return np.rec.fromrecords(r, names=['season', 'fieldRA', 'fieldDec', 'daymax'])
+            else:
+                return None
