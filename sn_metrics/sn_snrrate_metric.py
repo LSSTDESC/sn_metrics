@@ -108,7 +108,10 @@ class SNSNRRateMetric(BaseMetric):
         self.z = z
         self.season = season
         self.bands = bands
-
+        self.shift_phmin = -(1.+self.z)*self.min_rf_phase
+        self.shift_phmax = -(1.+self.z)*self.max_rf_phase
+        #self.shift_phmin = 0.
+        #self.shift_phmax = 0.
         self.lim_sn = lim_sn
         self.names_ref = names_ref
         self.snr_ref = snr_ref
@@ -169,23 +172,26 @@ class SNSNRRateMetric(BaseMetric):
 
         if snr_tot is not None:
             res = self.groupInfo(snr_tot)
-        # print(res)
-
+        
+        
         r = []
         for val in self.info_season:
             season = val['season']
-            dates = np.arange(val['MJD_min'], val['MJD_max'], self.daystep)
+            dates = np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)
             nsn = len(dates)
             rat = 0.
             if res is not None:
-                idx = res['season'] == season
+                idx = np.abs(res['season']-season)<1.e-5
                 nsn_snrcut = len(res[idx])
-                rat = nsn_snrcut/nsn
+                if nsn > 0:
+                    rat = nsn_snrcut/nsn
+                #print(season,rat,nsn,val['MJD_min'],val['MJD_max'])
             r.append((season, self.fieldRA, self.fieldDec, rat, self.bands))
 
         final_resu = np.rec.fromrecords(r, names=[
                                         'season', 'fieldRA', 'fieldDec', 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
+        #print(test)
         # print(final_resu)
         # print(test)
         return final_resu
@@ -215,7 +221,7 @@ class SNSNRRateMetric(BaseMetric):
         cadence: cadence of the season
         season_length: length of the season
         MJD_min: min MJD of the season
-        DayMax: SN max luminosity MJD (aka T0)
+        daymax: SN max luminosity MJD (aka T0)
         MJD:
         m5_eff: mean m5 of obs passing the min_phase, max_phase cut
         fieldRA: mean field RA
@@ -252,10 +258,10 @@ class SNSNRRateMetric(BaseMetric):
         dates = None
         for val in self.info_season:
             if dates is None:
-                dates = np.arange(val['MJD_min'], val['MJD_max'], self.daystep)
+                dates = np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)
             else:
                 dates = np.concatenate(
-                    (dates, np.arange(val['MJD_min'], val['MJD_max'], self.daystep)))
+                    (dates, np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)))
 
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates
@@ -299,11 +305,12 @@ class SNSNRRateMetric(BaseMetric):
         snr = rf.append_fields(
             snr, names, [global_info[name] for name in names])
 
-        # print('there pal', snr[['band', 'daymax',
+        #print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
         #                        'SNR_{}'.format(self.names_ref[0])]])
         idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
         snr = np.copy(snr[idx])
-
+        #print('there pol', snr.dtype,self.snr_ref[band],snr)
+        
         if output_q is not None:
             output_q.put({j: snr})
         else:
@@ -376,12 +383,14 @@ class SNSNRRateMetric(BaseMetric):
 
         for ib, name in enumerate(self.names_ref):
             fluxes = self.lim_sn[band].fluxes[ib](np.copy(time_lc))
+            #print('fluxes',fluxes)
             if name not in fluxes_tot.keys():
                 fluxes_tot[name] = fluxes
             else:
                 fluxes_tot[name] = np.concatenate((fluxes_tot[name], fluxes))
 
             flux_5sigma = self.lim_sn[band].mag_to_flux[ib](np.copy(m5_vals))
+            #print('5sigma',flux_5sigma)
             snr = fluxes**2/flux_5sigma**2
             snr_season = 5.*np.sqrt(np.sum(snr*flag, axis=1))
             if snr_tab is None:
@@ -434,9 +443,12 @@ class SNSNRRateMetric(BaseMetric):
         # these data are supposed to correspond to a given filter
         # so we have to group them according to (daymax,season)
 
+        
         r = []
         for key, grp_season in df.groupby(['season', 'daymax']):
             #print(grp_season[['season', 'daymax']], len(grp_season))
+            #print(key,grp_season)
+            #print(np.mean(grp_season['season']),np.mean(grp_season['daymax']),len(grp_season))
             if len(grp_season) == len(self.bands):
                 season = np.mean(grp_season['season'])
                 daymax = np.mean(grp_season['daymax'])
@@ -453,7 +465,7 @@ class SNSNRRateMetric(BaseMetric):
             r.append((np.mean(grp_season['season']), np.mean(grp_season['fieldRA']), np.mean(
                 grp_season['fieldDec']), nGood/len(grp_season), self.bands))
             """
-            if len(r) > 0:
-                return np.rec.fromrecords(r, names=['season', 'fieldRA', 'fieldDec', 'daymax'])
-            else:
-                return None
+        if len(r) > 0:
+            return np.rec.fromrecords(r, names=['season', 'fieldRA', 'fieldDec', 'daymax'])
+        else:
+            return None
