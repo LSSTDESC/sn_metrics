@@ -295,10 +295,11 @@ class SNNSNMetric(BaseMetric):
 
         pixRa = np.unique(effi_tot['pixRa'])[0]
         pixDec = np.unique(effi_tot['pixDec'])[0]
+        healpixID = int(np.unique(effi_tot['healpixID'])[0])
         season = np.unique(effi_tot['season'])[0]
 
-        r = [pixRa,pixDec,season]
-        names = ['pixRa','pixDec','season']
+        r = [healpixID,pixRa,pixDec,season]
+        names = ['healpixID','pixRa','pixDec','season']
         for key in x1_color:
             idx = np.abs(effi_tot['x1']-key[0])<1.e-5
             idx &= np.abs(effi_tot['color']-key[1])<1.e-5
@@ -401,7 +402,7 @@ class SNNSNMetric(BaseMetric):
     def process(self,tab):
 
         nproc = 1
-        groups = tab.group_by(['season','z','pixRa','pixDec'])
+        groups = tab.group_by(['season','z','pixRa','pixDec','healpixID'])
 
         if nproc == 1:
             restab = CalcSN_df(groups.groups[:]).sn
@@ -478,6 +479,7 @@ class SNNSNMetric(BaseMetric):
 
         pixRa = np.unique(data['pixRa'])[0]
         pixDec = np.unique(data['pixDec'])[0]
+        healpixID = int(np.unique(data['healpixID'])[0])
         season = np.unique(data['season'])[0]
         x1 = np.unique(data['x1'])[0]
         color = np.unique(data['color'])[0]
@@ -511,7 +513,8 @@ class SNNSNMetric(BaseMetric):
     
         res.add_column(Column(list(group.groups.keys()), name=group.keys))
         res.add_column(Column(rb, name='effi'))
-        res.add_column(Column(err, name='effi_err'))   
+        res.add_column(Column(err, name='effi_err'))
+        res.add_column(Column([healpixID]*len(res),'healpixID'))
         res.add_column(Column([pixRa]*len(res),'pixRa'))
         res.add_column(Column([pixDec]*len(res),'pixDec'))
         res.add_column(Column([season]*len(res),'season'))
