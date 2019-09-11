@@ -432,8 +432,14 @@ class SNNSNMetric(BaseMetric):
 
     def process(self, tab):
 
+        if self.verbose:
+            print('processing', len(tab))
+
         nproc = 1
         groups = tab.group_by(['season', 'z', 'pixRa', 'pixDec', 'healpixID'])
+
+        if self.verbose:
+            print('groups', len(groups))
 
         if nproc == 1:
             restab = CalcSN_df(groups.groups[:]).sn
@@ -568,13 +574,17 @@ class SNNSNMetric(BaseMetric):
 
             # estimate SN
 
-            sn = self.process(Table.from_pandas(lc))
+            sn = None
+            if len(lc) > 0:
+                sn = self.process(Table.from_pandas(lc))
+
             if self.verbose:
                 print('End of supernova', time.time()-time_ref)
 
-            if sn_tot is None:
-                sn_tot = sn
-            else:
-                sn_tot = np.concatenate((sn_tot, sn))
+            if sn is not None:
+                if sn_tot is None:
+                    sn_tot = sn
+                else:
+                    sn_tot = np.concatenate((sn_tot, sn))
 
         return sn_tot
