@@ -129,11 +129,14 @@ class SNNSNMetric(BaseMetric):
         self.min_rf_phase_qual = -10.
         self.max_rf_phase_qual = 20.
 
+        # snrate
         self.rateSN = SN_Rate(
             min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
 
+        # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
 
+        # Two SN considered
         self.nameSN = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
 
     def run(self, dataSlice,  slicePoint=None):
@@ -157,11 +160,15 @@ class SNNSNMetric(BaseMetric):
         pixRa = np.unique(dataSlice['pixRa'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
 
-        effi_tot = Table()
-        zlim_nsn = Table()
+        # possible outputs - by default zlim are returned
+        effi_tot = Table()  # efficiencies vs z
+        zlim_nsn = Table()  # zlim
+
         if self.verbose:
             print('Field', pixRa, pixDec)
             print('Info seasons', self.info_season)
+
+        # Loop on seasons
         for season in self.info_season['season']:
             # for each season:
             # generate simulation parameters
@@ -173,69 +180,44 @@ class SNNSNMetric(BaseMetric):
                 print('#### PROCESSING SEASON', season, pixRa, pixDec)
 
             time_refb = time.time()
+
             # select obs for this season
             idx = dataSlice['season'] == season
             obs = dataSlice[idx]
 
             if len(obs) <= 1:
+                # not enough obs -> season not considered
                 continue
 
             # stack obs (per band and per night) if necessary
             if self.stacker is not None:
                 obs = self.stacker._run(obs)
+
                 if self.verbose:
                     print('after stacking', season, time.time()-time_refb)
 
             # Simulation parameters
-            idseas = np.abs(self.info_season['season']-season) < 1.e-5
-            daymin = self.info_season[idseas]['MJD_min']
-            daymax = self.info_season[idseas]['MJD_max']
-            # print('hello',daymin,daymax)
-            daymaxRange = np.arange(daymin, daymax, self.daymaxStep)
-            season_length = daymax-daymin
-            r_durz = []
-            nz = int((self.zmax-self.zmin)/self.zStep)
+            gen_par, duration_z = self.simuParameters(season, zRange)
 
-            nslice = 1
-            nperSlice = int(nz/nslice)
+            #nslice = 1
+            #nperSlice = int(nz/nslice)
 
-            sn_tot = None
             time_ref = time.time()
-            for i in range(nslice):
-                if self.verbose:
-                    print(i, zRange[i*nperSlice:(i+1)*nperSlice])
 
-                r = []
+            if self.verbose:
+                print('NSN to simulate:', len(
+                    gen_par), time.time()-time_ref)
 
-                # for z in zRange:
-                for z in zRange[i*nperSlice:(i+1)*nperSlice]:
+            # get the supernova
+            sn = self.run_season_slice(obs, gen_par)
 
-                    T0_min = daymin-(1.+z)*self.min_rf_phase_qual
-                    T0_max = daymax-(1.+z)*self.max_rf_phase_qual
-                    r_durz.append((z, np.asscalar(T0_max-T0_min)))
-                    widthWindow = T0_max-T0_min
-                    if widthWindow < 1.:
-                        break
-                    daymaxRange = np.arange(T0_min, T0_max, self.daymaxStep)
+            if sn is None:
+                continue
+            # Estimate efficiencies
+            effi_season = self.effi(sn)
+            # concatenate all efficiencies over seasons
+            effi_tot = vstack([effi_tot, effi_season])
 
-                    for mydaymax in daymaxRange:
-                        r.append(
-                            (z, mydaymax, self.min_rf_phase, self.max_rf_phase))
-                gen_par = np.rec.fromrecords(
-                    r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase'])
-
-                if self.verbose:
-                    print('NSN to simulate:', len(
-                        gen_par), time.time()-time_ref)
-                resproc = self.run_season_slice(obs, gen_par)
-                if sn_tot is None:
-                    sn_tot = resproc
-                else:
-                    sn_tot = np.concatenate((sn_tot, resproc))
-
-            # print(r_durz)
-            duration_z = np.rec.fromrecords(
-                r_durz, names=['z', 'season_length'])
             durinterp_z = interp1d(
                 duration_z['z'], duration_z['season_length'], bounds_error=False, fill_value=0.)
 
@@ -245,10 +227,6 @@ class SNNSNMetric(BaseMetric):
                                                            survey_area=self.pixArea)
             rateInterp = interp1d(zz, nsn, kind='linear',
                                   bounds_error=False, fill_value=0)
-
-            # Estimate efficiencies
-            effi_season = self.effi(sn_tot)
-            effi_tot = vstack([effi_tot, effi_season])
 
             # Estimate zlim
             zlims = self.zlim(effi_season, rateInterp)
@@ -265,6 +243,43 @@ class SNNSNMetric(BaseMetric):
         # return np.array(effi_tot)
         # print('hello',zlim_nsn)
         return np.array(zlim_nsn)
+
+    def simuParameters(self, season, zRange):
+
+        idseas = np.abs(self.info_season['season']-season) < 1.e-5
+        daymin = self.info_season[idseas]['MJD_min']
+        daymax = self.info_season[idseas]['MJD_max']
+        # print('hello',daymin,daymax)
+        season_length = daymax-daymin
+
+        # define T0 range for simulation
+        daymaxRange = np.arange(daymin, daymax, self.daymaxStep)
+        r_durz = []
+        nz = int((self.zmax-self.zmin)/self.zStep)
+
+        r = []
+
+        for z in zRange:
+            # for z in zRange[i*nperSlice:(i+1)*nperSlice]:
+
+            T0_min = daymin-(1.+z)*self.min_rf_phase_qual
+            T0_max = daymax-(1.+z)*self.max_rf_phase_qual
+            r_durz.append((z, np.asscalar(T0_max-T0_min)))
+            widthWindow = T0_max-T0_min
+            if widthWindow < 1.:
+                break
+            daymaxRange = np.arange(T0_min, T0_max, self.daymaxStep)
+
+            for mydaymax in daymaxRange:
+                r.append(
+                    (z, mydaymax, self.min_rf_phase, self.max_rf_phase))
+
+        gen_par = np.rec.fromrecords(
+            r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase'])
+
+        duration_z = np.rec.fromrecords(
+            r_durz, names=['z', 'season_length'])
+        return gen_par, duration_z
 
     def effi(self, sn_tot):
 
@@ -577,6 +592,9 @@ class SNNSNMetric(BaseMetric):
             sn = None
             if len(lc) > 0:
                 sn = self.process(Table.from_pandas(lc))
+            else:
+                print('no LC here', len(obs), np.unique(obs['season']))
+                print(test)
 
             if self.verbose:
                 print('End of supernova', time.time()-time_ref)
