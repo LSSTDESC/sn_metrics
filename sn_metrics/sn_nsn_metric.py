@@ -134,7 +134,7 @@ class SNNSNMetric(BaseMetric):
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
-        #self.verbose = True
+        # self.verbose = True
         # Two SN considered
         # self.nameSN = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
 
@@ -162,7 +162,7 @@ class SNNSNMetric(BaseMetric):
 
         pixRa = np.unique(dataSlice['pixRa'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
-        healpixID = np.unique(dataSlice['healpixID'])[0]
+        healpixID = int(np.unique(dataSlice['healpixID'])[0])
 
         # possible outputs - by default zlim are returned
         # effi_tot = Table()  # efficiencies vs z
@@ -273,7 +273,10 @@ class SNNSNMetric(BaseMetric):
                     if self.verbose:
                         print('estimating zlimits')
                     zlimsdf = effi_seasondf.groupby(groupnames).apply(
-                        lambda x: self.zlimdf(x, rateInterp)).reset_index()
+                        lambda x: self.zlimdf(x, rateInterp)).reset_index(level=list(range(len(groupnames))))
+
+                    # print('alors', zlimsdf.columns)
+                    # print(test)
 
                     if self.verbose:
                         print('zlims', zlimsdf)
@@ -295,16 +298,18 @@ class SNNSNMetric(BaseMetric):
 
                     # stack the results
                     # zlim_nsn = vstack([zlim_nsn, znsn])
-            zlim_nsndf = pd.concat([zlimsdf, zlimsdf])
-            effi_totdf = pd.concat([effi_totdf, effi_seasondf])
-            print(zlimsdf, effi_totdf)
+                    # print(zlimsdf.dtypes)
+                    # print(test)
+            zlim_nsndf = pd.concat([zlim_nsndf, zlimsdf], sort=False)
+            effi_totdf = pd.concat([effi_totdf, effi_seasondf], sort=False)
+            # print(zlimsdf, effi_totdf)
             if self.verbose:
                 print('#### SEASON processed', time.time()-time_refb,
                       season, pixRa, pixDec)
         # return np.array(effi_tot)
         # print('hello',zlim_nsn)
-        #print('resultat', zlim_nsndf.to_numpy())
-        return zlim_nsndf.to_numpy()
+        #print('resultat', zlim_nsndf.columns)
+        return zlim_nsndf.to_records()
         # return np.array(zlim_nsn)
 
     def simuParameters(self, season, zRange):
@@ -380,7 +385,11 @@ class SNNSNMetric(BaseMetric):
         listNames = ['season', 'pixRa', 'pixDec', 'healpixID', 'x1', 'color']
         groups = sndf.groupby(listNames)
 
-        effi = groups.apply(lambda x: self.effiObsdf(x)).reset_index()
+        effi = groups['Cov_colorcolor', 'z'].apply(
+            lambda x: self.effiObsdf(x)).reset_index(level=list(range(len(listNames))))
+
+        # print(effi)
+        # print(test)
 
         return effi
 
