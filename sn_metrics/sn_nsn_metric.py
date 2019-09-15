@@ -7,7 +7,7 @@ import multiprocessing
 import yaml
 from scipy import interpolate
 import os
-from sn_tools.sn_calcFast import LCfast, CalcSN, CalcSN_df
+from sn_tools.sn_calcFast import LCfast, CalcSN_df
 from sn_tools.sn_telescope import Telescope
 from astropy.table import Table, vstack, Column
 import time
@@ -81,7 +81,7 @@ class SNNSNMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=-1, coadd=True, zmin=0.0, zmax=1.0,
-                 pixArea=9.6, verbose=False, ploteffi=False, **kwargs):
+                 pixArea=9.6, verbose=False, ploteffi=False, N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -137,6 +137,13 @@ class SNNSNMetric(BaseMetric):
         # self.verbose = True
         # Two SN considered
         # self.nameSN = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
+
+        # LC selection
+        self.N_bef = N_bef  # nb points before peak
+        self.N_aft = N_aft  # nb points after peak
+        self.snr_min = snr_min  # SNR cut for points before/after peak
+        self.N_phase_min = N_phase_min  # nb of point with phase <=-5
+        self.N_phase_max = N_phase_max  # nb of points with phase >=20
 
         # status of the pixel after processing
         self.status = dict(
@@ -498,7 +505,8 @@ class SNNSNMetric(BaseMetric):
             print('groups', len(groups))
 
         if nproc == 1:
-            restab = CalcSN_df(groups.groups[:]).sn
+            restab = CalcSN_df(groups.groups[:], N_bef=self.N_bef, N_aft=self.N_aft,
+                               snr_min=self.snr_min, N_phase_min=self.N_phase_min, N_phase_max=self.N_phase_max).sn
             return restab
 
         indices = groups.groups.indices
