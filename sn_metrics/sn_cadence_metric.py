@@ -1,6 +1,8 @@
 import numpy as np
 from lsst.sims.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
+import pandas as pd
+import time
 
 class SNCadenceMetric(BaseMetric):
     """
@@ -72,8 +74,11 @@ class SNCadenceMetric(BaseMetric):
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
+        self.stacker = None
         if coadd:
             cols += ['coadd']
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
+
         super(SNCadenceMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -122,80 +127,125 @@ class SNCadenceMetric(BaseMetric):
         frac_dT_15: fraction of gaps higher than 15 days (float)
         frac_dT_20: fraction of gaps higher than 20 days (float)
         season_length: length of the season (float)
+        numExposures: median number of exposures per season
+        visitExposureTime: median exposure time per season
         """
 
-        # Cut down to only include filters in correct wave range.
-        goodFilters = np.in1d(dataSlice[self.filterCol], self.filterNames)
-        dataSlice = dataSlice[goodFilters]
-        if dataSlice.size == 0:
-            return None
-        dataSlice.sort(order=self.mjdCol)
+       
 
-        time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
+        if self.stacker is not None:
+            dataSlice = self.stacker._run(dataSlice)
+
+
+        
+        time_ref = time.time()
+        obsdf = pd.DataFrame(np.copy(dataSlice))
+
+        res_filter = obsdf.groupby(['pixRa','pixDec','healpixID',self.seasonCol,self.filterCol]).apply(lambda x: self.anaSeason(x)).reset_index()
+
+        #print('here',time.time()-time_ref)
+        #print(res_filter[['gap_5','gap_5_new','gap_10','gap_10_new','gap_15','gap_15_new','gap_20','gap_20_new']])
+        # remove the u-band 
+        obsdf = obsdf[obsdf[self.filterCol]!='u']
+
+        
+        res_all_but_u= obsdf.groupby(['pixRa','pixDec','healpixID',self.seasonCol]).apply(lambda x: self.anaSeason(x)).reset_index()
+        
+        res_all_but_u.loc[:,self.filterCol] = 'all'
+        
+        res = pd.concat([res_filter,res_all_but_u],sort=False)
+
+        #res = res[res.columns.difference([self.filterCol,'level_4','level_5'])]
+        #res = res.rename(columns={'{}_cad'.format(self.filterCol): self.filterCol})
+        res = res[res.columns.difference(['level_4','level_5'])]
+
+        return res.to_records(index=False)
+
+    def anaSeason(self,dataSlice):
+
+        time_ref=time.time()
+        dataSlice.sort_values(by=[self.mjdCol])
+
+        #slicetime = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
+
         r = []
-        fieldRA = np.mean(dataSlice[self.RaCol])
-        fieldDec = np.mean(dataSlice[self.DecCol])
+        
+        #get the band
         band = "".join([val for val in np.unique(dataSlice[self.filterCol])])
         band = band.ljust(6)
-        
 
-        seasons = self.season
+        # this is to estimate the fraction of internight gaps higher than xx days
         internights = [5,10,15,20]
-        names = []
-        if self.season == -1:
-            seasons = np.unique(dataSlice[self.seasonCol])
-        for season in seasons:
-            ro = []
-            deltaT_res = {}
-            idx = dataSlice[self.seasonCol] == season
-            sel = dataSlice[idx]
-            sel.sort(order= self.mjdCol)
-            if 'healpixID' in sel.dtype.names:
-                healpixID = np.unique(sel['healpixID'])[0]
-                pixRa = np.unique(sel['pixRa'])[0]
-                pixDec = np.unique(sel['pixDec'])[0]
-            else:
-                healpixID = -1
-                pixRa = -1
-                pixDec = -1
-            m5_mean = 0.
-            deltaT_res['max']= 0.
-            for threshold in internights:
-                deltaT_res[threshold] = 0.
-            cadence = 0.
-            season_length = 0.
-            if len(sel) > 0:
-                m5_mean = np.mean(sel[self.m5Col])
-                deltaT = sel[self.mjdCol][1:]-sel[self.mjdCol][:-1]
-                
-            if len(sel) >=3:
-                season_length = np.max(sel[self.mjdCol])-np.min(sel[self.mjdCol])
-                deltaT_res['max']= np.max(deltaT)
-                for threshold in internights:
-                    idx = deltaT >= threshold
-                    deltaT_res[threshold] = len(deltaT[idx])/len(deltaT)
-                
-            if len(sel) >= 5:
-                bins = np.arange(np.floor(sel[self.mjdCol].min()), np.ceil(
-                    sel[self.mjdCol].max()), 1.)
-                c, b = np.histogram(sel[self.mjdCol], bins=bins)
-                if len(c)>= 2:
-                    cadence = 1. / c.mean()
-    
-            ro = [fieldRA, fieldDec, season, band,
-                      m5_mean, cadence, len(sel), healpixID, pixRa, pixDec]
-            names =['fieldRA', 'fieldDec', 'season', 'band', 'm5_mean', 'cadence_mean','Nobs','healpixID','pixRa','pixDec']
+        #myarr = np.array([[5],[10],[15],[20]], dtype= [('gap','f8')])
+        myarr = np.array([5,10,15,20], dtype= [('gap','f8')])
+        deltaT_res = {}
 
-            ro += [deltaT_res['max']]
-            names += ['dT_max']
-            for val in internights:
-                ro += [deltaT_res[val]]
-                names += ['frac_dT_{}'.format(val)]
-            ro += [season_length]
-            names += ['season_length']
-            r.append(tuple(ro))
+        m5_mean = 0.
+        gap_max = 0.
+        stat = np.zeros((len(internights),1))
+        
+        #for threshold in internights:
+        #    deltaT_res['gap_{}'.format(threshold)] = 0.
+        cadence = 0.
+        season_length = 0.
+        if len(dataSlice) > 0:
+            m5_mean = np.mean(dataSlice[self.m5Col])
+            deltaT = dataSlice[self.mjdCol].diff()
+                
+        if len(dataSlice) >=3:
+            season_length = np.max(dataSlice[self.mjdCol])-np.min(dataSlice[self.mjdCol])
+            gap_max = np.max(deltaT)
+            """
+            for threshold in internights:
+                idx = deltaT>= threshold
+                deltaT_res['gap_{}'.format(threshold)] = len(deltaT[idx])/(len(deltaT)-1)
+            """
+            # use broadcasting to estimate this - faster
+            arr = np.array(deltaT)
+            arr = arr[~np.isnan(arr)]
+            diff = arr-myarr['gap'][:,np.newaxis]
+            flag = diff >=0
+            flag_idx = np.argwhere(flag)
+            madiff = np.ma.array(diff, mask=~flag)
+            stat = np.ma.count(madiff,axis=1)/(np.ma.count(madiff,axis=1)+np.ma.count_masked(madiff,axis=1))
+
+        if len(dataSlice) >= 5:
+            """
+            bins = np.arange(np.floor(dataSlice[self.mjdCol].min()), np.ceil(
+                dataSlice[self.mjdCol].max()), 1.)
+            c, b = np.histogram(dataSlice[self.mjdCol], bins=bins)
+            if len(c)>= 2:
+                cadence = 1. / c.mean()
+            """
+            #cadence = np.mean(slicetime)
+            cadence = deltaT.median()
+
+        resudf = pd.DataFrame({'cadence_mean': [cadence], 
+                               'm5_mean': [m5_mean],
+                               'Nobs' : [len(dataSlice)],
+                               'season_length': season_length,
+                               'gap_max': gap_max})
+
 
         
-        res = np.rec.fromrecords(r, names=names)
+        for io in range(len(internights)):
+            resudf.loc[:,'gap_{}'.format(internights[io])]= stat[io]
+        
+            
+        #for val in ['gap_{}'.format(thresh) for thresh in internights]:
+        #    resudf.loc[:,val]= deltaT_res[val]
+        
+        #get the median number of obs per night
 
-        return res
+        medians = dataSlice.groupby('night')[['numExposures','visitExposureTime']].median()
+        
+        for val in ['numExposures','visitExposureTime']:
+            resudf.loc[:,val]= medians[val].median()
+
+        #replace the band - necessary when processing all the filters
+        #resudf = resudf[resudf.columns.difference([self.filterCol])]
+
+        resudf.loc[:,'{}_cad'.format(self.filterCol)] = band
+        
+        #print('processed',time.time()-time_ref)
+        return resudf
