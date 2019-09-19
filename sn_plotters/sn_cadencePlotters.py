@@ -27,10 +27,15 @@ class Lims:
     dt_range : pair(float)
         difference time range considered (cadence)
         Default : (0.5, 25.)
+    dbName: str,opt
+        cadence name
+    saveFig: bool,opt
+        to save (or not) the figs
     """
 
     def __init__(self, Li_files, mag_to_flux_files, band, SNR,
-                 mag_range=(23., 27.5), dt_range=(0.5, 25.)):
+                 mag_range=(23., 27.5), dt_range=(0.5, 25.),
+                 dbName='',saveFig=False):
 
         self.band = band
         self.SNR = SNR
@@ -38,6 +43,8 @@ class Lims:
         self.mag_to_flux = []
         self.mag_range = mag_range
         self.dt_range = dt_range
+        self.saveFig = saveFig
+        self.dbName = dbName
 
         for val in Li_files:
             self.lims.append(self.getLims(self.band, np.load(val), SNR))
@@ -184,7 +191,7 @@ class Lims:
                               'i': (26.16, 3.),
                               # was 24.68      # could be 25.1 (1000-s)
                               'z': (25.56, 3.),
-                              'y': (24.68, 3.)}):  # was 24.72
+                              'y': (24.68, 3.)}):# was 24.72
         """ Plot the cadence metric in the plane: median cadence vs m5
 
         Parameters
@@ -193,6 +200,9 @@ class Lims:
           array of observations containing at least the following fields:
           m5_mean : mean five-sigma depth value (par season and per band)
           cadence_mean : mean cadence (per season and per band)
+        target: dict
+          Values corresponding to targets
+        
 
         Returns
         ---------
@@ -244,6 +254,8 @@ class Lims:
         plt.xlim(self.mag_range)
         plt.ylim(self.dt_range)
         plt.grid(1)
+        if self.saveFig:
+            plt.savefig('{}_{}_cad_vs_m5.png'.format(self.dbName,self.band))
 
     def plotHistzlim(self, names_ref, restot):
         """
@@ -266,10 +278,15 @@ class Lims:
         label = []
         xminv = []
         xmaxv = []
+        
+        
 
         for j, name in enumerate(names_ref):
-            xminv.append(np.min(restot['zlim_'+name]))
-            xmaxv.append(np.max(restot['zlim_'+name]))
+            # remove point with zlim<0
+            idx = restot['zlim_'+name]>0.
+            sel = restot[idx]
+            xminv.append(np.min(sel['zlim_'+name]))
+            xmaxv.append(np.max(sel['zlim_'+name]))
 
         xmin = np.min(xminv)
         xmax = np.max(xmaxv)
@@ -279,9 +296,8 @@ class Lims:
         for j, name in enumerate(names_ref):
             label.append(
                 name + '  $z_{med}$ = ' + str(np.median(np.round(restot['zlim_'+name], 2))))
-            # remove point with zlim<0
-            idx = restot['zlim_'+name]>0.
-            ax.hist(restot[idx]['zlim_'+name], range=[xmin, xmax],
+            
+            ax.hist(restot['zlim_'+name], range=[xmin, xmax],
                     bins=bins, histtype='step', color=colors[j], linewidth=2)
 
         ax.set_xlabel('$z_{lim}$', fontsize=fontsize)
@@ -291,9 +307,10 @@ class Lims:
         ax.grid()
         plt.legend(label, fontsize=fontsize-2., loc='upper left')
         # plt.grid(1)
+        if self.saveFig:
+            plt.savefig('{}_{}_histzlim.png'.format(self.dbName,self.band))
 
-
-def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range, display=True):
+def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range,dbName, saveFig=False,display=True):
     """
     Main cadence plot
     Will display two plots: cadence plot and histogram of redshift limits
@@ -318,6 +335,10 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
         mag range considered
     dt_range : pair(float)
         difference time range considered (cadence)
+    dbName : str
+        cadence name
+    saveFig : bool, opt
+      to save the figures on disk or not.
 
     Returns
     ---------
@@ -343,7 +364,9 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     """
     res = metricValues
     lim_sn = Lims(Li_files, mag_to_flux_files,
-                  band, SNR, mag_range=mag_range, dt_range=dt_range)
+                  band, SNR, mag_range=mag_range, 
+                  dt_range=dt_range,dbName=dbName,
+                  saveFig=saveFig)
 
     if display:
         lim_sn.plotCadenceMetric(res)
@@ -373,22 +396,26 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     return restot
 
 
-def plotMollview(nside, tab, xval, legx, unitx, minx, band, seasons=-1):
+def plotMollview(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig=False,seasons=-1):
 
     #print(tab.dtype)
     if seasons == -1:
         plotMollviewIndiv(nside, tab, xval, legx, unitx,
-                          minx, band, season=seasons)
+                          minx, band, 
+                          dbName,saveFig,
+                          season=seasons)
     else:
         for season in seasons:
             idx = tab['season'] == season
             sel = tab[idx]
             plotMollviewIndiv(nside, sel, xval, legx, unitx,
-                              minx, band, season=seasons)
+                              minx, band, dbName,saveFig,season=seasons)
 
 
-def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
+def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,season=-1):
 
+
+    fig, ax= plt.subplots(figsize=(8, 6))
     med = np.median(tab[xval])
     print(np.min(tab[xval]))
     leg = '{} band - {} \n {}: {} {}'.format(
@@ -414,5 +441,9 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
             r.append((healpixID, np.median(sel[xval])))
         rt = np.rec.fromrecords(r, names=['healpixID', xval])
         hpxmap[rt['healpixID'].astype(int)] = rt[xval]
-    hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True)
+
+    plt.axes(ax)
+    hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True,hold=True)
     hp.graticule()
+    if saveFig:
+        plt.savefig('{}_{}_{}_mollview.png'.format(dbName,legx,band))

@@ -247,5 +247,5 @@ class SNCadenceMetric(BaseMetric):
 
         resudf.loc[:,'{}_cad'.format(self.filterCol)] = band
         
-        #print('processed',time.time()-time_ref)
+        #print('processed season',time.time()-time_ref)
         return resudf
