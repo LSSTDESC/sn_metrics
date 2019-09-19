@@ -239,7 +239,8 @@ class Lims:
                      markersize=15)
         plt.xlabel('$m_{5\sigma}$', fontsize=18)
         plt.ylabel(r'Observer frame cadence $^{-1}$ [days]', fontsize=18)
-        plt.title('$%s$' % self.band.split(':')[-1], fontsize=18)
+        #plt.title('$%s$' % self.band.split(':')[-1], fontsize=18)
+        plt.title('{} band'.format(self.band.split(':')[-1]), fontsize=18)
         plt.xlim(self.mag_range)
         plt.ylim(self.dt_range)
         plt.grid(1)
@@ -278,7 +279,9 @@ class Lims:
         for j, name in enumerate(names_ref):
             label.append(
                 name + '  $z_{med}$ = ' + str(np.median(np.round(restot['zlim_'+name], 2))))
-            ax.hist(restot['zlim_'+name], range=[xmin, xmax],
+            # remove point with zlim<0
+            idx = restot['zlim_'+name]>0.
+            ax.hist(restot[idx]['zlim_'+name], range=[xmin, xmax],
                     bins=bins, histtype='step', color=colors[j], linewidth=2)
 
         ax.set_xlabel('$z_{lim}$', fontsize=fontsize)
@@ -372,7 +375,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
 def plotMollview(nside, tab, xval, legx, unitx, minx, band, seasons=-1):
 
-    print(tab.dtype)
+    #print(tab.dtype)
     if seasons == -1:
         plotMollviewIndiv(nside, tab, xval, legx, unitx,
                           minx, band, season=seasons)
@@ -388,10 +391,10 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
 
     med = np.median(tab[xval])
     print(np.min(tab[xval]))
-    leg = 'band {} - {} \n {}: {} {}'.format(
+    leg = '{} band - {} \n {}: {} {}'.format(
         band, 'season {}'.format(season), legx, np.round(med, 1), unitx)
     if season == -1:
-        leg = 'band {} - {} \n {}: {} {}'.format(
+        leg = '{} band - {} \n {}: {} {}'.format(
             band, 'all seasons', legx, np.round(med, 1), unitx)
 
     npix = hp.nside2npix(nside=nside)
@@ -402,7 +405,7 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
 
     hpxmap = np.zeros(npix, dtype=np.float)
     if season > 0.:
-        hpxmap[tab['healpixID']] = tab[xval]
+        hpxmap[tab['healpixID'].astype(int)] = tab[xval]
     else:
         r = []
         for healpixID in np.unique(tab['healpixID']):
@@ -410,6 +413,6 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, season=-1):
             sel = tab[ii]
             r.append((healpixID, np.median(sel[xval])))
         rt = np.rec.fromrecords(r, names=['healpixID', xval])
-        hpxmap[rt['healpixID']] = rt[xval]
+        hpxmap[rt['healpixID'].astype(int)] = rt[xval]
     hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True)
     hp.graticule()
