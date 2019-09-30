@@ -3,6 +3,7 @@ from lsst.sims.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import pandas as pd
 import time
+import healpy as hp
 
 class SNCadenceMetric(BaseMetric):
     """
@@ -57,7 +58,7 @@ class SNCadenceMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', coadd=True, season=-1,
+                 vistimeCol='visitTime', coadd=True, season=-1,nside=64,
                  uniqueBlocks=False, config=None, **kwargs):
 
         self.mjdCol = mjdCol
@@ -95,8 +96,8 @@ class SNCadenceMetric(BaseMetric):
         #area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
         #if self.field_type == 'WFD':
             # in that case the survey area is the healpix area
-            #area = hp.nside2pixarea(
-                #config['Pixelisation']['nside'], degrees=True)
+        self.area = hp.nside2pixarea(nside, degrees=True)
+        self.nside = nside
 
     def run(self, dataSlice, slicePoint=None):
         """
@@ -131,34 +132,38 @@ class SNCadenceMetric(BaseMetric):
         visitExposureTime: median exposure time per season
         """
 
-       
-
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
-
 
         
         time_ref = time.time()
         obsdf = pd.DataFrame(np.copy(dataSlice))
+        
+        res_filter = obsdf.groupby(['healpixID',self.seasonCol,self.filterCol]).apply(lambda x: self.anaSeason(x)).reset_index()
 
-        res_filter = obsdf.groupby(['pixRa','pixDec','healpixID',self.seasonCol,self.filterCol]).apply(lambda x: self.anaSeason(x)).reset_index()
-
-        #print('here',time.time()-time_ref)
-        #print(res_filter[['gap_5','gap_5_new','gap_10','gap_10_new','gap_15','gap_15_new','gap_20','gap_20_new']])
+        
         # remove the u-band 
-        obsdf = obsdf[obsdf[self.filterCol]!='u']
+        
+        obsdf_no_u = obsdf.loc[lambda df : df[self.filterCol]!='u',:].copy()
 
         
-        res_all_but_u= obsdf.groupby(['pixRa','pixDec','healpixID',self.seasonCol]).apply(lambda x: self.anaSeason(x)).reset_index()
-        
-        res_all_but_u.loc[:,self.filterCol] = 'all'
-        
-        res = pd.concat([res_filter,res_all_but_u],sort=False)
+        if not obsdf_no_u.empty:
 
+            res_all_but_u= obsdf_no_u.groupby(['healpixID',self.seasonCol]).apply(lambda x: self.anaSeason(x)).reset_index()
+        
+            res_all_but_u.loc[:,self.filterCol] = 'all'
+            
+            
+            res = pd.concat([res_filter,res_all_but_u],sort=False)
+        else:
+            res = pd.DataFrame(res_filter)
+            
         #res = res[res.columns.difference([self.filterCol,'level_4','level_5'])]
         #res = res.rename(columns={'{}_cad'.format(self.filterCol): self.filterCol})
-        res = res[res.columns.difference(['level_4','level_5'])]
-
+        res = res[res.columns.difference(['level_2','level_3'])]
+        res.loc[:,'pixArea'] = self.area
+        res.loc[:,'nside'] = self.nside
+        
         return res.to_records(index=False)
 
     def anaSeason(self,dataSlice):
@@ -224,7 +229,9 @@ class SNCadenceMetric(BaseMetric):
                                'm5_mean': [m5_mean],
                                'Nobs' : [len(dataSlice)],
                                'season_length': season_length,
-                               'gap_max': gap_max})
+                               'gap_max': gap_max,
+                               'pixRa':np.median(dataSlice['pixRa']),
+                               'pixDec': np.median(dataSlice['pixDec'])})
 
 
         
@@ -248,4 +255,5 @@ class SNCadenceMetric(BaseMetric):
         resudf.loc[:,'{}_cad'.format(self.filterCol)] = band
         
         #print('processed season',time.time()-time_ref)
+        
         return resudf
