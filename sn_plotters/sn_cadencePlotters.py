@@ -396,33 +396,41 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     return restot
 
 
-def plotMollview(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig=False,seasons=-1):
+def plotMollview(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig=False,seasons=-1,type='mollview',fieldzoom=None):
 
     #print(tab.dtype)
     if seasons == -1:
-        plotMollviewIndiv(nside, tab, xval, legx, unitx,
-                          minx, band, 
-                          dbName,saveFig,
-                          season=seasons)
+        plotViewIndiv(nside, tab, xval, legx, unitx,
+                              minx, band, 
+                              dbName,saveFig,
+                              season=seasons,type=type,fieldzoom=fieldzoom)
     else:
         for season in seasons:
             idx = tab['season'] == season
             sel = tab[idx]
-            plotMollviewIndiv(nside, sel, xval, legx, unitx,
-                              minx, band, dbName,saveFig,season=seasons)
+            plotViewIndiv(nside, sel, xval, legx, unitx,
+                                  minx, band, dbName,saveFig,season=season,type=type,fieldzoom=fieldzoom)
+            
 
 
-def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,season=-1):
+def plotViewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,season=-1,type='mollview',fieldzoom=None):
 
 
     fig, ax= plt.subplots(figsize=(8, 6))
+    #print(xval,tab[xval])
     med = np.median(tab[xval])
-    print(np.min(tab[xval]))
-    leg = '{} band - {} \n {}: {} {}'.format(
-        band, 'season {}'.format(season), legx, np.round(med, 1), unitx)
-    if season == -1:
+    #print(med)
+    if band != '':
         leg = '{} band - {} \n {}: {} {}'.format(
-            band, 'all seasons', legx, np.round(med, 1), unitx)
+            band, 'season {}'.format(season), legx, np.round(med, 1), unitx)
+        if season == -1:
+            leg = '{} band - {} \n {}: {} {}'.format(
+                band, 'all seasons', legx, np.round(med, 1), unitx)
+    else:
+        leg = '{} \n {}: {} {}'.format('season {}'.format(season), legx, np.round(med, 1), unitx)
+        if season == -1:
+            leg = '{} \n {}: {} {}'.format('all seasons', legx, np.round(med, 1), unitx)
+
 
     npix = hp.nside2npix(nside=nside)
     cmap = plt.cm.jet
@@ -431,19 +439,127 @@ def plotMollviewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,
     # cmap.set_bad('w')
 
     hpxmap = np.zeros(npix, dtype=np.float)
+    """
     if season > 0.:
         hpxmap[tab['healpixID'].astype(int)] = tab[xval]
     else:
-        r = []
-        for healpixID in np.unique(tab['healpixID']):
-            ii = tab['healpixID'] == healpixID
-            sel = tab[ii]
-            r.append((healpixID, np.median(sel[xval])))
-        rt = np.rec.fromrecords(r, names=['healpixID', xval])
-        hpxmap[rt['healpixID'].astype(int)] = rt[xval]
+    """
+    r = []
+    for healpixID in np.unique(tab['healpixID']):
+        ii = tab['healpixID'] == healpixID
+        sel = tab[ii]
+        r.append((healpixID, np.median(sel[xval])))
+    rt = np.rec.fromrecords(r, names=['healpixID', xval])
+    hpxmap[rt['healpixID'].astype(int)] = rt[xval]
 
     plt.axes(ax)
-    hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True,hold=True)
-    hp.graticule()
+    if type == 'mollview':
+        hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True,hold=True)
+        hp.graticule()
+    if type == 'cartview':
+        fig,ax = plt.subplots()
+        lonra=[-180.,180.]
+        latra=[-90.,90.]
+        if fieldzoom is not None:
+            Ra =  fieldzoom['Ra'][0]
+            Dec = fieldzoom['Dec'][0]
+            lonra = [Ra-5.,Ra+5.]
+            latra = [Dec-5.,Dec+5.]
+
+        #test = hp.cartview(hpxmap, return_projected_map=True,cmap=cmap, title=leg, nest=True,hold=True,lonra=lonra,latra=latra)
+        test = hp.cartview(hpxmap, return_projected_map=True,nest=True,lonra=lonra,latra=latra)
+        ax.imshow(test, origin='lower',extent=(lonra[0],lonra[1],latra[0],latra[1]), interpolation = 'none',cmap=cmap,vmin=10.)
+        #hp.graticule()
+        #plt.xlim([lonra[0],lonra[1]])
+
     if saveFig:
         plt.savefig('{}_{}_{}_mollview.png'.format(dbName,legx,band))
+
+def plotDD(tab,cadenceName, what, io, ax, markers,colors,mfc,adjl):
+    
+    ax.plot(tab['fieldnum'], tab[what],
+            marker=markers[io], color=colors[io], linestyle='None', mfc=mfc[io], label=cadenceName, ms=10)
+
+
+def plotDDLoop(nside,dbNames, tabtot, 
+               what, legx, 
+               markers,colors,mfc,
+               adjl,fields,figleg):
+
+    fontsize = 20
+    fig, ax = plt.subplots()
+    fig.suptitle(figleg, fontsize=fontsize)
+    for io, cadenceName in enumerate(dbNames):
+        idx = (tabtot['cadence'] == cadenceName.ljust(
+            adjl)) & (tabtot['nside'] == nside)
+        plotDD(tabtot[idx],cadenceName, what, io, ax, markers,colors,mfc,adjl)
+
+    ax.set_ylabel(legx, fontsize=fontsize)
+    ax.tick_params(labelsize=fontsize)
+    #fields = getFields(0.)
+    plt.xticks(fields['fieldnum'], fields['fieldname'], fontsize=fontsize)
+    # plt.legend(fontsize=fontsize)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.8, 1.15),
+              ncol=1, fancybox=True, shadow=True, fontsize=15)
+
+
+def plotDDCorrel(tab,cadenceName, whatx,whaty,io, ax, markers,colors,mfc,adjl):
+    
+    ax.plot(tab[whatx], tab[whaty],
+            marker=markers[io], color=colors[io], linestyle='None', mfc=mfc[io], label=cadenceName, ms=10)
+
+
+def plotDDLoopCorrel(nside,dbNames, tabtot, 
+               whatx, whaty,legx,legy,
+               markers,colors,mfc,
+               adjl,fields,figleg):
+
+    fontsize = 20
+    fig, ax = plt.subplots()
+    fig.suptitle(figleg, fontsize=fontsize)
+    for io, cadenceName in enumerate(dbNames):
+        idx = (tabtot['cadence'] == cadenceName.ljust(
+            adjl)) & (tabtot['nside'] == nside)
+      
+
+        plotDDCorrel(tabtot[idx],cadenceName, whatx,whaty, io, ax, markers,colors,mfc,adjl)
+
+    ax.set_xlabel(legx, fontsize=fontsize)
+    ax.set_ylabel(legy, fontsize=fontsize)
+    ax.tick_params(labelsize=fontsize)
+    #fields = getFields(0.)
+    #plt.xticks(fields['fieldnum'], fields['fieldname'], fontsize=fontsize)
+    # plt.legend(fontsize=fontsize)
+    #ax.legend(loc='upper center', bbox_to_anchor=(0.8, 1.15),
+    #          ncol=1, fancybox=True, shadow=True, fontsize=15)
+
+def plotDDCadence(tab,dbName,what,legx,adjl,fields):
+
+    fcolors = 'cgyrm'
+    fmarkers = ['o','*','s','v','^']
+    fmfc = ['None']*len(fcolors)
+    fontsize = 15.
+    fig,ax = plt.subplots()
+    fig.suptitle('{}'.format(dbName))
+    fig.subplots_adjust(right=0.85)
+    #select data for this cadence
+    ia = tab['cadence'] == dbName.ljust(adjl)
+    sela = tab[ia]
+    # loop on bands and plot
+    for io,band in enumerate('grizy'):
+        idx = sela['filter']==band
+        selb = sela[idx]
+        ax.plot(selb['fieldnum'], selb[what],
+            marker=fmarkers[io], color=fcolors[io], linestyle='None', mfc=fmfc[io], label='{}'.format(band), ms=10)
+    
+    plt.xticks(fields['fieldnum'], fields['fieldname'], fontsize=fontsize)
+    # plt.legend(fontsize=fontsize)
+    ax.legend(loc='upper center', bbox_to_anchor=(1.1, 0.7),
+              ncol=1, fancybox=True, shadow=True, fontsize=15)
+
+    ax.set_ylabel(legx,fontsize=fontsize)
+    ax.tick_params(axis='y', labelsize=fontsize)
+
+
+
+    
