@@ -123,15 +123,16 @@ def detecFracPlot(data, nside, names_ref):
     name_ref : list(str)
       name of the simulator used to produce the reference files
     """""
-    data_heal = GetHealpix(data, nside)
+    #data_heal = GetHealpix(data, nside)
     npix = hp.nside2npix(nside)
-    for band, season in np.unique(data_heal[['band', 'season']]):
-        idx = (data_heal['band'] == band) & (data_heal['season'] == season)
-        sel = data_heal[idx]
+    print(npix,'npix')
+    for band, season in np.unique(data[['band', 'season']]):
+        idx = (data['band'] == band) & (data['season'] == season)
+        sel = data[idx]
         for sim in names_ref:
             fig, ax = plt.subplots()
             hpxmap = np.zeros(npix, dtype=np.float)
-            hpxmap[sel['healpixID']] += sel['frac_obs_'+sim]
+            hpxmap[sel['healpixId'].astype(int)] += sel['frac_obs_'+sim]
             cmap = plt.cm.jet
             # cmap.Normalize(clip=True)
             cmap.set_under('w')
@@ -235,7 +236,9 @@ def GetHealpix(data, nside):
     """
     res = data.copy()
     npix = hp.nside2npix(nside)
-    table = hp.ang2vec(data['fieldRA'], data['fieldDec'], lonlat=True)
+    print(res[['fieldRA','fieldDec']])
+    table = hp.ang2vec(res['fieldRA'], res['fieldDec'], lonlat=True)
     healpixs = hp.vec2pix(nside, table[:, 0], table[:, 1], table[:, 2])
+    print(healpixs)
     res = rf.append_fields(res, 'healpixID', healpixs)
     return res

@@ -396,12 +396,52 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     return restot
 
 
-def plotMollview(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig=False,seasons=-1,type='mollview',fieldzoom=None):
+def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName,saveFig=False,seasons=-1,type='mollview',fieldzoom=None):
+    """
+    Mollweid or Cart view
+
+    Parameters
+    --------------
+
+    nside: int
+     healpix nside parameter
+    tab: array
+     array of values
+    xval: str
+     name of the variable to display
+    legx: str
+     legend to display
+    unitx: str
+     unit of the legend
+    minx: float
+     min value for display
+    maxx: float
+     max value for display
+    band: str
+     band considered
+    dbName: str
+     name of the cadence file
+    saveFig: bool, opt
+     To save figure or not (default: False)
+    seasons: int
+     list of seasons to display (-1 = all)
+    type: str, opt
+     type of display: mollview (default) or cartview
+    fieldzoom: bool, opt
+     to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
+     (default: None)
+    
+    Returns
+    ---------
+    None
+
+    """
+
 
     #print(tab.dtype)
     if seasons == -1:
         plotViewIndiv(nside, tab, xval, legx, unitx,
-                              minx, band, 
+                              minx, maxx,band, 
                               dbName,saveFig,
                               season=seasons,type=type,fieldzoom=fieldzoom)
     else:
@@ -409,11 +449,52 @@ def plotMollview(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig=False
             idx = tab['season'] == season
             sel = tab[idx]
             plotViewIndiv(nside, sel, xval, legx, unitx,
-                                  minx, band, dbName,saveFig,season=season,type=type,fieldzoom=fieldzoom)
+                                  minx, maxx,band, dbName,saveFig,season=season,type=type,fieldzoom=fieldzoom)
             
 
 
-def plotViewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,season=-1,type='mollview',fieldzoom=None):
+def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx,band, dbName,saveFig,season=-1,type='mollview',fieldzoom=None):
+
+    """
+    Mollweid or Cart view
+
+    Parameters
+    --------------
+
+    nside: int
+     healpix nside parameter
+    tab: array
+     array of values
+    xval: str
+     name of the variable to display
+    legx: str
+     legend to display
+    unitx: str
+     unit of the legend
+    minx: float
+     min value for display
+    maxx: float
+     max value for display
+    band: str
+     band considered
+    dbName: str
+     name of the cadence file
+    saveFig: bool, opt
+     To save figure or not (default: False)
+    seasons: int
+     list of seasons to display (-1 = all)
+    type: str, opt
+     type of display: mollview (default) or cartview
+    fieldzoom: bool, opt
+     to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
+     (default: None)
+    
+    Returns
+    ---------
+    None
+
+    """
+
 
 
     fig, ax= plt.subplots(figsize=(8, 6))
@@ -454,10 +535,10 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,seas
 
     plt.axes(ax)
     if type == 'mollview':
-        hp.mollview(hpxmap, min=minx, cmap=cmap, title=leg, nest=True,hold=True)
+        hp.mollview(hpxmap, min=minx, max=maxx,cmap=cmap, title=leg, nest=True,hold=True)
         hp.graticule()
     if type == 'cartview':
-        fig,ax = plt.subplots()
+        #fig,ax = plt.subplots()
         lonra=[-180.,180.]
         latra=[-90.,90.]
         if fieldzoom is not None:
@@ -465,20 +546,45 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, band, dbName,saveFig,seas
             Dec = fieldzoom['Dec'][0]
             lonra = [Ra-5.,Ra+5.]
             latra = [Dec-5.,Dec+5.]
+        hp.cartview(hpxmap,min=minx, max=maxx,cmap=cmap,title=leg,nest=True,lonra=lonra,latra=latra)
+
+  
 
         #test = hp.cartview(hpxmap, return_projected_map=True,cmap=cmap, title=leg, nest=True,hold=True,lonra=lonra,latra=latra)
-        test = hp.cartview(hpxmap, return_projected_map=True,nest=True,lonra=lonra,latra=latra)
-        ax.imshow(test, origin='lower',extent=(lonra[0],lonra[1],latra[0],latra[1]), interpolation = 'none',cmap=cmap,vmin=10.)
+        
+        #test = hp.cartview(hpxmap, return_projected_map=True,nest=True,lonra=lonra,latra=latra)
+        #ax.imshow(test, origin='lower',extent=(lonra[0],lonra[1],latra[0],latra[1]), interpolation = 'none',cmap=cmap,vmin=10.)
         #hp.graticule()
         #plt.xlim([lonra[0],lonra[1]])
 
     if saveFig:
         plt.savefig('{}_{}_{}_mollview.png'.format(dbName,legx,band))
 
-def plotDD(tab,cadenceName, what, io, ax, markers,colors,mfc,adjl):
-    
+def plotDD(tab,cadenceName, what, ax, marker,color,mfc):
+    """
+    plot display for DD
+
+    Parameters
+    --------------
+
+    tab: array
+     array of values
+    cadenceName: str
+     name of the cadence considered
+    what: str
+     name of the variable to display
+    ax: 
+     axis for the display
+    marker: str
+     marker type for the display
+    color: str
+     marker color for the display
+    mfc: str
+     marker mfc for the display
+    """
+
     ax.plot(tab['fieldnum'], tab[what],
-            marker=markers[io], color=colors[io], linestyle='None', mfc=mfc[io], label=cadenceName, ms=10)
+            marker=marker, color=color, linestyle='None', mfc=mfc, label=cadenceName, ms=10)
 
 
 def plotDDLoop(nside,dbNames, tabtot, 
@@ -486,13 +592,48 @@ def plotDDLoop(nside,dbNames, tabtot,
                markers,colors,mfc,
                adjl,fields,figleg):
 
+    """
+    Loop of plots for DDF
+
+    Parameters
+    --------------
+
+    nside: int
+     healpix nside parameter
+    dbNames: list(str)
+      list of cadences to consider
+    tabtot: array
+     array of values
+    what: str
+     name of the variable to display
+    legx: str
+     legend to display
+    markers: list(str)
+     marker types for the display
+    colors: list(str)
+     color marker for the display   
+    mfc: list(str)
+     marker face color for the display
+    adjl: int
+     to adjust cadence names on the same length
+    fields: array
+     fields to display
+    figleg: str
+     legend of the figure
+
+    Returns
+    ---------
+    None
+
+    """
+
     fontsize = 20
     fig, ax = plt.subplots()
     fig.suptitle(figleg, fontsize=fontsize)
     for io, cadenceName in enumerate(dbNames):
         idx = (tabtot['cadence'] == cadenceName.ljust(
             adjl)) & (tabtot['nside'] == nside)
-        plotDD(tabtot[idx],cadenceName, what, io, ax, markers,colors,mfc,adjl)
+        plotDD(tabtot[idx],cadenceName, what, ax, markers[io],colors[io],mfc[io])
 
     ax.set_ylabel(legx, fontsize=fontsize)
     ax.tick_params(labelsize=fontsize)
@@ -503,16 +644,80 @@ def plotDDLoop(nside,dbNames, tabtot,
               ncol=1, fancybox=True, shadow=True, fontsize=15)
 
 
-def plotDDCorrel(tab,cadenceName, whatx,whaty,io, ax, markers,colors,mfc,adjl):
-    
+def plotDDCorrel(tab,cadenceName, whatx,whaty,ax, marker,color,mfc):
+     
+    """
+    plot display for DD correlation
+
+    Parameters
+    --------------
+
+    tab: array
+     array of values
+    cadenceName: str
+     name of the cadence considered
+    whatx: str
+     name of the 1rst variable to display
+    whaty: str
+     name of the 2nd variable to display
+    ax: 
+     axis for the display
+    marker: str
+     marker type for the display
+    color: str
+     marker color for the display
+    mfc: str
+     marker mfc for the display
+    """
     ax.plot(tab[whatx], tab[whaty],
-            marker=markers[io], color=colors[io], linestyle='None', mfc=mfc[io], label=cadenceName, ms=10)
+            marker=marker, color=color, linestyle='None', mfc=mfc, label=cadenceName, ms=10)
 
 
 def plotDDLoopCorrel(nside,dbNames, tabtot, 
                whatx, whaty,legx,legy,
                markers,colors,mfc,
                adjl,fields,figleg):
+
+
+    """
+    Loop of plots for DDF correlation
+
+    Parameters
+    --------------
+
+    nside: int
+     healpix nside parameter
+    dbNames: list(str)
+      list of cadences to consider
+    tabtot: array
+     array of values
+    whatx: str
+     name of the 1rst variable to display
+    whaty: str
+     name of the 2nd variable to display      
+    legx: str
+     legend to display (1rst var)
+    legy: str
+     legend to display (2nd var) 
+    markers: list(str)
+     marker types for the display
+    colors: list(str)
+     color marker for the display   
+    mfc: list(str)
+     marker face color for the display
+    adjl: int
+     to adjust cadence names on the same length
+    fields: array
+     fields to display
+    figleg: str
+     legend of the figure
+
+    Returns
+    ---------
+    None
+
+    """
+
 
     fontsize = 20
     fig, ax = plt.subplots()
@@ -522,7 +727,7 @@ def plotDDLoopCorrel(nside,dbNames, tabtot,
             adjl)) & (tabtot['nside'] == nside)
       
 
-        plotDDCorrel(tabtot[idx],cadenceName, whatx,whaty, io, ax, markers,colors,mfc,adjl)
+        plotDDCorrel(tabtot[idx],cadenceName, whatx,whaty,ax, markers[io],colors[io],mfc[io],adjl)
 
     ax.set_xlabel(legx, fontsize=fontsize)
     ax.set_ylabel(legy, fontsize=fontsize)
@@ -534,6 +739,27 @@ def plotDDLoopCorrel(nside,dbNames, tabtot,
     #          ncol=1, fancybox=True, shadow=True, fontsize=15)
 
 def plotDDCadence(tab,dbName,what,legx,adjl,fields):
+  
+    """
+    DDF cadence plot
+
+    Parameters
+    --------------
+
+    tab: array
+     array of values
+    dbNames: list(str)
+      list of cadences to consider
+    what: str
+     name of the variable to display
+    legx: str
+     legend for the variable to display
+    adjl: int
+     to adjust cadence names on the same length
+    fields: array
+     fields to display
+
+    """
 
     fcolors = 'cgyrm'
     fmarkers = ['o','*','s','v','^']

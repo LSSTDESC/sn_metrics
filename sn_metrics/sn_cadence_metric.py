@@ -134,8 +134,10 @@ class SNCadenceMetric(BaseMetric):
 
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
-
-        
+            
+        dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
+       
+            
         time_ref = time.time()
         obsdf = pd.DataFrame(np.copy(dataSlice))
         
@@ -162,7 +164,9 @@ class SNCadenceMetric(BaseMetric):
         #res = res.rename(columns={'{}_cad'.format(self.filterCol): self.filterCol})
         res = res[res.columns.difference(['level_2','level_3'])]
         res.loc[:,'pixArea'] = self.area
-        res.loc[:,'nside'] = self.nside
+        res.loc[:,'nside'] = int(self.nside)
+        
+        res['nside'] = res['nside'].astype(int)
         
         return res.to_records(index=False)
 

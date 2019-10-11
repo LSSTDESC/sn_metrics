@@ -132,6 +132,11 @@ class SNSNRRateMetric(BaseMetric):
         dataSlice = seasonCalc(dataSlice)
         self.fieldRA = np.mean(dataSlice[self.RaCol])
         self.fieldDec = np.mean(dataSlice[self.DecCol])
+
+        self.pixRa = np.mean(dataSlice['pixRa'])
+        self.pixDec = np.mean(dataSlice['pixDec'])
+        self.healpixId = np.mean(dataSlice['healpixID'])
+
         #print('there we fo', self.fieldRA, self.fieldDec)
         seasons = self.season
         if self.season == -1:
@@ -147,10 +152,14 @@ class SNSNRRateMetric(BaseMetric):
         if self.info_season is None:
             r = []
             for seas in seasons:
-                r.append((seas, self.fieldRA, self.fieldDec, 0., self.bands))
+                r.append((seas, self.fieldRA, self.fieldDec, 
+                          self.pixRa,self.pixDec,self.healpixId,
+                          0., self.bands))
 
             return np.rec.fromrecords(r, names=[
-                'season', 'fieldRA', 'fieldDec', 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
+                'season', 'fieldRA', 'fieldDec', 
+                'pixRa','pixDec','healpixId',
+                'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         seasons = self.info_season['season']
         #print('there', seasons)
@@ -186,11 +195,15 @@ class SNSNRRateMetric(BaseMetric):
                 if nsn > 0:
                     rat = nsn_snrcut/nsn
                 #print(season,rat,nsn,val['MJD_min'],val['MJD_max'])
-            r.append((season, self.fieldRA, self.fieldDec, rat, self.bands))
+            r.append((season, self.fieldRA, self.fieldDec, 
+                      self.pixRa,self.pixDec,self.healpixId,
+                      rat, self.bands))
 
         final_resu = np.rec.fromrecords(r, names=[
-                                        'season', 'fieldRA', 'fieldDec', 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
-
+            'season', 'fieldRA', 'fieldDec', 
+            'pixRa','pixDec','healpixId',
+            'frac_obs_{}'.format(self.names_ref[0]), 'band'])
+        
         #print(test)
         # print(final_resu)
         # print(test)
@@ -297,20 +310,24 @@ class SNSNRRateMetric(BaseMetric):
         snr = rf.append_fields(snr, 'MJD', dates)
         snr = rf.append_fields(snr, 'm5_eff', np.mean(
             np.ma.array(m5_vals, mask=~flag), axis=1))
-        global_info = [(self.fieldRA, self.fieldDec, band, m5,
-                        Nvisits, exptime)]*len(snr)
-        names = ['fieldRA', 'fieldDec', 'band',
-                 'm5', 'Nvisits', 'ExposureTime']
-        global_info = np.rec.fromrecords(global_info, names=names)
-        snr = rf.append_fields(
-            snr, names, [global_info[name] for name in names])
 
-        #print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
-        #                        'SNR_{}'.format(self.names_ref[0])]])
-        idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
-        snr = np.copy(snr[idx])
-        #print('there pol', snr.dtype,self.snr_ref[band],snr)
-        
+        if len(snr) > 0:
+            global_list = [(self.fieldRA, self.fieldDec, band, m5,
+                            Nvisits, exptime)]*len(snr)
+            names = ['fieldRA', 'fieldDec', 'band',
+                     'm5', 'Nvisits', 'ExposureTime']
+            global_info = np.rec.fromrecords(global_list, names=names)
+            snr = rf.append_fields(
+                snr, names, [global_info[name] for name in names])
+
+            #print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
+            #                        'SNR_{}'.format(self.names_ref[0])]])
+            idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
+            snr = np.copy(snr[idx])
+            #print('there pol', snr.dtype,self.snr_ref[band],snr)
+        else:
+            snr = None
+
         if output_q is not None:
             output_q.put({j: snr})
         else:
