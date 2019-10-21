@@ -137,7 +137,6 @@ class SNCadenceMetric(BaseMetric):
             
         dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
        
-            
         time_ref = time.time()
         obsdf = pd.DataFrame(np.copy(dataSlice))
         
@@ -170,15 +169,48 @@ class SNCadenceMetric(BaseMetric):
         
         return res.to_records(index=False)
 
+    def seq(self, dataSlice):
+        seq_band = "".join([val for val in np.unique(dataSlice[self.filterCol])])
+
+        return pd.DataFrame({'seq':seq_band})
+
+
     def anaSeason(self,dataSlice):
 
         time_ref=time.time()
         dataSlice.sort_values(by=[self.mjdCol])
 
-        #slicetime = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
+        return self.sliceCalc(dataSlice)
 
-        r = []
+        """
+        print('try to define sequences per night')
+
+        print('before',dataSlice)
+
+        #dataSlice['seq'] = dataSlice.groupby([self.nightCol])[self.filterCol].sum()
+        print(dataSlice.columns)
+        ll = dataSlice.groupby([self.nightCol])[self.filterCol].sum()
+    
+        print('alooooooo')
+        print('herer after',ll)
         
+
+        
+        res = pd.DataFrame()
+        for seq in dataSlice['seq'].unique():
+            index = dataSlice['seq'] == seq
+
+            res = pd.concat([res, self.sliceCalc(dataSlice[index])])
+        print(test)
+        return res
+
+        """
+    def sliceCalc(self,dataSlice):
+
+        #slicetime = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
+        """
+        r = []
+        """
         #get the band
         band = "".join([val for val in np.unique(dataSlice[self.filterCol])])
         band = band.ljust(6)
