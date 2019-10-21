@@ -396,7 +396,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     return restot
 
 
-def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName,saveFig=False,seasons=-1,type='mollview',fieldzoom=None):
+def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName,saveFig=False,seasons=-1,type='mollview',fieldzoom=None,healpixId='healpixID'):
     """
     Mollweid or Cart view
 
@@ -430,6 +430,8 @@ def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName,saveFig
     fieldzoom: bool, opt
      to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
      (default: None)
+    healpixId: str, opt
+     string to identify healpixId (default: healpixID)
     
     Returns
     ---------
@@ -441,19 +443,23 @@ def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName,saveFig
     #print(tab.dtype)
     if seasons == -1:
         plotViewIndiv(nside, tab, xval, legx, unitx,
-                              minx, maxx,band, 
-                              dbName,saveFig,
-                              season=seasons,type=type,fieldzoom=fieldzoom)
+                      minx, maxx,band, 
+                      dbName,saveFig,
+                      season=seasons,type=type,fieldzoom=fieldzoom,
+                      healpixId=healpixId)
     else:
         for season in seasons:
             idx = tab['season'] == season
             sel = tab[idx]
             plotViewIndiv(nside, sel, xval, legx, unitx,
-                                  minx, maxx,band, dbName,saveFig,season=season,type=type,fieldzoom=fieldzoom)
+                          minx, maxx,band, dbName,
+                          saveFig,season=season,type=type,
+                          fieldzoom=fieldzoom,
+                          healpixId=healpixId)
             
 
 
-def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx,band, dbName,saveFig,season=-1,type='mollview',fieldzoom=None):
+def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx,band, dbName,saveFig,season=-1,type='mollview',fieldzoom=None,healpixId='healpixID'):
 
     """
     Mollweid or Cart view
@@ -487,7 +493,9 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx,band, dbName,saveFig
      type of display: mollview (default) or cartview
     fieldzoom: bool, opt
      to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
-     (default: None)
+     (default: None)    
+    healpixId: str, opt
+     string to identify healpixId (default: healpixID)
     
     Returns
     ---------
@@ -526,8 +534,8 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx,band, dbName,saveFig
     else:
     """
     r = []
-    for healpixID in np.unique(tab['healpixID']):
-        ii = tab['healpixID'] == healpixID
+    for healpixID in np.unique(tab[healpixId]):
+        ii = tab[healpixId] == healpixID
         sel = tab[ii]
         r.append((healpixID, np.median(sel[xval])))
     rt = np.rec.fromrecords(r, names=['healpixID', xval])
@@ -672,6 +680,44 @@ def plotDDCorrel(tab,cadenceName, whatx,whaty,ax, marker,color,mfc):
     ax.plot(tab[whatx], tab[whaty],
             marker=marker, color=color, linestyle='None', mfc=mfc, label=cadenceName, ms=10)
 
+def plotDDFit(tabtot, whatx, whaty,whatz='',whatzb=''):
+    # linear fit
+    figb, axb = plt.subplots()
+    
+    idx = (tabtot[whatx]>0.)&(tabtot[whaty]>0.)
+    tabfit = tabtot[idx]
+    if whatz == '':
+        xfit = tabfit[whatx]
+        yfit = tabfit[whaty]
+    else:
+        yfit = tabfit[whatx]/tabfit[whaty]
+        xfit = tabfit[whatz]/tabfit[whatzb]
+    
+
+    axb.plot(xfit,yfit,'ko')
+
+    fit = np.polyfit(xfit,yfit,1)
+    p = np.poly1d(fit)
+
+    xrange = np.arange(np.min(xfit),np.max(yfit),0.01)
+
+    axb.plot(xrange,p(xrange),color='r')
+
+    figc, axc = plt.subplots()
+
+    #axc.plot(tabfit[whatx],p(tabfit[whatx])/tabfit[whaty],'ro')
+    if whatz == '':
+        axc.hist(p(xfit)/yfit,histtype='step')
+    else:
+        axc.plot(xfit,p(xfit)/yfit,'bo')
+    n, bins = np.histogram(p(xfit)/yfit)
+    mids = 0.5*(bins[1:] + bins[:-1])
+    mean = np.average(mids, weights=n)
+
+    var = np.average((mids - mean)**2, weights=n)
+
+    print('mean and var',mean, np.sqrt(var))
+    
 
 def plotDDLoopCorrel(nside,dbNames, tabtot, 
                whatx, whaty,legx,legy,
@@ -727,7 +773,7 @@ def plotDDLoopCorrel(nside,dbNames, tabtot,
             adjl)) & (tabtot['nside'] == nside)
       
 
-        plotDDCorrel(tabtot[idx],cadenceName, whatx,whaty,ax, markers[io],colors[io],mfc[io],adjl)
+        plotDDCorrel(tabtot[idx],cadenceName, whatx,whaty,ax, markers[io],colors[io],mfc[io])
 
     ax.set_xlabel(legx, fontsize=fontsize)
     ax.set_ylabel(legy, fontsize=fontsize)
@@ -737,6 +783,8 @@ def plotDDLoopCorrel(nside,dbNames, tabtot,
     # plt.legend(fontsize=fontsize)
     #ax.legend(loc='upper center', bbox_to_anchor=(0.8, 1.15),
     #          ncol=1, fancybox=True, shadow=True, fontsize=15)
+
+   
 
 def plotDDCadence(tab,dbName,what,legx,adjl,fields):
   
