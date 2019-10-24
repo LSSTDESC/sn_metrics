@@ -93,6 +93,8 @@ class SNSNRMetric(BaseMetric):
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
         if coadd:
             cols += ['coadd']
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
+
         super(SNSNRMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -140,6 +142,11 @@ class SNSNRMetric(BaseMetric):
 
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
+        #stack the data if requested
+
+        if self.stacker is not None:
+            dataSlice = self.stacker._run(dataSlice)
+
 
         seasons = self.season
 
@@ -195,6 +202,9 @@ class SNSNRMetric(BaseMetric):
         m5_eff: mean m5 of obs passing the min_phase, max_phase cut
         fieldRA: mean field RA
         fieldDec: mean field Dec
+        pixRa: mean field pixRa
+        pixDec: mean field pixDec
+        healpixID: field healpix Id
         band:  band
         m5: mean m5 (over the season)
         Nvisits: median number of visits (per observation) (over the season)
@@ -216,6 +226,10 @@ class SNSNRMetric(BaseMetric):
         # Get few infos: RA, Dec, Nvisits, m5, exptime
         fieldRA = np.mean(sel[self.RaCol])
         fieldDec = np.mean(sel[self.DecCol])
+        pixRa = np.mean(sel['pixRa'])
+        pixDec = np.mean(sel['pixDec'])
+        healpixID = int(np.unique(sel['healpixID'])[0])
+
         Nvisits = np.median(sel[self.nexpCol]/2.)  # one visit = 2 exposures
         m5 = np.mean(sel[self.m5Col])
         exptime = np.median(sel[self.exptimeCol])
@@ -265,10 +279,13 @@ class SNSNRMetric(BaseMetric):
         snr = rf.append_fields(snr, 'MJD', dates)
         snr = rf.append_fields(snr, 'm5_eff', np.mean(
             np.ma.array(m5_vals, mask=~flag), axis=1))
-        global_info = [(fieldRA, fieldDec, band, m5,
+        global_info = [(fieldRA, fieldDec, pixRa,pixDec,healpixID,band, m5,
                         Nvisits, exptime)]*len(snr)
-        names = ['fieldRA', 'fieldDec', 'band',
-                 'm5', 'Nvisits', 'ExposureTime']
+        names = ['fieldRA', 'fieldDec', 
+                 'pixRa','pixDec',
+                 'healpixID','band',
+                 'm5', 'Nvisits', 
+                 'ExposureTime']
         global_info = np.rec.fromrecords(global_info, names=names)
         snr = rf.append_fields(
             snr, names, [global_info[name] for name in names])
@@ -451,6 +468,9 @@ class SNSNRMetric(BaseMetric):
           observationStartMJD (float)
           fieldRA (float)
           fieldDec (float)
+          pixRa (float)
+          pixDec (float)
+          healpixID (int)
           filter (U1)
           fiveSigmaDepth (float)
           numExposures (float)
@@ -460,6 +480,9 @@ class SNSNRMetric(BaseMetric):
         slice_sel.sort(order=self.mjdCol)
         fieldRA = np.mean(slice_sel[self.RaCol])
         fieldDec = np.mean(slice_sel[self.DecCol])
+        pixRa = np.mean(slice_sel['pixRa'])
+        pixDec = np.mean(slice_sel['pixDec'])
+        healpixID = int(np.unique(slice_sel['healpixID'])[0])
         mjds_season = slice_sel[self.mjdCol]
         cadence = np.mean(mjds_season[1:]-mjds_season[:-1])
         mjd_min = np.min(mjds_season)
@@ -484,6 +507,11 @@ class SNSNRMetric(BaseMetric):
         config_fake['seeingGeom'] = [0.87]
 
         fake_obs_season = GenerateFakeObservations(config_fake).Observations
+
+        fake_obs_season = rf.append_fields(fake_obs_season,'pixRa',[pixRa]*len(fake_obs_season))
+        fake_obs_season = rf.append_fields(fake_obs_season,'pixDec',[pixDec]*len(fake_obs_season))
+        fake_obs_season = rf.append_fields(fake_obs_season,'healpixID',[healpixID]*len(fake_obs_season))
+
 
         return fake_obs_season
 
@@ -582,6 +610,10 @@ class SNSNRMetric(BaseMetric):
 
         ra = np.mean(snr_obs['fieldRA'])
         dec = np.mean(snr_obs['fieldDec'])
+        pixRa =  np.mean(snr_obs['pixRa'])
+        pixDec = np.mean(snr_obs['pixDec'])
+        healpixID = int(np.unique(snr_obs['healpixID'])[0])
+
         band = np.unique(snr_obs['band'])[0]
 
         rtot = []
@@ -593,8 +625,8 @@ class SNSNRMetric(BaseMetric):
             sel_fakes = snr_fakes[idxb]
             sel_obs.sort(order='MJD')
             sel_fakes.sort(order='MJD')
-            r = [ra, dec, season, band]
-            names = [self.RaCol, self.DecCol, 'season', 'band']
+            r = [ra, dec, pixRa, pixDec, healpixID, season, band]
+            names = [self.RaCol, self.DecCol, 'pixRa','pixDec','healpixID','season', 'band']
             for sim in self.names_ref:
                 fakes = interpolate.interp1d(
                     sel_fakes['MJD'], sel_fakes['SNR_'+sim])
