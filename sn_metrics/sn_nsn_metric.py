@@ -134,7 +134,7 @@ class SNNSNMetric(BaseMetric):
         self.zStep = 0.05  # zstep
         self.daymaxStep = 3.  # daymax step
         self.min_rf_phase = -20.
-        self.max_rf_phase = 60.
+        self.max_rf_phase = 40.
 
         self.min_rf_phase_qual = -10.
         self.max_rf_phase_qual = 20.
@@ -157,7 +157,7 @@ class SNNSNMetric(BaseMetric):
 
         self.params = ['x0', 'x1', 'daymax', 'color']
 
-        self.outputType = outputType # this is to dump effi vs z as output
+        self.outputType = outputType # this is to choose the output: lc, sn, effi, zlims
         self.proxy_level = proxy_level # proxy level chosen by the user: 0, 1, 2
  
     def run(self, dataSlice,  slicePoint=None):
@@ -287,7 +287,7 @@ class SNNSNMetric(BaseMetric):
 
         sn,lc = self.run_season_slice(obs, gen_par)
 
-        if self.outputType == 'lc':
+        if self.outputType == 'lc' or self.outputType == 'sn':
             return sn,lc
         if self.verbose:
             print('after simulation', season, time.time()-time_refb)
@@ -707,7 +707,7 @@ class SNNSNMetric(BaseMetric):
             effisel = effi_tot
 
         #print('hello',effisel,grp)
-        nsn = self.nsn(effisel, grp['zlim'], rateInterp)
+        nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
 
         return nsn
 
@@ -746,14 +746,16 @@ class SNNSNMetric(BaseMetric):
         effi_err_grid = RegularGridInterpolator((x1_vals,color_vals,z_vals),effi_err_resh,method='linear',bounds_error=False,fill_value=0.)
 
         nsnTot = None
-        
+        ip = -1
+        weight_sum = 0.
         for vals in self.x1_color_dist:
             
             x1 = vals['x1']
             color = vals['color']
             weight = vals['weight_tot']
             if np.abs(x1)<=2 and np.abs(color)<=0.2:
-                #ip += 1
+                ip += 1
+                weight_sum += weight
                 #print('trying',x1,color,weight)
                 df_x1c = pd.DataFrame()
                 df_x1c.loc[:,'effi'] = effi_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
@@ -768,12 +770,12 @@ class SNNSNMetric(BaseMetric):
                 nsn = zlim.apply(lambda x: self.nsn_typedf(
                     x, x1, color, df_x1c, duration_z,search=False), axis=1)
                 
-                #print(nsn,nsn*weight)
+                #print('NSN',x1,color,duration_z,nsn,nsn*weight)
                 if nsnTot is None:
                     nsnTot = nsn*weight
                 else:
                     nsnTot = np.sum([nsnTot,nsn*weight],axis=0)
-               
+        
         return nsnTot
         
         """
@@ -832,20 +834,34 @@ class SNNSNMetric(BaseMetric):
         return nsn_interp(zlim)
     """
 
-    def nsn(self, effi, zlim, rateInterp):
+    def nsn(self, effi, zlim, duration_z):
 
         
         if zlim<1.e-3:
             return -1
             
-        zplot = list(np.arange(self.zmin, self.zmax, 0.001))
+        dz = 0.001
+        zplot = list(np.arange(self.zmin, self.zmax, dz))
         # interpolate efficiencies vs z
         effiInterp = interp1d(
             effi['z'], effi['effi'], kind='linear', bounds_error=False, fill_value=0.)
         # estimate the cumulated number of SN vs z
-        nsn_cum = np.cumsum(effiInterp(zplot)*rateInterp(zplot))
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
+                                                       zmax=self.zmax,
+                                                       dz=dz,
+                                                       duration_z=duration_z,
+                                                       survey_area=self.pixArea)
+
+        nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
+        #nsn_cum = np.cumsum(rateInterp(zplot))*dz
         nsn_interp = interp1d(zplot, nsn_cum)
 
+        """
+        import matplotlib.pyplot as plt
+
+        plt.plot(zplot,nsn_cum)
+        plt.show()
+        """
         return np.asscalar(nsn_interp(zlim))
         
         print([-1.]*len(zlim),type(zlim))
@@ -977,19 +993,24 @@ class SNNSNMetric(BaseMetric):
             if self.verbose:
                 print('after selection',time.time()-time_refp)
 
+            finalsn = pd.DataFrame()
             goodsn = pd.DataFrame(sums.loc[idx])
-            goodsn.loc[:,'Cov_colorcolor'] = covColor(goodsn)
-
+            if len(goodsn) > 0:
+                goodsn.loc[:,'Cov_colorcolor'] = covColor(goodsn)
+                finalsn = pd.concat([finalsn,goodsn], sort=False)
             if self.verbose:
                 print('after color',time.time()-time_refp)
 
             badsn = pd.DataFrame(sums.loc[~idx])
-            badsn.loc[:,'Cov_colorcolor'] = 100.
+
+            if len(badsn) > 0:
+                badsn.loc[:,'Cov_colorcolor'] = 100.
+                finalsn = pd.concat([finalsn,badsn], sort=False)
 
 
             if self.verbose:
                 print('end of processing',time.time()-time_refp)
-            return pd.concat([goodsn,badsn], sort=False)
+            return finalsn
 
         indices = groups.groups.indices
         ngroups = len(indices)-1
