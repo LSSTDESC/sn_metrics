@@ -136,8 +136,8 @@ class SNNSNMetric(BaseMetric):
         self.min_rf_phase = -20.
         self.max_rf_phase = 40.
 
-        self.min_rf_phase_qual = -10.
-        self.max_rf_phase_qual = 20.
+        self.min_rf_phase_qual = -15.
+        self.max_rf_phase_qual = 25.
 
         # snrate
         self.rateSN = SN_Rate(
@@ -160,6 +160,8 @@ class SNNSNMetric(BaseMetric):
         self.outputType = outputType # this is to choose the output: lc, sn, effi, zlims
         self.proxy_level = proxy_level # proxy level chosen by the user: 0, 1, 2
  
+        print('pixel area',self.pixArea)
+
     def run(self, dataSlice,  slicePoint=None):
 
         time_ref = time.time()
@@ -659,26 +661,28 @@ class SNNSNMetric(BaseMetric):
             zlim = interp1d(nsn_cum_norm, zplot)
             zlimit = np.asscalar(zlim(0.95))
             status = self.status['ok']
+       
+           
 
+            if self.ploteffi:
+                import matplotlib.pylab as plt
+                fig, ax = plt.subplots()
+                x1 = grp['x1'].unique()[0]
+                color = grp['color'].unique()[0]
+               
+                ax.plot(zplot, nsn_cum_norm,
+                        label='(x1,color)=({},{})'.format(x1,color))
 
-        if self.ploteffi:
-            import matplotlib.pylab as plt
-            fig, ax = plt.subplots()
-            x1 = grp['x1'].unique()[0]
-            color = grp['color'].unique()[0]
-            ax.plot(zplot, nsn_cum_norm,
-                    label='(x1,color)=({},{})'.format(x1,color))
-
-            ftsize = 15
-            ax.set_ylabel('NSN ($z<$)', fontsize=ftsize)
-            ax.set_xlabel('z', fontsize=ftsize)
-            ax.xaxis.set_tick_params(labelsize=ftsize)
-            ax.yaxis.set_tick_params(labelsize=ftsize)
-            ax.set_xlim((0.0, 1.2))
-            ax.set_ylim((0.0, 1.05))
-            ax.plot([0., 1.2], [0.95, 0.95], ls='--', color='k')
-            plt.legend(fontsize=ftsize)
-            plt.show()
+                ftsize = 15
+                ax.set_ylabel('NSN ($z<$)', fontsize=ftsize)
+                ax.set_xlabel('z', fontsize=ftsize)
+                ax.xaxis.set_tick_params(labelsize=ftsize)
+                ax.yaxis.set_tick_params(labelsize=ftsize)
+                ax.set_xlim((0.0, 1.2))
+                ax.set_ylim((0.0, 1.05))
+                ax.plot([0., 1.2], [0.95, 0.95], ls='--', color='k')
+                plt.legend(fontsize=ftsize)
+                plt.show()
 
         return pd.DataFrame({'zlim': [zlimit],
                              'status': [int(status)]})
@@ -693,20 +697,21 @@ class SNNSNMetric(BaseMetric):
         durinterp_z = interp1d(
             seas_duration_z['z'], seas_duration_z['season_length'], bounds_error=False, fill_value=0.)
 
+        """
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
                                                        zmax=self.zmax,
                                                        duration_z=durinterp_z,
                                                        survey_area=self.pixArea)
         rateInterp = interp1d(zz, nsn, kind='linear',
                               bounds_error=False, fill_value=0)
-
+        """
         if search:
             effisel = effi_tot.loc[lambda dfa: (
                 dfa['x1'] == x1) & (dfa['color'] == color), :]
         else:
             effisel = effi_tot
 
-        #print('hello',effisel,grp)
+        
         nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
 
         return nsn
@@ -764,13 +769,13 @@ class SNNSNMetric(BaseMetric):
                 df_x1c.loc[:,'color'] = x1
                 df_x1c.loc[:,'z'] = zvals
                 
-                #print(df_x1c)
+               
                 #nsn = self.nsn_typedf(zlim,x1,color,df_x1c,duration_z)
-                #print('ici',zlim)
+              
                 nsn = zlim.apply(lambda x: self.nsn_typedf(
                     x, x1, color, df_x1c, duration_z,search=False), axis=1)
                 
-                #print('NSN',x1,color,duration_z,nsn,nsn*weight)
+                
                 if nsnTot is None:
                     nsnTot = nsn*weight
                 else:
@@ -864,7 +869,7 @@ class SNNSNMetric(BaseMetric):
         """
         return np.asscalar(nsn_interp(zlim))
         
-        print([-1.]*len(zlim),type(zlim))
+        #print([-1.]*len(zlim),type(zlim))
         #nsn_res = np.zeros(shape=(len(zlim),))
         nsn_res = pd.DataFrame({'test',tuple([-1.]*len(zlim))})
         
