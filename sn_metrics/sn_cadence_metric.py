@@ -135,11 +135,13 @@ class SNCadenceMetric(BaseMetric):
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
             
-        dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
+        #dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
        
         time_ref = time.time()
         obsdf = pd.DataFrame(np.copy(dataSlice))
         
+        obsdf['healpixID'] = obsdf['healpixID'].astype(int)
+
         res_filter = obsdf.groupby(['healpixID',self.seasonCol,self.filterCol]).apply(lambda x: self.anaSeason(x)).reset_index()
 
         
@@ -222,6 +224,7 @@ class SNCadenceMetric(BaseMetric):
         deltaT_res = {}
 
         m5_mean = 0.
+        m5_median = 0.
         gap_max = 0.
         stat = np.zeros((len(internights),1))
         
@@ -231,6 +234,7 @@ class SNCadenceMetric(BaseMetric):
         season_length = 0.
         if len(dataSlice) > 0:
             m5_mean = np.mean(dataSlice[self.m5Col])
+            m5_median = np.median(dataSlice[self.m5Col])
             deltaT = dataSlice[self.mjdCol].diff()
                 
         if len(dataSlice) >=3:
@@ -263,6 +267,7 @@ class SNCadenceMetric(BaseMetric):
 
         resudf = pd.DataFrame({'cadence_mean': [cadence], 
                                'm5_mean': [m5_mean],
+                               'm5_median': [m5_median],
                                'Nobs' : [len(dataSlice)],
                                'season_length': season_length,
                                'gap_max': gap_max,
