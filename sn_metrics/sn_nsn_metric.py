@@ -195,6 +195,7 @@ class SNNSNMetric(BaseMetric):
 
         if self.verbose:
             print('finally - eop',time.time()-time_ref)
+            print(varb_totdf)
 
         if self.outputType == 'lc':
             return varb_totdf.to_records()
@@ -209,8 +210,7 @@ class SNNSNMetric(BaseMetric):
 
     def run_seasons(self, dataSlice,seasons):
 
-        if self.verbose:
-            print('#### Processing season',seasons)
+       
 
         time_ref = time.time()
 
@@ -218,7 +218,9 @@ class SNNSNMetric(BaseMetric):
         pixRa = np.unique(dataSlice['pixRa'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
         healpixID = int(np.unique(dataSlice['healpixID'])[0])
-
+ 
+        if self.verbose:
+            print('#### Processing season',seasons,healpixID)
         # get infos on seasons
         self.info_season = self.seasonInfo(dataSlice, seasons)
         
@@ -328,6 +330,7 @@ class SNNSNMetric(BaseMetric):
             
             zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                 x, 0.0, 0.0, effi_seasondf, duration_z), axis=1)
+
             #zlimsdf['nsn'] = self.nsn_typedf(zlimsdf,0.0, 0.0, effi_seasondf, duration_z)
 
             # estimate number of supernovae - total
@@ -565,6 +568,7 @@ class SNNSNMetric(BaseMetric):
                              'color': [-1.0],
                              'zlim': [-1.0],
                              'nsn_med': [-1.0],
+                             'nsn': [-1.0],
                              'status': [int(errortype)]})
 
     def erroreffi(self, pixRa, pixDec, healpixID, season):
@@ -715,16 +719,35 @@ class SNNSNMetric(BaseMetric):
         nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
 
         return nsn
-
+    
+    def nsn_typedf_new(self,grp, duration_z,zlims):
+         
+        #get rate
+       
+        #durinterp_z = interp1d(
+        #    duration_z['z'], duration_z['season_length'], bounds_error=False, fill_value=0.)
+        """
+        nsn = []
+        for zlim in zlims:
+            nsn.append(self.nsn(grp, zlim, durinterp_z))
+        """
+        nsn = zlims.apply(lambda x: self.nsn_typedf(
+                x, 0.,0., grp, duration_z,search=False), axis=1)
+        return nsn*np.mean(grp['weight'])
         
     def nsn_tot(self, effi, zlim,duration_z):
 
         # the first thing is to interpolate efficiencies to have a regular grid
         zvals = np.arange(0.0,1.2,0.05)
 
+        
+        idx = np.abs(effi['x1'])<1.e-5
+        idx &= np.abs(effi['color'])<1.e-5
+        if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi'])<1.e-5:
+            return -1.0
         effi_grp = effi.groupby(['x1','color'])['x1','color','effi','effi_err','z'].apply(lambda x: self.effi_interp(x,zvals)).reset_index().to_records(index=False)
 
-        #print(effi_grp)
+        
         #print(zlim)
 
         # Now construct the griddata
@@ -753,34 +776,80 @@ class SNNSNMetric(BaseMetric):
         nsnTot = None
         ip = -1
         weight_sum = 0.
-        for vals in self.x1_color_dist:
+
+        idx = np.abs(self.x1_color_dist['x1'])<=2
+        idx &= np.abs(self.x1_color_dist['color'])<=0.2
+        
+        time_ref = time.time()
+        x1_tile = np.repeat(self.x1_color_dist[idx]['x1'],len(zvals))
+        color_tile = np.repeat(self.x1_color_dist[idx]['color'],len(zvals))
+        z_tile = np.tile(zvals,len(self.x1_color_dist[idx]))
+        weight_tile = np.repeat(self.x1_color_dist[idx]['weight_tot'],len(zvals))
+
+        df_test = pd.DataFrame()
+        
+        df_test.loc[:,'effi'] = effi_grid((x1_tile,color_tile,z_tile))
+        df_test.loc[:,'effi_err'] = effi_err_grid((x1_tile,color_tile,z_tile))
+        df_test.loc[:,'x1'] = np.round(x1_tile,2)
+        df_test.loc[:,'color'] = np.round(color_tile,2)
+        df_test.loc[:,'z'] = z_tile
+        df_test.loc[:,'weight'] = np.round(weight_tile,2)
+        season = np.median(zlim['season'])
+        idxb = duration_z['season'] == season
+
+
+        #print('there man',zlim['zlim'],duration_z[idxb])
+        nsn_tot = df_test.groupby(['x1','color']).apply(lambda x: self.nsn_typedf_new(
+            x, duration_z[idxb],zlim))
+
+        #print(nsn_tot.sum(axis=0),time.time()-time_ref,type(nsn_tot))
+        return nsn_tot.sum(axis=0)
+        """
+        print(x1_tile)
+        print(color_tile)
+        print(z_tile)
+        print(effi_grid((x1_tile,color_tile,z_tile)))
+        #print(test)
+        """
+        time_ref = time.time()
+
+        for vals in self.x1_color_dist[idx]:
             
             x1 = vals['x1']
             color = vals['color']
             weight = vals['weight_tot']
-            if np.abs(x1)<=2 and np.abs(color)<=0.2:
-                ip += 1
-                weight_sum += weight
-                #print('trying',x1,color,weight)
-                df_x1c = pd.DataFrame()
-                df_x1c.loc[:,'effi'] = effi_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
-                df_x1c.loc[:,'effi_err'] = effi_err_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
-                df_x1c.loc[:,'x1'] = x1
-                df_x1c.loc[:,'color'] = x1
-                df_x1c.loc[:,'z'] = zvals
+            #if np.abs(x1)<=2 and np.abs(color)<=0.2:
+            ip += 1
+            weight_sum += weight
+            #print('trying',x1,color,weight)
+            df_x1c = pd.DataFrame()
+            df_x1c.loc[:,'effi'] = effi_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
+            df_x1c.loc[:,'effi_err'] = effi_err_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
+            df_x1c.loc[:,'x1'] = x1
+            df_x1c.loc[:,'color'] = color
+            df_x1c.loc[:,'z'] = zvals
                 
-               
-                #nsn = self.nsn_typedf(zlim,x1,color,df_x1c,duration_z)
-              
-                nsn = zlim.apply(lambda x: self.nsn_typedf(
-                    x, x1, color, df_x1c, duration_z,search=False), axis=1)
+            """
+            print('here man',x1,color)
+            import matplotlib.pylab as plt
+            plt.plot(df_x1c['z'],df_x1c['effi'],'ko',mfc='None')
+            sel = df_test.loc[lambda df: (np.abs(df.x1-x1)<1.e-5)&(np.abs(df.color-color)<1.e-5), :]
+            plt.plot(sel['z'],sel['effi'],'r*')
+
+            plt.show()
+            """
+            #nsn = self.nsn_typedf(zlim,x1,color,df_x1c,duration_z)
+            
+            nsn = zlim.apply(lambda x: self.nsn_typedf(
+                x, x1, color, df_x1c, duration_z,search=False), axis=1)
+            
                 
-                
-                if nsnTot is None:
-                    nsnTot = nsn*weight
-                else:
-                    nsnTot = np.sum([nsnTot,nsn*weight],axis=0)
-        
+            if nsnTot is None:
+                nsnTot = nsn*weight
+            else:
+                nsnTot = np.sum([nsnTot,nsn*weight],axis=0)
+        print('after calc',nsnTot,time.time()-time_ref)
+        print(test)
         return nsnTot
         
         """
@@ -793,7 +862,6 @@ class SNNSNMetric(BaseMetric):
 
     def effi_interp(self,grp,zvals):
 
-        
         interp = interp1d(grp['z'],grp['effi'],bounds_error=False, fill_value=0.)
         interp_err = interp1d(grp['z'],grp['effi_err'],bounds_error=False, fill_value=0.)
 
@@ -841,9 +909,8 @@ class SNNSNMetric(BaseMetric):
 
     def nsn(self, effi, zlim, duration_z):
 
-        
         if zlim<1.e-3:
-            return -1
+            return -1.0
             
         dz = 0.001
         zplot = list(np.arange(self.zmin, self.zmax, dz))
