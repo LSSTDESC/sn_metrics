@@ -164,7 +164,7 @@ class Lims:
 
         plt.close(figa)  # do not display
 
-    def interpGriddata(self, index, data):
+    def interpGriddata(self, index, data,m5_str='m5_mean',cadence_str='cadence_mean'):
         """
         Estimate metric interpolation for data (m5,cadence)
 
@@ -181,7 +181,7 @@ class Lims:
 
         ref_points = self.Points_Ref[index]
         res = interpolate.griddata((ref_points['m5'], ref_points['cadence']), ref_points['z'], (
-            data['m5_mean'], data['cadence_mean']), method='cubic')
+            data[m5_str], data[cadence_str]), method='cubic')
         return res
 
     def plotCadenceMetric(self, restot,
@@ -310,7 +310,7 @@ class Lims:
         if self.saveFig:
             plt.savefig('{}_{}_histzlim.png'.format(self.dbName,self.band))
 
-def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range,dbName, saveFig=False,display=True):
+def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range,dbName, saveFig=False,display=True,m5_str='m5_mean',cadence_str='cadence_mean'):
     """
     Main cadence plot
     Will display two plots: cadence plot and histogram of redshift limits
@@ -339,6 +339,11 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
         cadence name
     saveFig : bool, opt
       to save the figures on disk or not.
+    m5_str : str, opt
+      m5 field name to use for computation
+    cadence_str : str, opt
+      cadence field name to use for computation
+    
 
     Returns
     ---------
@@ -347,8 +352,8 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     fieldDec : declination (float)
     season : season num (float)
     band : band (str)
-    m5_mean : mean cadence (float)
-    cadence_mean : mean cadence (float)
+    m5_str : m5 value (float)
+    cadence_str : cadence value(float)
     zlim_name_ref : redshift limit for name_ref (float)
 
     """
@@ -373,16 +378,16 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
 
     restot = None
 
-    idx = (res['m5_mean'] >= mag_range[0]) & (
-        res['m5_mean'] <= mag_range[1])
-    idx &= (res['cadence_mean'] >= dt_range[0]) & (
-        res['cadence_mean'] <= dt_range[1])
+    idx = (res[m5_str] >= mag_range[0]) & (
+        res[m5_str] <= mag_range[1])
+    idx &= (res[cadence_str] >= dt_range[0]) & (
+        res[cadence_str] <= dt_range[1])
     res = res[idx]
 
     if len(res) > 0:
         resu = np.copy(res)
         for io, interp in enumerate(names_ref):
-            zlims = lim_sn.interpGriddata(io, res)
+            zlims = lim_sn.interpGriddata(io, res,m5_str=m5_str,cadence_str=cadence_str)
             zlims[np.isnan(zlims)] = -1
             resu = rf.append_fields(resu, 'zlim_'+names_ref[io], zlims)
         if restot is None:
@@ -635,21 +640,24 @@ def plotDDLoop(nside,dbNames, tabtot,
 
     """
 
-    fontsize = 20
-    fig, ax = plt.subplots()
+    fontsize = 15
+    fig, ax = plt.subplots(figsize=(9, 5))
     fig.suptitle(figleg, fontsize=fontsize)
+    fig.subplots_adjust(right=0.8)
+
     for io, cadenceName in enumerate(dbNames):
         idx = (tabtot['cadence'] == cadenceName.ljust(
             adjl)) & (tabtot['nside'] == nside)
-        plotDD(tabtot[idx],cadenceName, what, ax, markers[io],colors[io],mfc[io])
+        
+        plotDD(tabtot[idx],'_'.join(cadenceName.split('_')[:2]), what, ax, markers[io],colors[io],mfc[io])
 
     ax.set_ylabel(legx, fontsize=fontsize)
     ax.tick_params(labelsize=fontsize)
     #fields = getFields(0.)
     plt.xticks(fields['fieldnum'], fields['fieldname'], fontsize=fontsize)
     # plt.legend(fontsize=fontsize)
-    ax.legend(loc='upper center', bbox_to_anchor=(0.8, 1.15),
-              ncol=1, fancybox=True, shadow=True, fontsize=15)
+    ax.legend(loc='upper center', bbox_to_anchor=(1.15, 0.8),
+              ncol=1, fancybox=True, shadow=True, fontsize=10)
 
 
 def plotDDCorrel(tab,cadenceName, whatx,whaty,ax, marker,color,mfc):
@@ -814,7 +822,11 @@ def plotDDCadence(tab,dbName,what,legx,adjl,fields):
     fmfc = ['None']*len(fcolors)
     fontsize = 15.
     fig,ax = plt.subplots()
-    fig.suptitle('{}'.format(dbName))
+    nodither = dbName.split('_')[-1]
+    dbName_new = dbName
+    if 'nodither' in nodither:
+        dbName_new = '{} - {}'.format('_'.join(dbName.split('_')[:2]),'nodither')
+    fig.suptitle('{}'.format(dbName_new))
     fig.subplots_adjust(right=0.85)
     #select data for this cadence
     ia = tab['cadence'] == dbName.ljust(adjl)
