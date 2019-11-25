@@ -27,15 +27,13 @@ class Lims:
     dt_range : pair(float)
         difference time range considered (cadence)
         Default : (0.5, 25.)
-    dbName: str,opt
-        cadence name
-    saveFig: bool,opt
-        to save (or not) the figs
     """
 
-    def __init__(self, Li_files, mag_to_flux_files, band, SNR,
-                 mag_range=(23., 27.5), dt_range=(0.5, 25.),
-                 dbName='',saveFig=False):
+    def __init__(self, Li_files, 
+                 mag_to_flux_files, 
+                 band, SNR,
+                 mag_range=(23., 27.5), 
+                 dt_range=(0.5, 25.)):
 
         self.band = band
         self.SNR = SNR
@@ -43,8 +41,7 @@ class Lims:
         self.mag_to_flux = []
         self.mag_range = mag_range
         self.dt_range = dt_range
-        self.saveFig = saveFig
-        self.dbName = dbName
+        
 
         for val in Li_files:
             self.lims.append(self.getLims(self.band, np.load(val), SNR))
@@ -191,7 +188,8 @@ class Lims:
                               'i': (26.16, 3.),
                               # was 24.68      # could be 25.1 (1000-s)
                               'z': (25.56, 3.),
-                              'y': (24.68, 3.)}):# was 24.72
+                              'y': (24.68, 3.)},# was 24.72
+                          dbName='',saveFig=False):
         """ Plot the cadence metric in the plane: median cadence vs m5
 
         Parameters
@@ -254,10 +252,10 @@ class Lims:
         plt.xlim(self.mag_range)
         plt.ylim(self.dt_range)
         plt.grid(1)
-        if self.saveFig:
-            plt.savefig('{}_{}_cad_vs_m5.png'.format(self.dbName,self.band))
+        if saveFig:
+            plt.savefig('{}_{}_cad_vs_m5.png'.format(dbName,self.band))
 
-    def plotHistzlim(self, names_ref, restot):
+    def plotHistzlim(self, names_ref, restot,dbName,saveFig):
         """
         Plot histogram of redshift limits
 
@@ -307,8 +305,8 @@ class Lims:
         ax.grid()
         plt.legend(label, fontsize=fontsize-2., loc='upper left')
         # plt.grid(1)
-        if self.saveFig:
-            plt.savefig('{}_{}_histzlim.png'.format(self.dbName,self.band))
+        if saveFig:
+            plt.savefig('{}_{}_histzlim.png'.format(dbName,self.band))
 
 def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref, mag_range, dt_range,dbName, saveFig=False,display=True,m5_str='m5_mean',cadence_str='cadence_mean'):
     """
@@ -370,11 +368,10 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
     res = metricValues
     lim_sn = Lims(Li_files, mag_to_flux_files,
                   band, SNR, mag_range=mag_range, 
-                  dt_range=dt_range,dbName=dbName,
-                  saveFig=saveFig)
+                  dt_range=dt_range)
 
     if display:
-        lim_sn.plotCadenceMetric(res)
+        lim_sn.plotCadenceMetric(res,dbName,saveFig)
 
     restot = None
 
@@ -396,7 +393,7 @@ def plotCadence(band, Li_files, mag_to_flux_files, SNR, metricValues, names_ref,
             restot = np.concatenate((restot, resu))
 
         if display:
-            lim_sn.plotHistzlim(names_ref, restot)
+            lim_sn.plotHistzlim(names_ref, restot,dbName,saveFig)
 
     return restot
 
