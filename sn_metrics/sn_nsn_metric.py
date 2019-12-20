@@ -83,7 +83,7 @@ class SNNSNMetric(BaseMetric):
                  vistimeCol='visitTime', season=-1, coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims',verbose=False, ploteffi=False, proxy_level=0,
                  N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1, 
-                 x1_color_dist=None,**kwargs):
+                 x1_color_dist=None,lightOutput=True,T0s='all',**kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -99,6 +99,7 @@ class SNNSNMetric(BaseMetric):
         self.pixArea = pixArea
         self.ploteffi = ploteffi
         self.x1_color_dist = x1_color_dist
+        self.T0s = T0s
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -128,7 +129,8 @@ class SNNSNMetric(BaseMetric):
             self.lcFast[key] = LCfast(vals, key[0], key[1], telescope,
                                       self.mjdCol, self.RaCol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
-                                      self.m5Col, self.seasonCol,self.snr_min)
+                                      self.m5Col, self.seasonCol,
+                                      self.snr_min,lightOutput=lightOutput)
         self.zmin = zmin
         self.zmax = zmax
         self.zStep = 0.05  # zstep
@@ -209,8 +211,6 @@ class SNNSNMetric(BaseMetric):
         return varb_totdf.to_records()
 
     def run_seasons(self, dataSlice,seasons):
-
-       
 
         time_ref = time.time()
 
@@ -542,7 +542,10 @@ class SNNSNMetric(BaseMetric):
             widthWindow = T0_max-T0_min
             if widthWindow < 1.:
                 break
-            daymaxRange = np.arange(T0_min, T0_max, self.daymaxStep)
+            if self.T0s == 'all':
+                daymaxRange = np.arange(T0_min, T0_max, self.daymaxStep)
+            else:
+                daymaxRange = [0.]
 
             for mydaymax in daymaxRange:
                 r.append(
@@ -554,6 +557,7 @@ class SNNSNMetric(BaseMetric):
         gen_par = np.rec.fromrecords(
             r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase','season'])
 
+        print(gen_par)
         duration_z = np.rec.fromrecords(
             r_durz, names=['z', 'season_length','season'])
         return gen_par, duration_z
