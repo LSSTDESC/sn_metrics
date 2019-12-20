@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_DDSummary(metricValues,markerdict,colordict,colors_cad):
+#def plot_DDSummary(metricValues,markerdict,colordict,colors_cad):
+def plot_DDSummary(metricValues,forPlot):
 
     print(metricValues.dtype)
 
@@ -52,16 +53,22 @@ def plot_DDSummary(metricValues,markerdict,colordict,colors_cad):
         if 'nodither' not in val['cadence']:
             print(val['cadence'],int(val['nsn_zfaint']),int(val['nsn_zmedium']),np.round(val['zlim_faint'],2),np.round(val['zlim_medium'],2))
 
-    Plot_NSNTot(summary,colors_cad,markerdict,sntype='medium')
-    Plot_NSNField(summary_fields,colordict,markerdict,sntype='medium')
+    Plot_NSNTot(summary,forPlot,sntype='faint')
+    #Plot_NSNField(summary_fields,colordict,markerdict,sntype='medium')
     plt.show()
 
-def Plot_NSNTot(summary,colors_cad,markerdict,sntype='faint'):
+#def Plot_NSNTot(summary,colors_cad,markerdict,sntype='faint'):
+def Plot_NSNTot(summary,forPlot,sntype='faint'):
     fontsize = 12
     fig, ax = plt.subplots()
     for cadence in np.unique(summary['cadence']):
         idx = summary['cadence']==cadence
         sela = summary[idx]
+
+        idp = forPlot['dbName']==cadence.strip()
+        custplot = forPlot[idp]
+        #print('oi',cadence,custplot)
+        #print(forPlot['dbName'])
         mfc = 'None'
         cadence_small = '_'.join(cadence.split('_')[:2])
         if 'no' not in cadence:
@@ -79,11 +86,12 @@ def Plot_NSNTot(summary,colors_cad,markerdict,sntype='faint'):
             if 'descddf_illum5_' in cadence:
                 yshift = 1.002
 
-            ax.text(xshift*sela['zlim_{}'.format(sntype)],yshift*sela['nsn_z{}'.format(sntype)],cadence_small,color=colors_cad[cadence_small])
-        ax.plot(sela['zlim_{}'.format(sntype)],sela['nsn_z{}'.format(sntype)],marker=markerdict[''.join(cadence.split())],mfc=mfc,color=colors_cad[cadence_small])
+            #ax.text(xshift*sela['zlim_{}'.format(sntype)],yshift*sela['nsn_z{}'.format(sntype)],cadence_small,color=colors_cad[cadence_small])
+            ax.text(xshift*sela['zlim_{}'.format(sntype)],yshift*sela['nsn_z{}'.format(sntype)],cadence_small,color=custplot['color'][0])
+        ax.plot(sela['zlim_{}'.format(sntype)],sela['nsn_z{}'.format(sntype)],marker=custplot['marker'][0],mfc=mfc,color=custplot['color'][0])
 
     ax.grid()
-    ax.set_xlabel('$z_{}$'.format(sntype),fontsize=fontsize)
+    ax.set_xlabel('$z_{'+sntype+'}$',fontsize=fontsize)
     ax.set_ylabel('$N_{SN} (z<)$',fontsize=fontsize)
         #horizontalalignment='center',verticalalignment='center', transform=ax.transAxes,fontsize=15)
     #ax.legend(loc='upper right')
