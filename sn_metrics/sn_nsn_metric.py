@@ -287,6 +287,7 @@ class SNNSNMetric(BaseMetric):
         # simulate supernovae
         if self.verbose:
             print('simulation SN',len(gen_par))
+            print(gen_par)
             time_refb = time.time()
 
         sn,lc = self.run_season_slice(obs, gen_par)
@@ -297,10 +298,13 @@ class SNNSNMetric(BaseMetric):
             print('after simulation', season, time.time()-time_refb)
 
         if sn.empty:
+            print(lc)
+            print(sn)
             zlimsdf = self.errordf(
                 pixRa, pixDec, healpixID, season, self.status['nosn'])
             effi_seasondf = self.erroreffi(
                 pixRa, pixDec, healpixID, season)
+            print(test)
         else:
             if self.verbose:
                 print('estimating efficiencies')
