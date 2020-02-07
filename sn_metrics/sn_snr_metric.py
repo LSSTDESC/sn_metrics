@@ -75,7 +75,10 @@ class SNSNRMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=-1, shift=10., coadd=True, z=0.01, display=False, **kwargs):
+                 vistimeCol='visitTime', seeingaCol='seeingFwhmEff',
+                 seeingbCol='seeingFwhmGeom',
+                 # airmassCol='airmass',skyCol='sky', moonCol='moonPhase'
+                 season=-1, shift=10., coadd=True, z=0.01, display=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -88,13 +91,16 @@ class SNSNRMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.seeingaCol = seeingaCol
+        self.seeingbCol = seeingbCol
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
+                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingaCol, self.seeingbCol]
+        self.stacker = None
         if coadd:
             cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
-                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
+                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime', seeingaCol=self.seeingaCol, seeingbCol=self.seeingbCol)
 
         super(SNSNRMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
@@ -222,9 +228,13 @@ class SNSNRMetric(BaseMetric):
         # Get few infos: RA, Dec, Nvisits, m5, exptime
         fieldRA = np.mean(sel[self.RaCol])
         fieldDec = np.mean(sel[self.DecCol])
-        pixRa = np.mean(sel['pixRa'])
-        pixDec = np.mean(sel['pixDec'])
-        healpixID = int(np.unique(sel['healpixID'])[0])
+        pixRa = 0.
+        pixDec = 0.
+        healpixID = 0
+        if 'pixRa' in sel.dtype.names:
+            pixRa = np.mean(sel['pixRa'])
+            pixDec = np.mean(sel['pixDec'])
+            healpixID = int(np.unique(sel['healpixID'])[0])
 
         Nvisits = np.median(sel[self.nexpCol]/2.)  # one visit = 2 exposures
         m5 = np.mean(sel[self.m5Col])
@@ -342,9 +352,10 @@ class SNSNRMetric(BaseMetric):
         Parameters
         -------------
 
-        time_lc :
-        m5_vals : list(float)
-           five-sigme depth values
+        time_lc : numpy array(float)
+           deltaT = mjd-time_T0
+        m5_vals : array(float)
+           five-sigma depth values
         flag : array(bool)
           flag to be applied (example: selection from phase cut)
         season_vals : array(float)
@@ -360,6 +371,7 @@ class SNSNRMetric(BaseMetric):
           snr_name_ref (float) : Signal-to-Noise values
           season (float) : season num.
         """
+
         seasons = np.ma.array(season_vals, mask=~flag)
 
         fluxes_tot = {}
@@ -403,12 +415,12 @@ class SNSNRMetric(BaseMetric):
 
         Parameters
         ---------------
-        T0 : list(float)
+        T0 : array(float)
            set of T0 values
 
         Returns
         -----------
-        list (float) of corresponding seasons
+        array(float) of corresponding seasons
         """
 
         diff_min = T0[:, None]-self.info_season['MJD_min']
@@ -489,9 +501,12 @@ class SNSNRMetric(BaseMetric):
         slice_sel.sort(order=self.mjdCol)
         fieldRA = np.mean(slice_sel[self.RaCol])
         fieldDec = np.mean(slice_sel[self.DecCol])
-        pixRa = np.mean(slice_sel['pixRa'])
-        pixDec = np.mean(slice_sel['pixDec'])
-        healpixID = int(np.unique(slice_sel['healpixID'])[0])
+        pixRa, pixDec, healpixID = 0., 0., 0
+
+        if 'pixRa' in slice_sel.dtype.names:
+            pixRa = np.mean(slice_sel['pixRa'])
+            pixDec = np.mean(slice_sel['pixDec'])
+            healpixID = int(np.unique(slice_sel['healpixID'])[0])
         mjds_season = slice_sel[self.mjdCol]
         cadence = np.mean(mjds_season[1:]-mjds_season[:-1])
         mjd_min = np.min(mjds_season)
@@ -529,6 +544,10 @@ class SNSNRMetric(BaseMetric):
     def plot(self, fluxes, mjd, flag, snr, T0_lc, dates):
         """
         Plotting method to illustrate the method used to estimate the metric.
+        Two plots (one for scheduler data, the other for fake data)are displayed (in "real time") 
+        and are composed of two plots:
+            - top plot: SN flux (in pe/sec) as a function of mjd
+            - bottom: SNR as a function of mjd
 
         Parameters
         --------------
