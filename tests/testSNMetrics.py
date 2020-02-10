@@ -1,18 +1,19 @@
+from sn_tools.sn_cadence_tools import ReferenceData
+from sn_metrics.sn_obsrate_metric import SNObsRateMetric
+from sn_metrics.sn_snr_metric import SNSNRMetric
+import sn_plotters.sn_snrPlotters as sn_snr_plot
+import sn_plotters.sn_cadencePlotters as sn_cadence_plot
+from sn_metrics.sn_cadence_metric import SNCadenceMetric
+import matplotlib.pylab as plt
+import yaml
+import lsst.utils.tests
+import unittest
+import numpy as np
 from builtins import zip
 import matplotlib
 matplotlib.use("Agg")
-import numpy as np
-import unittest
-#import lsst.sims.maf.metrics as metrics
-import lsst.utils.tests
-import yaml
-import matplotlib.pylab as plt
+# import lsst.sims.maf.metrics as metrics
 
-from sn_metrics.sn_cadence_metric import SNCadenceMetric
-import sn_plotters.sn_cadencePlotters as sn_cadence_plot
-import sn_plotters.sn_snrPlotters as sn_snr_plot
-from sn_metrics.sn_snr_metric import SNSNRMetric
-from sn_tools.sn_cadence_tools import ReferenceData
 
 m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
@@ -66,12 +67,12 @@ class TestSNmetrics(unittest.TestCase):
         result = metric.run(data, slicePoint)
 
         # And the result should be...
-        refResult = dict(zip(['m5_mean','cadence_mean','dT_max','frac_dT_5',
-                              'frac_dT_10','frac_dT_15','frac_dT_20','season_length'],
-                             [24.38,4.97959184,5.,1.,0.,0.,0.,245.]))
+        refResult = dict(zip(['m5_mean', 'cadence_mean', 'dT_max', 'frac_dT_5',
+                              'frac_dT_10', 'frac_dT_15', 'frac_dT_20', 'season_length'],
+                             [24.38, 4.97959184, 5., 1., 0., 0., 0., 245.]))
         for key in refResult.keys():
             assert((np.abs(refResult[key]-result[key]) < 1.e-5))
-       
+
         res_z = sn_cadence_plot.plotCadence(band, config['Li file'], config['Mag_to_flux file'],
                                             SNR[band],
                                             result,
@@ -127,7 +128,7 @@ class TestSNmetrics(unittest.TestCase):
 
         # Run the metric with these fake data
         slicePoint = [0]
-        metric = SNSNRMetric(lim_sn, config['names_ref'], fake_file = config['Fake_file'], coadd=config['Observations']
+        metric = SNSNRMetric(lim_sn, config['names_ref'], fake_file=config['Fake_file'], coadd=config['Observations']
                              ['coadd'],  z=z)
 
         result = metric.run(data, slicePoint)
@@ -164,8 +165,15 @@ class TestSNmetrics(unittest.TestCase):
         sn_snr_plot.detecFracHist(
             detec_frac, config['names_ref'])
 
+    def testObsRateMetric(self):
+        """
+        Test ObsRate metric
+
+
 
 """
+
+
 def setup_module(module):
     lsst.utils.tests.init()
 
