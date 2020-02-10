@@ -125,7 +125,7 @@ def detecFracPlot(data, nside, names_ref):
     """""
     #data_heal = GetHealpix(data, nside)
     npix = hp.nside2npix(nside)
-    print(npix,'npix')
+    print(npix, 'npix')
     for band, season in np.unique(data[['band', 'season']]):
         idx = (data['band'] == band) & (data['season'] == season)
         sel = data[idx]
@@ -232,13 +232,13 @@ def GetHealpix(data, nside):
     array with the following fields:
       fieldRA: right ascension (float)
       fieldDec : declination (float)
-      healpixID : healpix id (int)
+      healpixId : healpix id (int)
     """
     res = data.copy()
     npix = hp.nside2npix(nside)
-    print(res[['fieldRA','fieldDec']])
+    print(res[['fieldRA', 'fieldDec']])
     table = hp.ang2vec(res['fieldRA'], res['fieldDec'], lonlat=True)
     healpixs = hp.vec2pix(nside, table[:, 0], table[:, 1], table[:, 2])
     print(healpixs)
-    res = rf.append_fields(res, 'healpixID', healpixs)
+    res = rf.append_fields(res, 'healpixId', healpixs)
     return res
