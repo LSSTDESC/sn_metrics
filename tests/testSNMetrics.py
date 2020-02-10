@@ -4,7 +4,7 @@ from sn_metrics.sn_snr_metric import SNSNRMetric
 import sn_plotters.sn_snrPlotters as sn_snr_plot
 import sn_plotters.sn_cadencePlotters as sn_cadence_plot
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
-import matplotlib.pylab as plt
+import matplotlib.pyplot as plt
 import yaml
 import lsst.utils.tests
 import unittest
@@ -25,7 +25,10 @@ class TestSNmetrics(unittest.TestCase):
         """Test the SN cadence metric """
 
         # Load required SN info to run the metric
-        config = yaml.load(open('config/param_cadence_metric.yaml'))
+        f = open('config/param_cadence_metric.yaml', 'r')
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        f.close()
+
         SNR = dict(zip(config['Observations']['bands'],
                        config['Observations']['SNR']))
         band = 'r'
@@ -39,7 +42,11 @@ class TestSNmetrics(unittest.TestCase):
 
         # Define fake data
         names = ['observationStartMJD', 'fieldRA', 'fieldDec',
-                 'fiveSigmaDepth', 'visitExposureTime', 'numExposures', 'visitTime', 'season']
+                 'fiveSigmaDepth', 'visitExposureTime',
+                 'numExposures', 'visitTime', 'season',
+                 'seeingFwhmEff', 'seeingFwhmGeom',
+                 'airmass', 'sky', 'moonPhase']
+
         types = ['f8']*len(names)
         names += ['night']
         types += ['i2']
@@ -60,16 +67,23 @@ class TestSNmetrics(unittest.TestCase):
         data['visitTime'] = 2.*15.
         data['filter'] = band
         data['season'] = 1.
+        data['seeingFwhmEff'] = 0.
+        data['seeingFwhmGeom'] = 0.
+        data['airmass'] = 1.2
+        data['sky'] = 20.0
+        data['moonPhase'] = 0.5
 
         # Run the metric with these fake data
         slicePoint = [0]
         metric = SNCadenceMetric(coadd=config['Observations']['coadd'])
         result = metric.run(data, slicePoint)
+        idx = result['filter'] == band
+        result = result[idx]
 
         # And the result should be...
-        refResult = dict(zip(['m5_mean', 'cadence_mean', 'dT_max', 'frac_dT_5',
-                              'frac_dT_10', 'frac_dT_15', 'frac_dT_20', 'season_length'],
-                             [24.38, 4.97959184, 5., 1., 0., 0., 0., 245.]))
+        refResult = dict(zip(['m5_mean', 'cadence_mean', 'gap_max', 'gap_5',
+                              'gap_10', 'gap_15', 'gap_20', 'season_length'],
+                             [24.00371251, 5.0, 5., 1., 0., 0., 0., 245.]))
         for key in refResult.keys():
             assert((np.abs(refResult[key]-result[key]) < 1.e-5))
 
@@ -77,9 +91,11 @@ class TestSNmetrics(unittest.TestCase):
                                             SNR[band],
                                             result,
                                             config['names_ref'],
-                                            mag_range=mag_range, dt_range=dt_range)
+                                            mag_range=mag_range, dt_range=dt_range,
+                                            dbName='Fakes')
 
-        zlim = 0.3743514031001232
+        #zlim = 0.3743514031001232
+        zlim = 0.3171019707213057
         zres = res_z['zlim_{}'.format(config['names_ref'][0])]
         assert(np.abs(zlim-zres) < 1.e-5)
 
@@ -87,7 +103,10 @@ class TestSNmetrics(unittest.TestCase):
         # Test the SN SNR metric
 
         # Load required SN info to run the metric
-        config = yaml.load(open('config/param_snr_metric.yaml'))
+        f = open('config/param_snr_metric.yaml', 'r')
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        f.close()
+
         band = 'r'
         z = 0.3
         season = 1.
@@ -165,10 +184,13 @@ class TestSNmetrics(unittest.TestCase):
         sn_snr_plot.detecFracHist(
             detec_frac, config['names_ref'])
 
+        # plt.show()
+
     def testObsRateMetric(self):
         """
         Test ObsRate metric
 
+        """
 
 
 """
@@ -180,4 +202,4 @@ def setup_module(module):
 """
 if __name__ == "__main__":
     lsst.utils.tests.init()
-    unittest.main()
+    unittest.main(verbosity=5)
