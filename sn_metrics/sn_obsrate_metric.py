@@ -12,7 +12,7 @@ import random
 from sn_tools.sn_obs import season as seasonCalc
 
 
-class SNSNRRateMetric(BaseMetric):
+class SNObsRateMetric(BaseMetric):
     """
     Measure SN-Signal-to-Noise Ratio as a function of time.
     Extract the detection rate from these measurements
@@ -24,60 +24,49 @@ class SNSNRRateMetric(BaseMetric):
     names_ref : str
        names of the simulator used to generate reference files
     metricName : str, opt
-      metric name
-      Default : SNSNRMetric
+      metric name (default: SNSNRMetric)
     mjdCol : str, opt
-      mjd column name
-      Default : observationStartMJD,
+      mjd column name (default: observationStartMJD)
     RaCol : str,opt
-      Right Ascension column name
-      Default : fieldRA
+      Right Ascension column name (default: fieldRA)
     DecCol : str,opt
-      Declinaison column name
-      Default : fieldDec
+      Declinaison column name (default: fieldDec)
     filterCol : str,opt
-       filter column name
-       Default: filter
+       filter column name (default: filter)
     m5Col : str, opt
-       five-sigma depth column name
-       Default : fiveSigmaDepth
+       five-sigma depth column name (default: fiveSigmaDepth)
     exptimeCol : str,opt
-       exposure time column name
-       Default : visitExposureTime
+       exposure time column name (default: visitExposureTime)
     nightCol : str,opt
-       night column name
-       Default : night
+       night column name (default: night)
     obsidCol : str,opt
-      observation id column name
-      Default : observationId
+      observation id column name (default: observationId)
     nexpCol : str,opt
-      number of exposure column name
-      Default : numExposures
-     vistimeCol : str,opt
-        visit time column name
-        Default : visitTime
+      number of exposure column name (default: numExposures)
+    vistimeCol : str,opt
+        visit time column name(default: visitTime)
     coadd : bool,opt
-       coaddition per night (and per band)
-       Default : True
+       coaddition per night (and per band) (default: True)
     season : list,opt
-       list of seasons to process (float)
-       Default : -1. (all seasons)
-    shift : float,opt
-       T0 of the SN to consider = MJD-shift
-       Default: 10.
+       list of seasons to process (float) (default: -1. = all seasons)
     z : float,opt
-       redshift for the study
-       Default : 0.01
+       redshift for the study(default: 0.1)
+    bands: str, opt
+       bands to consider (default: griz)
+    nside: int, opt
+       nside parameter for healpix (default: 64)
+    snr_ref: dict, opt
+       snr dict reference values (default: {})
 
 
     """
 
     def __init__(self, lim_sn, names_ref,
-                 metricName='SNSNRMetric',
+                 metricName='SNObsRateMetric',
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=-1, coadd=True, z=0.01, bands='griz', snr_ref={}, **kwargs):
+                 vistimeCol='visitTime', season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={}, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -96,10 +85,10 @@ class SNSNRRateMetric(BaseMetric):
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
         if coadd:
             cols += ['coadd']
-        super(SNSNRRateMetric, self).__init__(
+        super(SNObsRateMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
-        self.filterNames = np.array(['u', 'g', 'r', 'i', 'z', 'y'])
+        self.filterNames = np.array([b for b in bands])
         # self.config = config
         self.blue_cutoff = 300.
         self.red_cutoff = 800.
@@ -108,36 +97,82 @@ class SNSNRRateMetric(BaseMetric):
         self.z = z
         self.season = season
         self.bands = bands
-        self.shift_phmin = -(1.+self.z)*self.min_rf_phase
-        self.shift_phmax = -(1.+self.z)*self.max_rf_phase
-        #self.shift_phmin = 0.
-        #self.shift_phmax = 0.
+        self.min_rf_phase_qual = -15.
+        self.max_rf_phase_qual = 25.
+        self.shift_phmin = -(1.+self.z)*self.min_rf_phase_qual
+        self.shift_phmax = -(1.+self.z)*self.max_rf_phase_qual
+
+        # self.shift_phmin = 0.
+        # self.shift_phmax = 0.
         self.lim_sn = lim_sn
         self.names_ref = names_ref
         self.snr_ref = snr_ref
+        self.nside = nside
 
     def run(self, dataSlice,  slicePoint=None):
         """
+        Run method for the metric.
+
+        Parameters
+        ---------------
+        dataSlice: numpy array
+          data to process
+        slicePoint: ,opt
+          (default: None)
+
+        Returns
+        -----------
+        final_resu: numpy record array with the following:
+
+          season: season num
+
+          fieldRA: median(fieldRA) of the dataSlice
+
+          fieldDec: median(fieldDec) of the dataSlice
+
+          pixRa: Ra of the pixel corresponding to (fieldRA,fieldDec)
+
+          pixDec: Dec of the pixel corresponding to (fieldRA,fieldDec)
+
+          healpixId: Id of the pixel corresponding to (fieldRA,fieldDec)
+
+          frac_obs_band: observing fraction in the band.
+
+        """
+
         goodFilters = np.in1d(dataSlice[self.filterCol], self.filterNames)
         dataSlice = dataSlice[goodFilters]
         if dataSlice.size == 0:
             return None
         dataSlice.sort(order=self.mjdCol)
 
+        """
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
 
-        dataSlice = rf.drop_fields(dataSlice, ['season'])
+        # get seasons
+        if 'season' in dataSlice.dtype.names:
+            dataSlice = rf.drop_fields(dataSlice, ['season'])
+            dataSlice = seasonCalc(dataSlice)
 
-        dataSlice = seasonCalc(dataSlice)
+        # get fieldRA, fieldDec and healpix infos
         self.fieldRA = np.mean(dataSlice[self.RaCol])
         self.fieldDec = np.mean(dataSlice[self.DecCol])
 
-        self.pixRa = np.mean(dataSlice['pixRa'])
-        self.pixDec = np.mean(dataSlice['pixDec'])
-        self.healpixId = np.mean(dataSlice['healpixID'])
+        if 'pixRa' not in dataSlice.dtype.names:
+            self.healpixId = hp.ang2pix(self.nside, self.fieldRA,
+                                        self.fieldDec, nest=True, lonlat=True)
+            coord = hp.pix2ang(self.nside,
+                               self.healpixId, nest=True, lonlat=True)
 
-        #print('there we fo', self.fieldRA, self.fieldDec)
+            self.pixRa = coord[0]
+            self.pixDec = coord[1]
+
+        else:
+            self.pixRa = np.mean(dataSlice['pixRa'])
+            self.pixDec = np.mean(dataSlice['pixDec'])
+            self.healpixId = np.mean(dataSlice['healpixId'])
+
         seasons = self.season
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
@@ -148,27 +183,27 @@ class SNSNRRateMetric(BaseMetric):
 
         self.info_season = self.seasonInfo(dataSlice, seasons)
 
-        #print('info seasons', self.info_season)
+        # print('info seasons', self.info_season)
         if self.info_season is None:
             r = []
             for seas in seasons:
-                r.append((seas, self.fieldRA, self.fieldDec, 
-                          self.pixRa,self.pixDec,self.healpixId,
+                r.append((seas, self.fieldRA, self.fieldDec,
+                          self.pixRa, self.pixDec, self.healpixId,
                           0., self.bands))
 
             return np.rec.fromrecords(r, names=[
-                'season', 'fieldRA', 'fieldDec', 
-                'pixRa','pixDec','healpixId',
+                'season', 'fieldRA', 'fieldDec',
+                'pixRa', 'pixDec', 'healpixId',
                 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         seasons = self.info_season['season']
-        #print('there', seasons)
+
         snr_tot = None
         for band in self.bands:
             idx = dataSlice[self.filterCol] == band
-            #print(band, len(dataSlice[idx]))
+            print(band, len(dataSlice[idx]))
             if len(dataSlice[idx]) > 0:
-                snr_rate = self.snrRateSeason(
+                snr_rate = self.snrSeason(
                     dataSlice[idx], seasons)  # SNR for observations
                 if snr_rate is not None:
                     if snr_tot is None:
@@ -177,44 +212,43 @@ class SNSNRRateMetric(BaseMetric):
                         snr_tot = np.concatenate((snr_tot, snr_rate))
 
         res = None
-        #print(snr_tot, snr_tot.dtype)
 
         if snr_tot is not None:
             res = self.groupInfo(snr_tot)
-        
-        
         r = []
         for val in self.info_season:
             season = val['season']
-            dates = np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)
+            dates = np.arange(val['MJD_min']+self.shift_phmin,
+                              val['MJD_max']+self.shift_phmax, self.daystep)
             nsn = len(dates)
             rat = 0.
             if res is not None:
-                idx = np.abs(res['season']-season)<1.e-5
+                idx = np.abs(res['season']-season) < 1.e-5
                 nsn_snrcut = len(res[idx])
+
                 if nsn > 0:
                     rat = nsn_snrcut/nsn
-                #print(season,rat,nsn,val['MJD_min'],val['MJD_max'])
-            r.append((season, self.fieldRA, self.fieldDec, 
-                      self.pixRa,self.pixDec,self.healpixId,
+
+            else:
+                rat = 0.
+            r.append((season, self.fieldRA, self.fieldDec,
+                      self.pixRa, self.pixDec, self.healpixId,
                       rat, self.bands))
 
         final_resu = np.rec.fromrecords(r, names=[
-            'season', 'fieldRA', 'fieldDec', 
-            'pixRa','pixDec','healpixId',
+            'season', 'fieldRA', 'fieldDec',
+            'pixRa', 'pixDec', 'healpixId',
             'frac_obs_{}'.format(self.names_ref[0]), 'band'])
-        
-        #print(test)
-        # print(final_resu)
-        # print(test)
+
         return final_resu
 
-    def snrRateSeason(self, dataSlice, seasons, j=-1, output_q=None):
+    def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
-        Estimate SNR for a dataSlice
+        Estimate SNR values for a dataSlice.
+        Apply a selection to have only SNRs>= SNR_ref
 
         Parameters
-        ---------
+        ---------------
         dataSlice : array
           Array of observations
         seasons : list
@@ -227,22 +261,36 @@ class SNSNRRateMetric(BaseMetric):
           Default : none
 
         Returns
-        -----
+        ----------
         array with the following fields (all are of f8 type, except band which is of U1)
-        SNR_name_ref:  Signal-To-Noise Ratio estimator
-        season : season
-        cadence: cadence of the season
-        season_length: length of the season
-        MJD_min: min MJD of the season
-        daymax: SN max luminosity MJD (aka T0)
-        MJD:
-        m5_eff: mean m5 of obs passing the min_phase, max_phase cut
-        fieldRA: mean field RA
-        fieldDec: mean field Dec
-        band:  band
-        m5: mean m5 (over the season)
-        Nvisits: median number of visits (per observation) (over the season)
-        ExposureTime: median exposure time (per observation) (over the season)
+
+         SNR_name_ref:  Signal-To-Noise Ratio estimator
+
+         season : season
+
+         cadence: cadence of the season
+
+         season_length: length of the season
+
+         MJD_min: min MJD of the season
+
+         daymax: SN max luminosity MJD (aka T0)
+
+         MJD:
+
+         m5_eff: mean m5 of obs passing the min_phase, max_phase cut
+
+         fieldRA: mean field RA
+
+         fieldDec: mean field Dec
+
+         band:  band
+
+         m5: mean m5 (over the season)
+
+         Nvisits: median number of visits (per observation) (over the season)
+
+         ExposureTime: median exposure time (per observation) (over the season)
         """
 
         # check whether we do have data for the considered season for this dataSlice
@@ -270,11 +318,18 @@ class SNSNRRateMetric(BaseMetric):
         # basically: step of one day between MJDmin and MJDmax
         dates = None
         for val in self.info_season:
-            if dates is None:
-                dates = np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)
-            else:
-                dates = np.concatenate(
-                    (dates, np.arange(val['MJD_min']+self.shift_phmin, val['MJD_max']+self.shift_phmax, self.daystep)))
+            min_mjd = val['MJD_min']+self.shift_phmin
+            max_mjd = val['MJD_max']+self.shift_phmax
+            deltaT = max_mjd-min_mjd
+            if deltaT >= 5.:
+                mjds_T0 = np.arange(min_mjd, max_mjd, self.daystep)
+                if dates is None:
+                    dates = mjds_T0
+                else:
+                    dates = np.concatenate((dates, mjds_T0))
+
+        if dates is None:
+            return None
 
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates
@@ -293,38 +348,46 @@ class SNSNRRateMetric(BaseMetric):
         season_vals = np.tile(sel[self.seasonCol], (len(time_for_lc), 1))
 
         # estimate fluxes and snr in SNR function
-        fluxes_tot, snr = self.SNR(
+        fluxes_tot, snr = self.calcSNR(
             time_for_lc, band, m5_vals, flag, season_vals, T0_lc)
 
         # now save the results in a record array
         snr_nomask = np.ma.copy(snr)
         _, idx = np.unique(snr['season'], return_inverse=True)
 
-        #print('seas', np.unique(snr['season']))
-        #print(band, idx)
+        # print('seas', np.unique(snr['season']))
+        # print(band, idx)
         infos = self.info_season[idx]
+
+        """
         vars_info = ['cadence', 'season_length', 'MJD_min']
         snr = rf.append_fields(
             snr, vars_info, [infos[name] for name in vars_info])
+        """
         snr = rf.append_fields(snr, 'daymax', T0_lc)
-        snr = rf.append_fields(snr, 'MJD', dates)
-        snr = rf.append_fields(snr, 'm5_eff', np.mean(
+
+        #snr = rf.append_fields(snr, 'MJD', dates)
+        snr = rf.append_fields(snr, 'm5_mean', np.mean(
             np.ma.array(m5_vals, mask=~flag), axis=1))
 
         if len(snr) > 0:
-            global_list = [(self.fieldRA, self.fieldDec, band, m5,
-                            Nvisits, exptime)]*len(snr)
-            names = ['fieldRA', 'fieldDec', 'band',
-                     'm5', 'Nvisits', 'ExposureTime']
+            # global_list = [(self.fieldRA, self.fieldDec, band, m5,
+            #                Nvisits, exptime)]*len(snr)
+            # names = ['fieldRA', 'fieldDec', 'band',
+            #         'm5', 'Nvisits', 'ExposureTime']
+            global_list = [(self.fieldRA, self.fieldDec, band,
+                            )]*len(snr)
+            names = ['fieldRA', 'fieldDec', 'band']
+
             global_info = np.rec.fromrecords(global_list, names=names)
             snr = rf.append_fields(
                 snr, names, [global_info[name] for name in names])
 
-            #print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
+            # print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
             #                        'SNR_{}'.format(self.names_ref[0])]])
             idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
             snr = np.copy(snr[idx])
-            #print('there pol', snr.dtype,self.snr_ref[band],snr)
+
         else:
             snr = None
 
@@ -336,12 +399,14 @@ class SNSNRRateMetric(BaseMetric):
     def seasonInfo(self, dataSlice, seasons):
         """
         Get info on seasons for each dataSlice
+
         Parameters
-        -----
+        ---------------
         dataSlice : array
           array of observations
+
         Returns
-        -----
+        ----------
         recordarray with the following fields:
         season, cadence, season_length, MJDmin, MJDmax
         """
@@ -350,7 +415,7 @@ class SNSNRRateMetric(BaseMetric):
         for season in seasons:
             idx = np.abs(dataSlice[self.seasonCol]-season) < 1.e-5
             slice_sel = dataSlice[idx]
-            #print(season, len(slice_sel))
+
             if len(slice_sel) < 5:
                 continue
             slice_sel.sort(order=self.mjdCol)
@@ -371,12 +436,33 @@ class SNSNRRateMetric(BaseMetric):
 
         return info_season
 
-    def SNR(self, time_lc, band, m5_vals, flag, season_vals, T0_lc):
+    def calcSNR(self, time_lc, band, m5_vals, flag, season_vals, T0_lc):
         """
-        Estimate SNR vs time
+        Estimate SNR vs time.
+        The SNR is estimated in the backgound dominating regime:
+
+        .. math::
+
+           (a + b)^2 = a^2 + 2ab + b^2 
+
+           SNR=\sqrt{\sum(flux/\sigma_{flux})}
+
+        with 
+
+        .. math::
+
+           \sigma_{flux} = \sigma_5 
+
+           \sigma_5 = flux_5/5
+
+           log(flux_5) = 10^{-0.4*(m_5-zp)}
+
+        :math:`m_5` :fiveSigmaDepth (from the scheduler)
+
         Parameters
-        -----------
-        time_lc :
+        ----------------
+        time_lc : numpy array(floats)
+          differences between mjds and T0
         m5_vals : list(float)
            five-sigme depth values
         flag : array(bool)
@@ -385,14 +471,16 @@ class SNSNRRateMetric(BaseMetric):
           season values
         T0_lc : array(float)
            array of T0 for supernovae
+
         Returns
-        -----
+        ----------
         fluxes_tot : list(float)
          list of (interpolated) fluxes
         snr_tab : array with the following fields:
           snr_name_ref (float) : Signal-to-Noise values
           season (float) : season num.
         """
+
         seasons = np.ma.array(season_vals, mask=~flag)
 
         fluxes_tot = {}
@@ -400,14 +488,14 @@ class SNSNRRateMetric(BaseMetric):
 
         for ib, name in enumerate(self.names_ref):
             fluxes = self.lim_sn[band].fluxes[ib](np.copy(time_lc))
-            #print('fluxes',fluxes)
+            # print('fluxes',fluxes)
             if name not in fluxes_tot.keys():
                 fluxes_tot[name] = fluxes
             else:
                 fluxes_tot[name] = np.concatenate((fluxes_tot[name], fluxes))
 
             flux_5sigma = self.lim_sn[band].mag_to_flux[ib](np.copy(m5_vals))
-            #print('5sigma',flux_5sigma)
+            # print('5sigma',flux_5sigma)
             snr = fluxes**2/flux_5sigma**2
             snr_season = 5.*np.sqrt(np.sum(snr*flag, axis=1))
             if snr_tab is None:
@@ -435,12 +523,14 @@ class SNSNRRateMetric(BaseMetric):
     def getSeason(self, T0):
         """
         Estimate the seasons corresponding to T0 values
+
         Parameters
-        -------
+        ---------------
         T0 : list(float)
            set of T0 values
+
         Returns
-        -----
+        -----------
         list (float) of corresponding seasons
         """
 
@@ -450,38 +540,49 @@ class SNSNRRateMetric(BaseMetric):
         seasons = np.tile(self.info_season['season'], (len(diff_min), 1))
         flag = (diff_min >= 0) & (diff_max >= 0)
         seasons = np.ma.array(seasons, mask=~flag)
-        #print('hello', seasons)
+
         return np.mean(seasons, axis=1)
 
     def groupInfo(self, snr):
+        """
+        Method to filter a numpy array.
+        the input numpy array is grouped by (season,daymax)
+        Only groups with len(grp)==len(self.bands) are selected
+
+
+        Parameters
+        ---------------
+        snr: numpy array with the following cols
+          SNR: SNR value 
+
+          season : season
+
+          m5_mean : mean m5 for obs
+
+          fieldRA : RA of the field
+
+          fieldDec : Dec of the field
+
+          band : band
+
+        Returns
+        ----------
+        record array with 'season', 'fieldRA', 'fieldDec', 'daymax' as fields.
+
+        """
 
         # we have to make group so let us move to panda
         df = pd.DataFrame.from_records(snr)
         # these data are supposed to correspond to a given filter
         # so we have to group them according to (daymax,season)
 
-        
         r = []
         for key, grp_season in df.groupby(['season', 'daymax']):
-            #print(grp_season[['season', 'daymax']], len(grp_season))
-            #print(key,grp_season)
-            #print(np.mean(grp_season['season']),np.mean(grp_season['daymax']),len(grp_season))
             if len(grp_season) == len(self.bands):
                 season = np.mean(grp_season['season'])
                 daymax = np.mean(grp_season['daymax'])
                 r.append((season, self.fieldRA, self.fieldDec, daymax))
-            """
-            select = grp_season.groupby('daymax').apply(
-                self.selectSNR).value_counts()
 
-            values = select.keys().tolist()
-            counts = select.tolist()
-            nGood = 0.
-            if True in values:
-                nGood = counts[values.index(True)]
-            r.append((np.mean(grp_season['season']), np.mean(grp_season['fieldRA']), np.mean(
-                grp_season['fieldDec']), nGood/len(grp_season), self.bands))
-            """
         if len(r) > 0:
             return np.rec.fromrecords(r, names=['season', 'fieldRA', 'fieldDec', 'daymax'])
         else:
