@@ -19,6 +19,45 @@ m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
 
 
+def fakeData(band, season=1):
+
+    # Define fake data
+    names = ['observationStartMJD', 'fieldRA', 'fieldDec',
+             'fiveSigmaDepth', 'visitExposureTime',
+             'numExposures', 'visitTime', 'season',
+             'seeingFwhmEff', 'seeingFwhmGeom',
+             'airmass', 'sky', 'moonPhase']
+
+    types = ['f8']*len(names)
+    names += ['night']
+    types += ['i2']
+    names += ['filter']
+    types += ['O']
+
+    dayobs = [59948.31957176, 59959.2821412, 59970.26134259,
+              59973.25978009, 59976.26383102, 59988.20670139, 59991.18412037,
+              60004.1853588, 60032.08975694, 60045.11981481, 60047.98747685,
+              60060.02083333, 60071.986875, 60075.96452546]
+    day0 = np.min(dayobs)
+    npts = len(dayobs)
+    data = np.zeros(npts, dtype=list(zip(names, types)))
+    data['observationStartMJD'] = dayobs
+    data['night'] = np.floor(data['observationStartMJD']-day0+1)
+    data['fiveSigmaDepth'] = m5_ref[band]
+    data['visitExposureTime'] = 15.
+    data['numExposures'] = 2
+    data['visitTime'] = 2.*15.
+    data['season'] = season
+    data['filter'] = band
+    data['seeingFwhmEff'] = 0.
+    data['seeingFwhmGeom'] = 0.
+    data['airmass'] = 1.2
+    data['sky'] = 20.0
+    data['moonPhase'] = 0.5
+
+    return data
+
+
 class TestSNmetrics(unittest.TestCase):
 
     def testCadenceMetric(self):
@@ -121,29 +160,7 @@ class TestSNmetrics(unittest.TestCase):
         lim_sn = ReferenceData(Li_files, mag_to_flux_files, band, z)
 
         # Define fake data
-        names = ['observationStartMJD', 'fieldRA', 'fieldDec',
-                 'fiveSigmaDepth', 'visitExposureTime', 'numExposures', 'visitTime', 'season']
-        types = ['f8']*len(names)
-        names += ['night']
-        types += ['i2']
-        names += ['filter']
-        types += ['O']
-
-        dayobs = [59948.31957176, 59959.2821412, 59970.26134259,
-                  59973.25978009, 59976.26383102, 59988.20670139, 59991.18412037,
-                  60004.1853588, 60032.08975694, 60045.11981481, 60047.98747685,
-                  60060.02083333, 60071.986875, 60075.96452546]
-        day0 = np.min(dayobs)
-        npts = len(dayobs)
-        data = np.zeros(npts, dtype=list(zip(names, types)))
-        data['observationStartMJD'] = dayobs
-        data['night'] = np.floor(data['observationStartMJD']-day0)
-        data['fiveSigmaDepth'] = m5_ref[band]
-        data['visitExposureTime'] = 15.
-        data['numExposures'] = 2
-        data['visitTime'] = 2.*15.
-        data['season'] = season
-        data['filter'] = band
+        data = fakeData(band)
 
         # Run the metric with these fake data
         slicePoint = [0]
@@ -191,6 +208,44 @@ class TestSNmetrics(unittest.TestCase):
         Test ObsRate metric
 
         """
+
+        # Load required SN info to run the metric
+        f = open('config/param_obsrate_metric.yaml', 'r')
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        f.close()
+
+        bands = config['Observations']['bands']
+        snr_ref = config['Observations']['SNR']
+        z = config['Observations']['z']
+        coadd = config['Observations']['coadd']
+        season = config['Observations']['season']
+        lim_sn = {}
+        for band in bands:
+            lim_sn[band] = ReferenceData(
+                config['Li file'], config['Mag_to_flux file'], band, z)
+
+        # metric instance
+        metric = SNObsRateMetric(lim_sn=lim_sn,
+                                 names_ref=config['names_ref'],
+                                 season=season, coadd=coadd,
+                                 z=z, bands=bands,
+                                 snr_ref=dict(zip(bands, snr_ref)))
+
+        # make fake data
+
+        data = None
+        cadence = dict(zip('grizy', [10, 20, 20, 26, 20]))
+        for band in bands:
+            for i in range(cadence[band]):
+                fakes = fakeData(band)
+                if data is None:
+                    data = fakes
+                else:
+                    data = np.concatenate((data, fakes))
+
+        print(data.dtype, data)
+        res = metric.run(data)
+        print(res.dtype, res)
 
 
 """
