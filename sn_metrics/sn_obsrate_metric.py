@@ -201,7 +201,6 @@ class SNObsRateMetric(BaseMetric):
         snr_tot = None
         for band in self.bands:
             idx = dataSlice[self.filterCol] == band
-            print(band, len(dataSlice[idx]))
             if len(dataSlice[idx]) > 0:
                 snr_rate = self.snrSeason(
                     dataSlice[idx], seasons)  # SNR for observations
