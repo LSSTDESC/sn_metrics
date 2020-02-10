@@ -5,6 +5,7 @@ import healpy as hp
 import numpy.lib.recfunctions as rf
 import multiprocessing
 from sn_tools.sn_cadence_tools import GenerateFakeObservations
+from sn_tools.sn_obs import getPix
 import yaml
 from scipy import interpolate
 import os
@@ -78,7 +79,7 @@ class SNSNRMetric(BaseMetric):
                  vistimeCol='visitTime', seeingaCol='seeingFwhmEff',
                  seeingbCol='seeingFwhmGeom',
                  # airmassCol='airmass',skyCol='sky', moonCol='moonPhase'
-                 season=-1, shift=10., coadd=True, z=0.01, display=False, **kwargs):
+                 season=-1, shift=10., coadd=True, z=0.01, display=False, nside=64, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -93,6 +94,7 @@ class SNSNRMetric(BaseMetric):
         self.vistimeCol = vistimeCol
         self.seeingaCol = seeingaCol
         self.seeingbCol = seeingbCol
+        self.nside = nside
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingaCol, self.seeingbCol]
@@ -225,16 +227,24 @@ class SNSNRMetric(BaseMetric):
         if len(sel) == 0:
             return None
 
+        if 'pixRa' not in sel.dtype.names:
+            healpixID, pixRa, pixDec = getPix(self.nside,
+                                              np.mean(sel[self.RaCol]),
+                                              np.mean(sel[self.DecCol]))
+
+            sel = rf.append_fields(sel, 'healpixID', [
+                healpixID]*len(sel))
+            sel = rf.append_fields(
+                sel, 'pixRa', [pixRa]*len(sel))
+            sel = rf.append_fields(
+                sel, 'pixDec', [pixDec]*len(sel))
+
         # Get few infos: RA, Dec, Nvisits, m5, exptime
         fieldRA = np.mean(sel[self.RaCol])
         fieldDec = np.mean(sel[self.DecCol])
-        pixRa = 0.
-        pixDec = 0.
-        healpixID = 0
-        if 'pixRa' in sel.dtype.names:
-            pixRa = np.mean(sel['pixRa'])
-            pixDec = np.mean(sel['pixDec'])
-            healpixID = int(np.unique(sel['healpixID'])[0])
+        pixRa = np.mean(sel['pixRa'])
+        pixDec = np.mean(sel['pixDec'])
+        healpixID = int(np.unique(sel['healpixID'])[0])
 
         Nvisits = np.median(sel[self.nexpCol]/2.)  # one visit = 2 exposures
         m5 = np.mean(sel[self.m5Col])
@@ -516,7 +526,9 @@ class SNSNRMetric(BaseMetric):
         m5 = np.median(slice_sel[self.m5Col])
         Tvisit = 30.
 
-        config_fake = yaml.load(open(self.fakeFile), Loader=yaml.FullLoader)
+        f = open(self.fakeFile, 'r')
+        config_fake = yaml.load(f, Loader=yaml.FullLoader)
+        f.close()
         config_fake['Ra'] = fieldRA
         config_fake['Dec'] = fieldDec
         config_fake['bands'] = [band]

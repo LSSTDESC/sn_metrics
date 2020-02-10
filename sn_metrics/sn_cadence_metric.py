@@ -4,6 +4,8 @@ from sn_stackers.coadd_stacker import CoaddStacker
 import pandas as pd
 import time
 import healpy as hp
+from sn_tools.sn_obs import getPix
+import numpy.lib.recfunctions as rf
 
 
 class SNCadenceMetric(BaseMetric):
@@ -18,7 +20,7 @@ class SNCadenceMetric(BaseMetric):
       Default : SNCadenceMetric
     mjdCol : str, opt
       mjd column name
-      Default : observationStartMJD, 
+      Default : observationStartMJD,
     RaCol : str,opt
       Right Ascension column name
       Default : fieldRA
@@ -36,7 +38,7 @@ class SNCadenceMetric(BaseMetric):
        Default : visitExposureTime
     nightCol : str,opt
        night column name
-       Default : night 
+       Default : night
     obsidCol : str,opt
       observation id column name
       Default : observationId
@@ -86,15 +88,15 @@ class SNCadenceMetric(BaseMetric):
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         self.filterNames = np.array(['u', 'g', 'r', 'i', 'z', 'y'])
-        #self.config = config
+        # self.config = config
 
         # sn parameters
-        #sn_parameters = config['SN parameters']
+        # sn_parameters = config['SN parameters']
 
         self.season = season
-        #self.field_type = config['Observations']['fieldtype']
-        #self.season = config['Observations']['season']
-        #self.season = season
+        # self.field_type = config['Observations']['fieldtype']
+        # self.season = config['Observations']['season']
+        # self.season = season
         # area = 9.6  # survey_area in sqdeg - 9.6 by default for DD
         # if self.field_type == 'WFD':
         # in that case the survey area is the healpix area
@@ -121,8 +123,8 @@ class SNCadenceMetric(BaseMetric):
         m5_mean: mean five sigma depth (over the season) (float)
         cadence_mean: mean cadence (over the season) (float)
         Nobs: number of observation (int)
-        healpixID: healpix ID (int)
-        pixRA: Ra of the pixel (float)
+        healpixID: healpix Id (int)
+        pixRa: Ra of the pixel (float)
         pixDec: Dec of the pixel (float)
         deltaT_max: max internight gap (float)
         frac_dT_5: fraction of gaps higher than 5 days (float)
@@ -134,10 +136,23 @@ class SNCadenceMetric(BaseMetric):
         visitExposureTime: median exposure time per season
         """
 
+        # add pixRa, pixDec and healpixID if not already included
+        if 'pixRa' not in dataSlice.dtype.names:
+            healpixID, pixRa, pixDec = getPix(self.nside,
+                                              np.mean(dataSlice[self.RaCol]),
+                                              np.mean(dataSlice[self.DecCol]))
+
+            dataSlice = rf.append_fields(dataSlice, 'healpixID', [
+                                         healpixID]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixRa', [pixRa]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixDec', [pixDec]*len(dataSlice))
+
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
 
-        #dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
+        # dataSlice['healpixID'] = dataSlice['healpixID'].astype(int)
 
         time_ref = time.time()
         obsdf = pd.DataFrame(np.copy(dataSlice))
@@ -162,8 +177,8 @@ class SNCadenceMetric(BaseMetric):
         else:
             res = pd.DataFrame(res_filter)
 
-        #res = res[res.columns.difference([self.filterCol,'level_4','level_5'])]
-        #res = res.rename(columns={'{}_cad'.format(self.filterCol): self.filterCol})
+        # res = res[res.columns.difference([self.filterCol,'level_4','level_5'])]
+        # res = res.rename(columns={'{}_cad'.format(self.filterCol): self.filterCol})
         res = res[res.columns.difference(['level_2', 'level_3'])]
         res.loc[:, 'pixArea'] = self.area
         res.loc[:, 'nside'] = int(self.nside)
@@ -180,7 +195,7 @@ class SNCadenceMetric(BaseMetric):
         Parameters
         --------------
 
-        dataSlice : panda df 
+        dataSlice : panda df
          pandas df with a column self.filterCol
 
         Returns
@@ -216,10 +231,10 @@ class SNCadenceMetric(BaseMetric):
         """
         print('try to define sequences per night')
 
-        #dataSlice['seq'] = dataSlice.groupby([self.nightCol])[self.filterCol].sum()
+        # dataSlice['seq'] = dataSlice.groupby([self.nightCol])[self.filterCol].sum()
         print(dataSlice.columns)
         ll = dataSlice.groupby([self.nightCol])[self.filterCol].sum()
-        
+
         res = pd.DataFrame()
         for seq in dataSlice['seq'].unique():
             index = dataSlice['seq'] == seq
@@ -256,7 +271,7 @@ class SNCadenceMetric(BaseMetric):
 
         """
 
-        #slicetime = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
+        # slicetime = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
         r = []
         """
@@ -266,7 +281,7 @@ class SNCadenceMetric(BaseMetric):
 
         # this is to estimate the fraction of internight gaps higher than xx days
         internights = [5, 10, 15, 20]
-        #myarr = np.array([[5],[10],[15],[20]], dtype= [('gap','f8')])
+        # myarr = np.array([[5],[10],[15],[20]], dtype= [('gap','f8')])
         myarr = np.array([5, 10, 15, 20], dtype=[('gap', 'f8')])
         deltaT_res = {}
 
@@ -291,7 +306,8 @@ class SNCadenceMetric(BaseMetric):
             """
             for threshold in internights:
                 idx = deltaT>= threshold
-                deltaT_res['gap_{}'.format(threshold)] = len(deltaT[idx])/(len(deltaT)-1)
+                deltaT_res['gap_{}'.format(threshold)] = len(
+                    deltaT[idx])/(len(deltaT)-1)
             """
             # use broadcasting to estimate this - faster
             arr = np.array(deltaT)
@@ -311,7 +327,7 @@ class SNCadenceMetric(BaseMetric):
             if len(c)>= 2:
                 cadence = 1. / c.mean()
             """
-            #cadence = np.mean(slicetime)
+            # cadence = np.mean(slicetime)
             cadence = deltaT.median()
 
         resudf = pd.DataFrame({'cadence_mean': [cadence],
@@ -338,7 +354,7 @@ class SNCadenceMetric(BaseMetric):
             resudf.loc[:, val] = medians[val].median()
 
         # replace the band - necessary when processing all the filters
-        #resudf = resudf[resudf.columns.difference([self.filterCol])]
+        # resudf = resudf[resudf.columns.difference([self.filterCol])]
 
         resudf.loc[:, '{}_cad'.format(self.filterCol)] = band
 

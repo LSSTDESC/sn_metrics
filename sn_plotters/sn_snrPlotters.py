@@ -132,7 +132,7 @@ def detecFracPlot(data, nside, names_ref):
         for sim in names_ref:
             fig, ax = plt.subplots()
             hpxmap = np.zeros(npix, dtype=np.float)
-            hpxmap[sel['healpixId'].astype(int)] += sel['frac_obs_'+sim]
+            hpxmap[sel['healpixID'].astype(int)] += sel['frac_obs_'+sim]
             cmap = plt.cm.jet
             # cmap.Normalize(clip=True)
             cmap.set_under('w')
@@ -240,5 +240,5 @@ def GetHealpix(data, nside):
     table = hp.ang2vec(res['fieldRA'], res['fieldDec'], lonlat=True)
     healpixs = hp.vec2pix(nside, table[:, 0], table[:, 1], table[:, 2])
     print(healpixs)
-    res = rf.append_fields(res, 'healpixId', healpixs)
+    res = rf.append_fields(res, 'healpixID', healpixs)
     return res
