@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import random
 from sn_tools.sn_obs import season as seasonCalc
+from sn_tools.sn_obs import getPix
 
 
 class SNObsRateMetric(BaseMetric):
@@ -66,7 +67,8 @@ class SNObsRateMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={}, **kwargs):
+                 vistimeCol='visitTime', visitExposureTimeCol='visitExposureTime',
+                 season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={}, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -79,12 +81,20 @@ class SNObsRateMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.visitExposureTimeCol=visitExposureTimeCol
         self.daystep = 1.
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
+                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol,self.visitExposureTimeCol]
+        self.stacker = None
+    
         if coadd:
-            cols += ['coadd']
+            #cols += ['coadd']
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol,
+                                        RaCol=self.RaCol, DecCol=self.DecCol,
+                                        m5Col=self.m5Col, nightCol=self.nightCol,
+                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol,
+                                        visitTimeCol=self.vistimeCol, visitExposureTimeCol=self.visitExposureTimeCol)
         super(SNObsRateMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -108,6 +118,7 @@ class SNObsRateMetric(BaseMetric):
         self.names_ref = names_ref
         self.snr_ref = snr_ref
         self.nside = nside
+        self.verbose = False
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -146,6 +157,7 @@ class SNObsRateMetric(BaseMetric):
             return None
         dataSlice.sort(order=self.mjdCol)
 
+      
         """
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
@@ -160,19 +172,24 @@ class SNObsRateMetric(BaseMetric):
         self.fieldDec = np.mean(dataSlice[self.DecCol])
 
         if 'pixRa' not in dataSlice.dtype.names:
-            self.healpixId = hp.ang2pix(self.nside, self.fieldRA,
-                                        self.fieldDec, nest=True, lonlat=True)
-            coord = hp.pix2ang(self.nside,
-                               self.healpixId, nest=True, lonlat=True)
+            self.healpixID, self.pixRa, self.pixDec = getPix(self.nside,
+                                              np.mean(dataSlice[self.RaCol]),
+                                              np.mean(dataSlice[self.DecCol]))
 
-            self.pixRa = coord[0]
-            self.pixDec = coord[1]
-
+            dataSlice = rf.append_fields(dataSlice, 'healpixID', [self.healpixID]*len(dataSlice))
+            dataSlice = rf.append_fields(dataSlice, 'pixRa', [self.pixRa]*len(dataSlice))
+            dataSlice = rf.append_fields(dataSlice, 'pixDec', [self.pixDec]*len(dataSlice))
+            
         else:
             self.pixRa = np.mean(dataSlice['pixRa'])
             self.pixDec = np.mean(dataSlice['pixDec'])
-            self.healpixId = np.mean(dataSlice['healpixId'])
+            self.healpixID = np.mean(dataSlice['healpixID'])
 
+    
+        if self.stacker is not None:
+            dataSlice = self.stacker._run(dataSlice)
+            if self.verbose:
+                print('after stacking',dataSlice[[self.filterCol,self.m5Col,self.visitExposureTimeCol]])
         seasons = self.season
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
@@ -188,7 +205,7 @@ class SNObsRateMetric(BaseMetric):
             r = []
             for seas in seasons:
                 r.append((seas, self.fieldRA, self.fieldDec,
-                          self.pixRa, self.pixDec, self.healpixId,
+                          self.pixRa, self.pixDec, self.healpixID,
                           0., self.bands))
 
             return np.rec.fromrecords(r, names=[
@@ -214,6 +231,7 @@ class SNObsRateMetric(BaseMetric):
 
         if snr_tot is not None:
             res = self.groupInfo(snr_tot)
+
         r = []
         for val in self.info_season:
             season = val['season']
@@ -231,7 +249,7 @@ class SNObsRateMetric(BaseMetric):
             else:
                 rat = 0.
             r.append((season, self.fieldRA, self.fieldDec,
-                      self.pixRa, self.pixDec, self.healpixId,
+                      self.pixRa, self.pixDec, self.healpixID,
                       rat, self.bands))
 
         final_resu = np.rec.fromrecords(r, names=[
@@ -305,6 +323,7 @@ class SNObsRateMetric(BaseMetric):
         if len(sel) == 0:
             return None
 
+        sel = np.copy(sel)
         # Get few infos: Nvisits, m5, exptime
         Nvisits = np.median(sel[self.nexpCol]/2.)  # one visit = 2 exposures
         m5 = np.mean(sel[self.m5Col])
@@ -333,11 +352,15 @@ class SNObsRateMetric(BaseMetric):
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates
 
+        #T0_lc = np.array([np.mean(dates)])
         # for these DayMax, estimate the phases of LC points corresponding to the current dataSlice MJDs
         # diff_time = dates[:, np.newaxis]-mjds
         time_for_lc = mjds-T0_lc[:, None]
-
+        
         phase = time_for_lc/(1.+self.z)  # phases of LC points
+        if self.verbose:
+            print('time for lc',time_for_lc)
+            print('phase for lc',phase)
         # flag: select LC points only in between min_rf_phase and max_phase
         # phase_max = self.shift/(1.+self.z)
         flag = (phase >= self.min_rf_phase) & (phase <= self.max_rf_phase)
@@ -350,6 +373,11 @@ class SNObsRateMetric(BaseMetric):
         fluxes_tot, snr = self.calcSNR(
             time_for_lc, band, m5_vals, flag, season_vals, T0_lc)
 
+        if self.verbose:
+            print('m5',m5_vals)
+            print('fluxes',fluxes_tot)
+            print('snr',snr)
+        
         # now save the results in a record array
         snr_nomask = np.ma.copy(snr)
         _, idx = np.unique(snr['season'], return_inverse=True)
@@ -381,12 +409,12 @@ class SNObsRateMetric(BaseMetric):
             global_info = np.rec.fromrecords(global_list, names=names)
             snr = rf.append_fields(
                 snr, names, [global_info[name] for name in names])
-
+ 
             # print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
             #                        'SNR_{}'.format(self.names_ref[0])]])
             idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
             snr = np.copy(snr[idx])
-
+           
         else:
             snr = None
 
@@ -487,15 +515,20 @@ class SNObsRateMetric(BaseMetric):
 
         for ib, name in enumerate(self.names_ref):
             fluxes = self.lim_sn[band].fluxes[ib](np.copy(time_lc))
-            # print('fluxes',fluxes)
+            
             if name not in fluxes_tot.keys():
                 fluxes_tot[name] = fluxes
             else:
                 fluxes_tot[name] = np.concatenate((fluxes_tot[name], fluxes))
 
             flux_5sigma = self.lim_sn[band].mag_to_flux[ib](np.copy(m5_vals))
-            # print('5sigma',flux_5sigma)
+            
             snr = fluxes**2/flux_5sigma**2
+            if self.verbose:
+                print('times',time_lc)
+                print('fluxes',fluxes)
+                print('5sigma fluxes',flux_5sigma)
+                print('snr',snr*flag,np.sum(snr*flag),np.sqrt(np.sum(snr*flag)))
             snr_season = 5.*np.sqrt(np.sum(snr*flag, axis=1))
             if snr_tab is None:
                 snr_tab = np.asarray(np.copy(snr_season), dtype=[

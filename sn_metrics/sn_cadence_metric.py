@@ -139,8 +139,8 @@ class SNCadenceMetric(BaseMetric):
         # add pixRa, pixDec and healpixID if not already included
         if 'pixRa' not in dataSlice.dtype.names:
             healpixID, pixRa, pixDec = getPix(self.nside,
-                                              np.mean(dataSlice[self.RaCol]),
-                                              np.mean(dataSlice[self.DecCol]))
+                                              np.mean(np.copy(dataSlice[self.RaCol])),
+                                              np.mean(np.copy(dataSlice[self.DecCol])))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
                                          healpixID]*len(dataSlice))
@@ -295,8 +295,8 @@ class SNCadenceMetric(BaseMetric):
         cadence = 0.
         season_length = 0.
         if len(dataSlice) > 0:
-            m5_mean = np.mean(dataSlice[self.m5Col])
-            m5_median = np.median(dataSlice[self.m5Col])
+            m5_mean = np.mean(np.copy(dataSlice[self.m5Col]))
+            m5_median = np.median(np.copy(dataSlice[self.m5Col]))
             deltaT = dataSlice[self.mjdCol].diff()
 
         if len(dataSlice) >= 3:

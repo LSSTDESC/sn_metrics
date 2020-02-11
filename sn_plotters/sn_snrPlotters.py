@@ -125,7 +125,7 @@ def detecFracPlot(data, nside, names_ref):
     """""
     #data_heal = GetHealpix(data, nside)
     npix = hp.nside2npix(nside)
-    print(npix, 'npix')
+    
     for band, season in np.unique(data[['band', 'season']]):
         idx = (data['band'] == band) & (data['season'] == season)
         sel = data[idx]
@@ -138,12 +138,13 @@ def detecFracPlot(data, nside, names_ref):
             cmap.set_under('w')
             # remove max=200 and norm='hist' to get the DDFs
             median_value = np.median(sel['frac_obs_'+sim])
-            plt.axes(ax)
+            #plt.axes(ax)
+            plt.sca(ax)
             hp.mollview(hpxmap, min=0, max=1., cmap=cmap,
                         title='{} - season {} \n median: {}'.format(band, int(season), np.round(median_value, 2)), hold=True)
 
 
-def detecFracHist(data, names_ref):
+def detecFracHist(data, names_ref,saveFig=False):
     """
     Plot histogram of detection rates 
 
@@ -161,10 +162,10 @@ def detecFracHist(data, names_ref):
 
     for band, season in np.unique(data[['band', 'season']]):
         idx = (data['band'] == band) & (np.abs(data['season']-season) < 1.e-5)
-        detecFracHist_bandseason(data[idx], band, season, names_ref)
+        detecFracHist_bandseason(data[idx], band, season, names_ref,saveFig=saveFig)
 
 
-def detecFracHist_bandseason(data, band, season, names_ref):
+def detecFracHist_bandseason(data, band, season, names_ref,saveFig=False):
     """
     Plot histogram of detection rates per band and per season
 
@@ -212,7 +213,8 @@ def detecFracHist_bandseason(data, band, season, names_ref):
         ax.grid()
         plt.legend(label, fontsize=fontsize-2., loc='upper left')
         plt.grid(1)
-        plt.savefig('test.png')
+        if saveFig:
+            plt.savefig('test.png')
 
 
 def GetHealpix(data, nside):
