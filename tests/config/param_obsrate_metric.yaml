@@ -9,9 +9,10 @@ Observations:
    fieldtype: DD #DD or WFD
    coadd: True # this is the coaddition per night
    season: [1] #season to simulate (-1 = all seasons)
-   bands: 'griz' #bands to consider
+   bands: 'riz' #bands to consider
    #bands: 'i'
-   SNR: [25., 25., 30., 35.] #DDF SNR cut to estimate sum(Li**2)
+   #SNR: [25., 25., 30., 35.] #DDF SNR cut to estimate sum(Li**2)
+   SNR: [25., 30., 35.] #DDF SNR cut to estimate sum(Li**2)
    #SNR:  [30., 40., 30., 20.]#WFD SNR cut to estimate sum(Li**2)
    #SNR:  [30., 40., 30.]#WFD SNR cut to estimate sum(Li**2)
    z: 0.4

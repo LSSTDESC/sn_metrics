@@ -122,7 +122,7 @@ class TestSNmetrics(unittest.TestCase):
         # And the result should be...
         refResult = dict(zip(['m5_mean', 'cadence_mean', 'gap_max', 'gap_5',
                               'gap_10', 'gap_15', 'gap_20', 'season_length'],
-                             [24.00371251, 5.0, 5., 1., 0., 0., 0., 245.]))
+                             [24.38, 5.0, 5., 1., 0., 0., 0., 245.]))
         for key in refResult.keys():
             assert((np.abs(refResult[key]-result[key]) < 1.e-5))
 
@@ -134,7 +134,7 @@ class TestSNmetrics(unittest.TestCase):
                                             dbName='Fakes')
 
         #zlim = 0.3743514031001232
-        zlim = 0.3171019707213057
+        zlim = 0.3740264590350457
         zres = res_z['zlim_{}'.format(config['names_ref'][0])]
         assert(np.abs(zlim-zres) < 1.e-5)
 
@@ -220,11 +220,14 @@ class TestSNmetrics(unittest.TestCase):
         coadd = config['Observations']['coadd']
         season = config['Observations']['season']
         lim_sn = {}
+        z = 0.6
         for band in bands:
             lim_sn[band] = ReferenceData(
                 config['Li file'], config['Mag_to_flux file'], band, z)
 
         # metric instance
+        coadd = True
+        
         metric = SNObsRateMetric(lim_sn=lim_sn,
                                  names_ref=config['names_ref'],
                                  season=season, coadd=coadd,
@@ -235,6 +238,7 @@ class TestSNmetrics(unittest.TestCase):
 
         data = None
         cadence = dict(zip('grizy', [10, 20, 20, 26, 20]))
+        #cadence = dict(zip('grizy', [1, 1, 1, 1, 1]))
         for band in bands:
             for i in range(cadence[band]):
                 fakes = fakeData(band)
@@ -243,10 +247,10 @@ class TestSNmetrics(unittest.TestCase):
                 else:
                     data = np.concatenate((data, fakes))
 
-        print(data.dtype, data)
         res = metric.run(data)
-        print(res.dtype, res)
-
+        result_metric = res['frac_obs_{}'.format(config['names_ref'][0])]
+        result_ref = 0.125
+        assert(np.abs(result_metric-result_ref) < 1.e-5)
 
 """
 
