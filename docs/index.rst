@@ -12,7 +12,7 @@ Welcome to sn_metrics's documentation!
 
    cadence metric <api/sn_metrics.sn_cadence_metric>
    SNR metric <api/sn_metrics.sn_snr_metric>
-   SNRate metric <api/sn_metrics.sn_snrrate_metric>
+   ObsRate metric <api/sn_metrics.sn_obsrate_metric>
    cadence plotter <api/sn_plotters.sn_cadencePlotters>
    SNR plotter <api/sn_plotters.sn_snrPlotters>
 
