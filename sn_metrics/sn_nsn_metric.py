@@ -16,6 +16,7 @@ from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
 from scipy.interpolate import RegularGridInterpolator
 
+
 class SNNSNMetric(BaseMetric):
     """
     Measure zlim of type Ia supernovae.
@@ -81,9 +82,9 @@ class SNNSNMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=-1, coadd=True, zmin=0.0, zmax=1.2,
-                 pixArea=9.6, outputType='zlims',verbose=False, ploteffi=False, proxy_level=0,
-                 N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1, 
-                 x1_color_dist=None,lightOutput=True,T0s='all',**kwargs):
+                 pixArea=9.6, outputType='zlims', verbose=False, ploteffi=False, proxy_level=0,
+                 N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1,
+                 x1_color_dist=None, lightOutput=True, T0s='all', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -130,7 +131,7 @@ class SNNSNMetric(BaseMetric):
                                       self.mjdCol, self.RaCol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol,
-                                      self.snr_min,lightOutput=lightOutput)
+                                      self.snr_min, lightOutput=lightOutput)
         self.zmin = zmin
         self.zmax = zmax
         self.zStep = 0.05  # zstep
@@ -151,23 +152,21 @@ class SNNSNMetric(BaseMetric):
         # Two SN considered
         # self.nameSN = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
 
-       
-
         # status of the pixel after processing
         self.status = dict(
-            zip(['ok', 'effi', 'season_length', 'nosn','simu_parameters'], [1, -1, -2, -3, -4]))
+            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters'], [1, -1, -2, -3, -4]))
 
         self.params = ['x0', 'x1', 'daymax', 'color']
 
-        self.outputType = outputType # this is to choose the output: lc, sn, effi, zlims
-        self.proxy_level = proxy_level # proxy level chosen by the user: 0, 1, 2
- 
-        print('pixel area',self.pixArea)
+        self.outputType = outputType  # this is to choose the output: lc, sn, effi, zlims
+        self.proxy_level = proxy_level  # proxy level chosen by the user: 0, 1, 2
+
+        print('pixel area', self.pixArea)
 
     def run(self, dataSlice,  slicePoint=None):
 
         time_ref = time.time()
-        
+
         seasons = self.season
 
         if self.season == -1:
@@ -175,13 +174,11 @@ class SNNSNMetric(BaseMetric):
 
         #seasons = [[1,2,3],[4,5,6],[7,8,9,10]]
         #seasons = [[i] for i in range(1,11)]
- 
-        
+
         #effi_totdf = pd.DataFrame()
         #zlim_nsndf = pd.DataFrame()
         vara_totdf = pd.DataFrame()
         varb_totdf = pd.DataFrame()
-
 
         for seas in seasons:
             """
@@ -190,27 +187,27 @@ class SNNSNMetric(BaseMetric):
             zlim_nsndf = pd.concat([zlim_nsndf, zlimsdf], sort=False)
             effi_totdf = pd.concat([effi_totdf, effi_seasondf], sort=False)
             """
-            vara_df, varb_df = self.run_seasons(dataSlice,[seas])
-            #print(seas,effi_seasondf)
+            vara_df, varb_df = self.run_seasons(dataSlice, [seas])
+            # print(seas,effi_seasondf)
             vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
             varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
 
         if self.verbose:
-            print('finally - eop',time.time()-time_ref)
+            print('finally - eop', time.time()-time_ref)
             print(varb_totdf)
 
         if self.outputType == 'lc':
             return varb_totdf.to_records()
-        
+
         if self.outputType == 'sn':
             return vara_totdf.to_records()
-        
+
         if self.outputType == 'effi':
             return vara_totdf.to_records()
 
         return varb_totdf.to_records()
 
-    def run_seasons(self, dataSlice,seasons):
+    def run_seasons(self, dataSlice, seasons):
 
         time_ref = time.time()
 
@@ -218,17 +215,17 @@ class SNNSNMetric(BaseMetric):
         pixRa = np.unique(dataSlice['pixRa'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
         healpixID = int(np.unique(dataSlice['healpixID'])[0])
- 
+
         if self.verbose:
-            print('#### Processing season',seasons,healpixID)
+            print('#### Processing season', seasons, healpixID)
         # get infos on seasons
         self.info_season = self.seasonInfo(dataSlice, seasons)
-        
+
         if self.info_season is None:
             return None
 
         groupnames = ['pixRa', 'pixDec', 'healpixID', 'season', 'x1', 'color']
-       
+
         zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
         if zRange[0] < 1.e-6:
             zRange[0] = 0.01
@@ -247,34 +244,35 @@ class SNNSNMetric(BaseMetric):
                     pixRa, pixDec, healpixID, season, self.status['season_length'])
                 effi_seasondf = self.erroreffi(
                     pixRa, pixDec, healpixID, season)
-                
-                return effi_seasondf,zlimsdf
+
+                return effi_seasondf, zlimsdf
 
             # generate simulation parameters
-            
-            gen_par_season, duration_z_season = self.simuParameters(season, zRange)
+
+            gen_par_season, duration_z_season = self.simuParameters(
+                season, zRange)
             if gen_par_season is None:
                 if self.verbose:
                     print('No simulation params could be estimated')
                 zlimsdf = self.errordf(
                     pixRa, pixDec, healpixID, season, self.status['simu_parameters'])
                 effi_seasondf = self.erroreffi(
-                    pixRa, pixDec, healpixID, season) 
-                return effi_seasondf,zlimsdf
+                    pixRa, pixDec, healpixID, season)
+                return effi_seasondf, zlimsdf
 
             if gen_par is None:
                 gen_par = gen_par_season
             else:
-                gen_par = np.concatenate((gen_par,gen_par_season))
+                gen_par = np.concatenate((gen_par, gen_par_season))
             if duration_z is None:
                 duration_z = duration_z_season
             else:
-                duration_z = np.concatenate((duration_z,duration_z_season))
+                duration_z = np.concatenate((duration_z, duration_z_season))
             idx = dataSlice['season'] == season
             if obs is None:
                 obs = np.copy(dataSlice[idx])
             else:
-               obs = np.concatenate((obs,np.copy(dataSlice[idx])))
+                obs = np.concatenate((obs, np.copy(dataSlice[idx])))
 
         if self.verbose:
             time_refb = time.time()
@@ -283,55 +281,51 @@ class SNNSNMetric(BaseMetric):
             obs = self.stacker._run(obs)
             if self.verbose:
                 print('after stacking', season, time.time()-time_refb)
-                
+
         # simulate supernovae
         if self.verbose:
-            print('simulation SN',len(gen_par))
-            print(gen_par)
+            print('simulation SN', len(gen_par))
+            # print(gen_par)
             time_refb = time.time()
 
-        sn,lc = self.run_season_slice(obs, gen_par)
+        sn, lc = self.run_season_slice(obs, gen_par)
 
         if self.outputType == 'lc' or self.outputType == 'sn':
-            return sn,lc
+            return sn, lc
         if self.verbose:
             print('after simulation', season, time.time()-time_refb)
 
         if sn.empty:
+            print('sn empty')
             print(lc)
             print(sn)
             zlimsdf = self.errordf(
                 pixRa, pixDec, healpixID, season, self.status['nosn'])
             effi_seasondf = self.erroreffi(
                 pixRa, pixDec, healpixID, season)
-            print(test)
         else:
             if self.verbose:
                 print('estimating efficiencies')
                 time_refb = time.time()
-            #estimate efficiencies
+            # estimate efficiencies
             effi_seasondf = self.effidf(sn)
-          
 
             if self.verbose:
-                print('after effis',time.time()-time_refb)
+                print('after effis', time.time()-time_refb)
                 print('estimating zlimits')
                 time_refb = time.time()
-            
-                
-            
-            #estimate zlims
-            zlimsdf = effi_seasondf.groupby(groupnames).apply(
-            lambda x: self.zlimdf(x, duration_z)).reset_index(level=list(range(len(groupnames))))
 
+            # estimate zlims
+            zlimsdf = effi_seasondf.groupby(groupnames).apply(
+                lambda x: self.zlimdf(x, duration_z)).reset_index(level=list(range(len(groupnames))))
 
             if self.verbose:
                 print('zlims', zlimsdf)
-                print('after zlims',time.time()-time_refb)
+                print('after zlims', time.time()-time_refb)
                 print('Estimating number of supernovae')
                 time_refb = time.time()
             # estimate number of supernovae - medium one
-            
+
             zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                 x, 0.0, 0.0, effi_seasondf, duration_z), axis=1)
 
@@ -339,19 +333,17 @@ class SNNSNMetric(BaseMetric):
 
             # estimate number of supernovae - total
 
-            zlimsdf['nsn'] = self.nsn_tot(effi_seasondf,zlimsdf,duration_z)
+            zlimsdf['nsn'] = self.nsn_tot(effi_seasondf, zlimsdf, duration_z)
 
             if self.verbose:
                 print('final result ', zlimsdf)
-                print('after nsn',time.time()-time_refb)
-
+                print('after nsn', time.time()-time_refb)
 
         if self.verbose:
             print('#### SEASON processed', time.time()-time_ref,
                   seasons)
-            
-        return effi_seasondf,zlimsdf
 
+        return effi_seasondf, zlimsdf
 
     def run_loop_seasons(self, dataSlice,  slicePoint=None):
 
@@ -431,9 +423,10 @@ class SNNSNMetric(BaseMetric):
             else:
                 # stack obs (per band and per night) if necessary
                 if self.stacker is not None:
+                    print('stacker')
                     obs = self.stacker._run(obs)
                     if self.verbose:
-                        print('after stacking', season, time.time()-time_refb)
+                        print('after stackong', season, time.time()-time_refb)
 
                 # Simulation parameters
                 gen_par, duration_z = self.simuParameters(season, zRange)
@@ -468,8 +461,7 @@ class SNNSNMetric(BaseMetric):
                     # effi_tot = vstack([effi_tot, effi_season])
 
                     if self.verbose:
-                        print('after effis',time.time()-time_refb)
-
+                        print('after effis', time.time()-time_refb)
 
                     # Estimate zlim
                     # zlims = self.zlim(effi_season, rateInterp, season, zlims)
@@ -485,7 +477,7 @@ class SNNSNMetric(BaseMetric):
 
                     if self.verbose:
                         print('zlims', zlimsdf)
-                        print('after zlims',time.time()-time_refb)
+                        print('after zlims', time.time()-time_refb)
                     # estimate number of supernovae
                     # znsn = self.nsn_type(
                     #    0.0, 0.0, effi_season, zlims, rateInterp)
@@ -493,7 +485,7 @@ class SNNSNMetric(BaseMetric):
                     if self.verbose:
                         print('Estimating number of supernovae')
                         time_refb = time.time()
-                        
+
                     zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                         x, 0.0, 0.0, effi_seasondf, duration_z), axis=1)
 
@@ -501,7 +493,7 @@ class SNNSNMetric(BaseMetric):
                     # print(zlimsdf)
                     if self.verbose:
                         print('final result ', zlimsdf)
-                        print('after nsn',time.time()-time_refb)
+                        print('after nsn', time.time()-time_refb)
                     # stack the results
                     # zlim_nsn = vstack([zlim_nsn, znsn])
                     # print(zlimsdf.dtypes)
@@ -512,13 +504,12 @@ class SNNSNMetric(BaseMetric):
             if self.verbose:
                 print('#### SEASON processed', time.time()-time_refseas,
                       season, pixRa, pixDec)
-                
+
         # return np.array(effi_tot)
         # print('hello',zlim_nsn)
         #print('resultat', zlim_nsndf.columns)
         if self.verbose:
-            print('finally - eop',time.time()-time_ref)
-        print(test)
+            print('finally - eop', time.time()-time_ref)
         return zlim_nsndf.to_records()
         # return np.array(zlim_nsn)
 
@@ -527,7 +518,7 @@ class SNNSNMetric(BaseMetric):
         idseas = self.info_season['season'] == season
         daymin = self.info_season[idseas]['MJD_min']
         daymax = self.info_season[idseas]['MJD_max']
-        #print('hello',daymin,daymax)
+        # print('hello',daymin,daymax)
         season_length = daymax-daymin
 
         # define T0 range for simulation
@@ -542,7 +533,7 @@ class SNNSNMetric(BaseMetric):
 
             T0_min = daymin-(1.+z)*self.min_rf_phase_qual
             T0_max = daymax-(1.+z)*self.max_rf_phase_qual
-            r_durz.append((z, np.asscalar(T0_max-T0_min),season))
+            r_durz.append((z, np.asscalar(T0_max-T0_min), season))
             widthWindow = T0_max-T0_min
             if widthWindow < 1.:
                 break
@@ -553,23 +544,22 @@ class SNNSNMetric(BaseMetric):
 
             for mydaymax in daymaxRange:
                 r.append(
-                    (z, mydaymax, self.min_rf_phase, self.max_rf_phase,season))
-        #print('simu',r)
+                    (z, mydaymax, self.min_rf_phase, self.max_rf_phase, season))
+        # print('simu',r)
         if len(r) == 0:
             return None, None
 
         gen_par = np.rec.fromrecords(
-            r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase','season'])
+            r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase', 'season'])
 
-        print(gen_par)
         duration_z = np.rec.fromrecords(
-            r_durz, names=['z', 'season_length','season'])
+            r_durz, names=['z', 'season_length', 'season'])
         return gen_par, duration_z
 
     def errordf(self, pixRa, pixDec, healpixID, season, errortype):
 
-        return pd.DataFrame({'pixRa': [np.round(pixRa,4)],
-                             'pixDec': [np.round(pixDec,4)],
+        return pd.DataFrame({'pixRa': [np.round(pixRa, 4)],
+                             'pixDec': [np.round(pixDec, 4)],
                              'healpixID': [healpixID],
                              'season': [int(season)],
                              'x1': [-1.0],
@@ -604,18 +594,17 @@ class SNNSNMetric(BaseMetric):
         # print(effi)
         # print(test)
 
-
         if self.ploteffi:
             import matplotlib.pylab as plt
             fig, ax = plt.subplots()
 
             # get efficiencies vs z
-            grb = effi.groupby(['x1','color'])
+            grb = effi.groupby(['x1', 'color'])
             for key, grp in grb:
                 x1 = grp['x1'].unique()[0]
                 color = grp['color'].unique()[0]
                 ax.errorbar(grp['z'], grp['effi'], yerr=grp['effi_err'],
-                            marker='o', label='(x1,color)=({},{})'.format(x1,color))
+                            marker='o', label='(x1,color)=({},{})'.format(x1, color))
 
             ftsize = 15
             ax.set_xlabel('z', fontsize=ftsize)
@@ -626,8 +615,6 @@ class SNNSNMetric(BaseMetric):
             plt.show()
 
         return effi
-
-
 
         return effi
 
@@ -648,7 +635,7 @@ class SNNSNMetric(BaseMetric):
         effiInterp = interp1d(
             grp['z'], grp['effi'], kind='linear', bounds_error=False, fill_value=0.)
 
-        #get rate
+        # get rate
         season = np.median(grp['season'])
         idx = duration_z['season'] == season
         seas_duration_z = duration_z[idx]
@@ -663,27 +650,23 @@ class SNNSNMetric(BaseMetric):
         rateInterp = interp1d(zz, nsn, kind='linear',
                               bounds_error=False, fill_value=0)
 
-
         # estimate the cumulated number of SN vs z
         nsn_cum = np.cumsum(effiInterp(zplot)*rateInterp(zplot))
 
-        
         if nsn_cum[-1] >= 1.e-5:
             nsn_cum_norm = nsn_cum/nsn_cum[-1]  # normalize
             zlim = interp1d(nsn_cum_norm, zplot)
             zlimit = np.asscalar(zlim(0.95))
             status = self.status['ok']
-       
-           
 
             if self.ploteffi:
                 import matplotlib.pylab as plt
                 fig, ax = plt.subplots()
                 x1 = grp['x1'].unique()[0]
                 color = grp['color'].unique()[0]
-               
+
                 ax.plot(zplot, nsn_cum_norm,
-                        label='(x1,color)=({},{})'.format(x1,color))
+                        label='(x1,color)=({},{})'.format(x1, color))
 
                 ftsize = 15
                 ax.set_ylabel('NSN ($z<$)', fontsize=ftsize)
@@ -699,9 +682,9 @@ class SNNSNMetric(BaseMetric):
         return pd.DataFrame({'zlim': [zlimit],
                              'status': [int(status)]})
 
-    def nsn_typedf(self, grp, x1, color, effi_tot, duration_z,search=True):
-         
-        #get rate
+    def nsn_typedf(self, grp, x1, color, effi_tot, duration_z, search=True):
+
+        # get rate
         season = np.median(grp['season'])
         idx = duration_z['season'] == season
         seas_duration_z = duration_z[idx]
@@ -723,16 +706,15 @@ class SNNSNMetric(BaseMetric):
         else:
             effisel = effi_tot
 
-        
         nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
 
         return nsn
-    
-    def nsn_typedf_new(self,grp, duration_z,zlims):
-         
-        #get rate
-       
-        #durinterp_z = interp1d(
+
+    def nsn_typedf_new(self, grp, duration_z, zlims):
+
+        # get rate
+
+        # durinterp_z = interp1d(
         #    duration_z['z'], duration_z['season_length'], bounds_error=False, fill_value=0.)
         """
         nsn = []
@@ -740,23 +722,22 @@ class SNNSNMetric(BaseMetric):
             nsn.append(self.nsn(grp, zlim, durinterp_z))
         """
         nsn = zlims.apply(lambda x: self.nsn_typedf(
-                x, 0.,0., grp, duration_z,search=False), axis=1)
+            x, 0., 0., grp, duration_z, search=False), axis=1)
         return nsn*np.mean(grp['weight'])
-        
-    def nsn_tot(self, effi, zlim,duration_z):
+
+    def nsn_tot(self, effi, zlim, duration_z):
 
         # the first thing is to interpolate efficiencies to have a regular grid
-        zvals = np.arange(0.0,1.2,0.05)
+        zvals = np.arange(0.0, 1.2, 0.05)
 
-        
-        idx = np.abs(effi['x1'])<1.e-5
-        idx &= np.abs(effi['color'])<1.e-5
-        if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi'])<1.e-5:
+        idx = np.abs(effi['x1']) < 1.e-5
+        idx &= np.abs(effi['color']) < 1.e-5
+        if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi']) < 1.e-5:
             return -1.0
-        effi_grp = effi.groupby(['x1','color'])['x1','color','effi','effi_err','z'].apply(lambda x: self.effi_interp(x,zvals)).reset_index().to_records(index=False)
+        effi_grp = effi.groupby(['x1', 'color'])['x1', 'color', 'effi', 'effi_err', 'z'].apply(
+            lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
-        
-        #print(zlim)
+        # print(zlim)
 
         # Now construct the griddata
 
@@ -768,49 +749,53 @@ class SNNSNMetric(BaseMetric):
         x1_vals = np.unique(effi_grp['x1'])
         color_vals = np.unique(effi_grp['color'])
         z_vals = np.unique(effi_grp['z'])
-        
+
         n_x1 = len(x1_vals)
         n_color = len(color_vals)
         n_z = len(z_vals)
 
-        index = np.lexsort((effi_grp['x1'],effi_grp['color'],effi_grp['z']))
-        effi_resh = np.reshape(effi_grp[index]['effi'],(n_x1,n_color,n_z))
-        effi_err_resh = np.reshape(effi_grp[index]['effi_err'],(n_x1,n_color,n_z))
+        index = np.lexsort((effi_grp['x1'], effi_grp['color'], effi_grp['z']))
+        effi_resh = np.reshape(effi_grp[index]['effi'], (n_x1, n_color, n_z))
+        effi_err_resh = np.reshape(
+            effi_grp[index]['effi_err'], (n_x1, n_color, n_z))
 
-        effi_grid = RegularGridInterpolator((x1_vals,color_vals,z_vals),effi_resh,method='linear',bounds_error=False,fill_value=0.)
+        effi_grid = RegularGridInterpolator(
+            (x1_vals, color_vals, z_vals), effi_resh, method='linear', bounds_error=False, fill_value=0.)
 
-        effi_err_grid = RegularGridInterpolator((x1_vals,color_vals,z_vals),effi_err_resh,method='linear',bounds_error=False,fill_value=0.)
+        effi_err_grid = RegularGridInterpolator(
+            (x1_vals, color_vals, z_vals), effi_err_resh, method='linear', bounds_error=False, fill_value=0.)
 
         nsnTot = None
         ip = -1
         weight_sum = 0.
 
-        idx = np.abs(self.x1_color_dist['x1'])<=2
-        idx &= np.abs(self.x1_color_dist['color'])<=0.2
-        
+        idx = np.abs(self.x1_color_dist['x1']) <= 2
+        idx &= np.abs(self.x1_color_dist['color']) <= 0.2
+
         time_ref = time.time()
-        x1_tile = np.repeat(self.x1_color_dist[idx]['x1'],len(zvals))
-        color_tile = np.repeat(self.x1_color_dist[idx]['color'],len(zvals))
-        z_tile = np.tile(zvals,len(self.x1_color_dist[idx]))
-        weight_tile = np.repeat(self.x1_color_dist[idx]['weight_tot'],len(zvals))
+        x1_tile = np.repeat(self.x1_color_dist[idx]['x1'], len(zvals))
+        color_tile = np.repeat(self.x1_color_dist[idx]['color'], len(zvals))
+        z_tile = np.tile(zvals, len(self.x1_color_dist[idx]))
+        weight_tile = np.repeat(
+            self.x1_color_dist[idx]['weight_tot'], len(zvals))
 
         df_test = pd.DataFrame()
-        
-        df_test.loc[:,'effi'] = effi_grid((x1_tile,color_tile,z_tile))
-        df_test.loc[:,'effi_err'] = effi_err_grid((x1_tile,color_tile,z_tile))
-        df_test.loc[:,'x1'] = np.round(x1_tile,2)
-        df_test.loc[:,'color'] = np.round(color_tile,2)
-        df_test.loc[:,'z'] = z_tile
-        df_test.loc[:,'weight'] = np.round(weight_tile,2)
+
+        df_test.loc[:, 'effi'] = effi_grid((x1_tile, color_tile, z_tile))
+        df_test.loc[:, 'effi_err'] = effi_err_grid(
+            (x1_tile, color_tile, z_tile))
+        df_test.loc[:, 'x1'] = np.round(x1_tile, 2)
+        df_test.loc[:, 'color'] = np.round(color_tile, 2)
+        df_test.loc[:, 'z'] = z_tile
+        df_test.loc[:, 'weight'] = np.round(weight_tile, 2)
         season = np.median(zlim['season'])
         idxb = duration_z['season'] == season
 
-
         #print('there man',zlim['zlim'],duration_z[idxb])
-        nsn_tot = df_test.groupby(['x1','color']).apply(lambda x: self.nsn_typedf_new(
-            x, duration_z[idxb],zlim))
+        nsn_tot = df_test.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_new(
+            x, duration_z[idxb], zlim))
 
-        #print(nsn_tot.sum(axis=0),time.time()-time_ref,type(nsn_tot))
+        # print(nsn_tot.sum(axis=0),time.time()-time_ref,type(nsn_tot))
         return nsn_tot.sum(axis=0)
         """
         print(x1_tile)
@@ -822,21 +807,23 @@ class SNNSNMetric(BaseMetric):
         time_ref = time.time()
 
         for vals in self.x1_color_dist[idx]:
-            
+
             x1 = vals['x1']
             color = vals['color']
             weight = vals['weight_tot']
-            #if np.abs(x1)<=2 and np.abs(color)<=0.2:
+            # if np.abs(x1)<=2 and np.abs(color)<=0.2:
             ip += 1
             weight_sum += weight
-            #print('trying',x1,color,weight)
+            # print('trying',x1,color,weight)
             df_x1c = pd.DataFrame()
-            df_x1c.loc[:,'effi'] = effi_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
-            df_x1c.loc[:,'effi_err'] = effi_err_grid(([x1]*len(zvals),[color]*len(zvals),zvals))
-            df_x1c.loc[:,'x1'] = x1
-            df_x1c.loc[:,'color'] = color
-            df_x1c.loc[:,'z'] = zvals
-                
+            df_x1c.loc[:, 'effi'] = effi_grid(
+                ([x1]*len(zvals), [color]*len(zvals), zvals))
+            df_x1c.loc[:, 'effi_err'] = effi_err_grid(
+                ([x1]*len(zvals), [color]*len(zvals), zvals))
+            df_x1c.loc[:, 'x1'] = x1
+            df_x1c.loc[:, 'color'] = color
+            df_x1c.loc[:, 'z'] = zvals
+
             """
             print('here man',x1,color)
             import matplotlib.pylab as plt
@@ -847,31 +834,31 @@ class SNNSNMetric(BaseMetric):
             plt.show()
             """
             #nsn = self.nsn_typedf(zlim,x1,color,df_x1c,duration_z)
-            
+
             nsn = zlim.apply(lambda x: self.nsn_typedf(
-                x, x1, color, df_x1c, duration_z,search=False), axis=1)
-            
-                
+                x, x1, color, df_x1c, duration_z, search=False), axis=1)
+
             if nsnTot is None:
                 nsnTot = nsn*weight
             else:
-                nsnTot = np.sum([nsnTot,nsn*weight],axis=0)
-        print('after calc',nsnTot,time.time()-time_ref)
+                nsnTot = np.sum([nsnTot, nsn*weight], axis=0)
+        print('after calc', nsnTot, time.time()-time_ref)
         print(test)
         return nsnTot
-        
+
         """
         import matplotlib.pylab as plt
         plt.plot(effi_grp['z'],effi_grp['effi'],'ko',mfc='None')
         plt.plot(effi['z'],effi['effi'],'r*',mfc='None')
         plt.show()
         """
-        
 
-    def effi_interp(self,grp,zvals):
+    def effi_interp(self, grp, zvals):
 
-        interp = interp1d(grp['z'],grp['effi'],bounds_error=False, fill_value=0.)
-        interp_err = interp1d(grp['z'],grp['effi_err'],bounds_error=False, fill_value=0.)
+        interp = interp1d(grp['z'], grp['effi'],
+                          bounds_error=False, fill_value=0.)
+        interp_err = interp1d(grp['z'], grp['effi_err'],
+                              bounds_error=False, fill_value=0.)
 
         """
         resdf = pd.DataFrame()
@@ -893,12 +880,7 @@ class SNNSNMetric(BaseMetric):
                              'effi_err': interp_err(zvals),
                              'z': zvals})
 
-
-        #return resdf
-
-
-
-
+        # return resdf
 
     """
     def nsndf(self, effi, zlim, rateInterp):
@@ -917,9 +899,9 @@ class SNNSNMetric(BaseMetric):
 
     def nsn(self, effi, zlim, duration_z):
 
-        if zlim<1.e-3:
+        if zlim < 1.e-3:
             return -1.0
-            
+
         dz = 0.001
         zplot = list(np.arange(self.zmin, self.zmax, dz))
         # interpolate efficiencies vs z
@@ -943,18 +925,18 @@ class SNNSNMetric(BaseMetric):
         plt.show()
         """
         return np.asscalar(nsn_interp(zlim))
-        
-        #print([-1.]*len(zlim),type(zlim))
+
+        # print([-1.]*len(zlim),type(zlim))
         #nsn_res = np.zeros(shape=(len(zlim),))
-        nsn_res = pd.DataFrame({'test',tuple([-1.]*len(zlim))})
-        
+        nsn_res = pd.DataFrame({'test', tuple([-1.]*len(zlim))})
+
         idxa = zlim >= 1.e-3
         idxb = np.argwhere(zlim < 1.e-3)
         """
         zlim_bad = zlim[idx] 
         zlim_good = zlim[~idx]
         """
-        
+
         zplot = list(np.arange(self.zmin, self.zmax, 0.001))
         # interpolate efficiencies vs z
         effiInterp = interp1d(
@@ -964,7 +946,7 @@ class SNNSNMetric(BaseMetric):
         nsn_interp = interp1d(zplot, nsn_cum)
 
         test = nsn_interp(zlim[idxa])
-        print(idxa,zlim[idxa],test.shape,nsn_res.shape)
+        print(idxa, zlim[idxa], test.shape, nsn_res.shape)
         print(idxb)
         nsn_res.iloc[idxa] = nsn_interp(zlim[idxa])
         #nsn_res[idxb] = -1.
@@ -1036,60 +1018,60 @@ class SNNSNMetric(BaseMetric):
             tab[colname] = tab[colname].astype(int)
         """
         # now groupby
-        tab = tab.round({'pixRa': 4, 'pixDec': 4, 'daymax': 3, 'z': 3, 'x1': 2, 'color':2})
-        groups = tab.groupby(['pixRa','pixDec','daymax','season', 'z','healpixID','x1','color'])
+        tab = tab.round({'pixRa': 4, 'pixDec': 4, 'daymax': 3,
+                         'z': 3, 'x1': 2, 'color': 2})
+        groups = tab.groupby(
+            ['pixRa', 'pixDec', 'daymax', 'season', 'z', 'healpixID', 'x1', 'color'])
         if self.verbose:
-            print('groups', groups.ngroups) 
-        
+            print('groups', groups.ngroups)
 
         if nproc == 1:
-            #restab = CalcSN_df(groups.groups[:], N_bef=self.N_bef, N_aft=self.N_aft,
+            # restab = CalcSN_df(groups.groups[:], N_bef=self.N_bef, N_aft=self.N_aft,
             #                   snr_min=self.snr_min, N_phase_min=self.N_phase_min, N_phase_max=self.N_phase_max).sn
             #restab = groups.apply(lambda grp : CalcSN_df_def(grp,snr_min=self.snr_min)).reset_index()
-            
+
             tosum = []
             for ia, vala in enumerate(self.params):
                 for jb, valb in enumerate(self.params):
                     if jb >= ia:
                         tosum.append('F_'+vala+valb)
             tosum += ['N_aft', 'N_bef', 'N_phmin', 'N_phmax']
-            #apply the sum on the group 
-            #print(groups[tosum].sum())
+            # apply the sum on the group
+            # print(groups[tosum].sum())
             sums = groups[tosum].sum().reset_index()
 
             if self.verbose:
-                print('sums',time.time()-time_refp)
+                print('sums', time.time()-time_refp)
             """
             sums.loc[:,'cov_ColorColor'] = covColor(sums)
 
             print(sums)
             """
-            #select LC according to the number of points bef/aft peak
+            # select LC according to the number of points bef/aft peak
             idx = sums['N_aft'] >= self.N_aft
             idx &= sums['N_bef'] >= self.N_bef
             idx &= sums['N_phmin'] >= self.N_phase_min
             idx &= sums['N_phmax'] >= self.N_phase_max
 
             if self.verbose:
-                print('after selection',time.time()-time_refp)
+                print('after selection', time.time()-time_refp)
 
             finalsn = pd.DataFrame()
             goodsn = pd.DataFrame(sums.loc[idx])
             if len(goodsn) > 0:
-                goodsn.loc[:,'Cov_colorcolor'] = covColor(goodsn)
-                finalsn = pd.concat([finalsn,goodsn], sort=False)
+                goodsn.loc[:, 'Cov_colorcolor'] = covColor(goodsn)
+                finalsn = pd.concat([finalsn, goodsn], sort=False)
             if self.verbose:
-                print('after color',time.time()-time_refp)
+                print('after color', time.time()-time_refp)
 
             badsn = pd.DataFrame(sums.loc[~idx])
 
             if len(badsn) > 0:
-                badsn.loc[:,'Cov_colorcolor'] = 100.
-                finalsn = pd.concat([finalsn,badsn], sort=False)
-
+                badsn.loc[:, 'Cov_colorcolor'] = 100.
+                finalsn = pd.concat([finalsn, badsn], sort=False)
 
             if self.verbose:
-                print('end of processing',time.time()-time_refp)
+                print('end of processing', time.time()-time_refp)
             return finalsn
 
         indices = groups.groups.indices
@@ -1181,7 +1163,6 @@ class SNNSNMetric(BaseMetric):
 
     def run_season_slice(self, obs, gen_par):
 
-       
         time_ref = time.time()
         # LC estimation
 
@@ -1195,9 +1176,9 @@ class SNNSNMetric(BaseMetric):
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, -1, gen_par_cp, bands='grizy')
             if self.outputType == 'lc':
-                lc_tot = pd.concat([lc_tot,lc],sort=False)
+                lc_tot = pd.concat([lc_tot, lc], sort=False)
             if self.verbose:
-                print('End of simulation', key,time.time()-time_refs)
+                print('End of simulation', key, time.time()-time_refs)
 
             # estimate SN
 
@@ -1217,8 +1198,8 @@ class SNNSNMetric(BaseMetric):
                     sn_tot = np.concatenate((sn_tot, sn))
             """
             if not sn.empty:
-                sn_tot = pd.concat([sn_tot,pd.DataFrame(sn)],sort=False)
-            
+                sn_tot = pd.concat([sn_tot, pd.DataFrame(sn)], sort=False)
+
         if self.verbose:
             print('End of supernova - all', time.time()-time_ref)
 
