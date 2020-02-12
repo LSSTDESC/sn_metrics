@@ -61,7 +61,7 @@ class SNCadenceMetric(BaseMetric):
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', coadd=True, season=-1, nside=64,
+                 vistimeCol='visitTime', coadd=True, season=-1, nside=64, verbose=False,
                  uniqueBlocks=False, config=None, **kwargs):
 
         self.mjdCol = mjdCol
@@ -75,6 +75,7 @@ class SNCadenceMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.verbose = verbose
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -139,7 +140,8 @@ class SNCadenceMetric(BaseMetric):
         # add pixRa, pixDec and healpixID if not already included
         if 'pixRa' not in dataSlice.dtype.names:
             healpixID, pixRa, pixDec = getPix(self.nside,
-                                              np.mean(np.copy(dataSlice[self.RaCol])),
+                                              np.mean(
+                                                  np.copy(dataSlice[self.RaCol])),
                                               np.mean(np.copy(dataSlice[self.DecCol])))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
@@ -186,6 +188,9 @@ class SNCadenceMetric(BaseMetric):
         res['nside'] = res['nside'].astype(int)
 
         # return the results as a numpy record array
+
+        if self.verbose:
+            print('processed', res)
         return res.to_records(index=False)
 
     def seq(self, dataSlice):

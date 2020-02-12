@@ -79,7 +79,8 @@ class SNSNRMetric(BaseMetric):
                  vistimeCol='visitTime', seeingaCol='seeingFwhmEff',
                  seeingbCol='seeingFwhmGeom',
                  # airmassCol='airmass',skyCol='sky', moonCol='moonPhase'
-                 season=-1, shift=10., coadd=True, z=0.01, display=False, nside=64, **kwargs):
+                 season=-1, shift=10., coadd=True, z=0.01,
+                 display=False, nside=64, band='r', verbose=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -95,6 +96,8 @@ class SNSNRMetric(BaseMetric):
         self.seeingaCol = seeingaCol
         self.seeingbCol = seeingbCol
         self.nside = nside
+        self.band = band
+        self.verbose = verbose
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingaCol, self.seeingbCol]
@@ -145,8 +148,13 @@ class SNSNRMetric(BaseMetric):
 
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
-        # stack the data if requested
 
+        # select data corresponding to the band
+        idx = dataSlice[self.filterCol] == self.band
+
+        dataSlice = dataSlice[idx]
+
+        # stack the data if requested
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
 
@@ -172,6 +180,9 @@ class SNSNRMetric(BaseMetric):
         detect_frac = np.asarray(detect_frac)
 
         # return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
+        if self.verbose:
+            print('processed', detect_frac)
+
         return detect_frac
 
     def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):

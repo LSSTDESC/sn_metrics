@@ -9,15 +9,15 @@ import healpy as hp
 from sn_stackers.coadd_stacker import CoaddStacker
 import time
 
+
 class SLSNMetric(BaseMetric):
     def __init__(self, metricName='SLSNMetric',
                  mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', m5Col='fiveSigmaDepth',season=-1,
-                 nside=64,coadd=False,
+                 vistimeCol='visitTime', m5Col='fiveSigmaDepth', season=-1,
+                 nside=64, coadd=False, verbose=False,
                  uniqueBlocks=False, **kwargs):
-
         """
         Strong Lensed SN metric
 
@@ -57,7 +57,7 @@ class SLSNMetric(BaseMetric):
          season to process (default: -1: all seasons)
         nside: int, opt
          healpix parameter nside (default: 64)
-         
+
 
         """
         self.mjdCol = mjdCol
@@ -72,10 +72,11 @@ class SLSNMetric(BaseMetric):
         self.seasonCol = 'season'
         self.m5Col = m5Col
         self.nside = nside
+        self.verbose = verbose
 
-        cols = [self.nightCol,self.filterCol, self.mjdCol, self.obsidCol,
+        cols = [self.nightCol, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol]
-       
+
         super(SLSNMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -86,7 +87,8 @@ class SLSNMetric(BaseMetric):
 
         # stacker
         if coadd:
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol,RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol, filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol,visitExposureTimeCol='visitExposureTime')
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
+                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
 
     def run(self, dataSlice, slicePoint=None):
         """
@@ -101,24 +103,21 @@ class SLSNMetric(BaseMetric):
         Returns
         -----------
         record array with the following fields:
-        
+
         """
 
-        #sort data
+        # sort data
         dataSlice.sort(order=self.mjdCol)
         if len(dataSlice) == 0:
             return None
 
         time_refb = time.time()
 
-            
         if self.stacker is not None:
-            dataSlice= self.stacker._run(dataSlice)
+            dataSlice = self.stacker._run(dataSlice)
         """    
         print('stacker',time.time()-time_refb)
         """
-        
-
 
         # get coordinates for this pixel
         """
@@ -136,9 +135,6 @@ class SLSNMetric(BaseMetric):
         healpixId, pixRa, pixDec = healpixs[0], coord[0][0],coord[1][0]
         """
 
-
-
-
         seasons = self.season
 
         if self.season == -1:
@@ -149,9 +145,9 @@ class SLSNMetric(BaseMetric):
         if info_season is None:
             return None
 
-        #print(test)
-        #print(info_season.dtype)
-        #print(info_season)
+        # print(test)
+        # print(info_season.dtype)
+        # print(info_season)
 
         healpixId = int(np.unique(dataSlice['healpixID'])[0])
         pixRa = np.unique(dataSlice['pixRa'])[0]
@@ -169,7 +165,7 @@ class SLSNMetric(BaseMetric):
         names.append('gap_median')
         r.append(np.mean(info_season['gap_max']))
         names.append('gap_max')
-        
+
         for band in self.bands:
             r.append(np.mean(info_season['gap_median_{}'.format(band)]))
             r.append(np.mean(info_season['gap_max_{}'.format(band)]))
@@ -178,12 +174,14 @@ class SLSNMetric(BaseMetric):
 
         r.append(self.area)
         names.append('area')
-        
+
         res = np.rec.fromrecords([r], names=names)
 
-        #print('done',time.time()-time_refb)
-        return res
+        # print('done',time.time()-time_refb)
 
+        if self.verbose:
+            print('processed', res)
+        return res
 
     def seasonInfo(self, dataSlice, seasons):
         """
@@ -199,15 +197,12 @@ class SLSNMetric(BaseMetric):
         gap_median, gap_max for each band
         """
 
-       
-
         rv = []
         time_ref = time.time()
         for season in seasons:
             time_refb = time.time()
             idx = (dataSlice[self.seasonCol] == season)
             slice_sel = dataSlice[idx]
-          
 
             if len(slice_sel) < 5:
                 continue
@@ -221,12 +216,9 @@ class SLSNMetric(BaseMetric):
             median_gap = np.median(cadence)
             mean_gap = np.mean(cadence)
             max_gap = np.max(cadence)
-            
 
-            
             rg = [float(season), np.mean(cadence), season_length,
-                       mjd_min, mjd_max, Nvisits, median_gap,mean_gap,max_gap]
-
+                  mjd_min, mjd_max, Nvisits, median_gap, mean_gap, max_gap]
 
             # night gaps per band
             for band in self.bands:
@@ -234,24 +226,25 @@ class SLSNMetric(BaseMetric):
                 selb = slice_sel[idb]
                 if len(selb) >= 2:
                     gaps = selb[self.mjdCol][1:]-selb[self.mjdCol][:-1]
-                    #print('alors',band,gaps,np.median(gaps),np.max(gaps))
-                    rg += [np.median(gaps),np.mean(gaps),np.max(gaps)]
+                    # print('alors',band,gaps,np.median(gaps),np.max(gaps))
+                    rg += [np.median(gaps), np.mean(gaps), np.max(gaps)]
 
                 else:
-                    rg += [0.0,0.0,0.0]
-
+                    rg += [0.0, 0.0, 0.0]
 
             rv.append(tuple(rg))
-       
+
         info_season = None
-        names=['season', 'cadence', 'season_length', 'MJD_min', 'MJD_max', 'Nvisits']
-        names += ['gap_median','gap_mean','gap_max']
+        names = ['season', 'cadence', 'season_length',
+                 'MJD_min', 'MJD_max', 'Nvisits']
+        names += ['gap_median', 'gap_mean', 'gap_max']
         for band in self.bands:
-            names += ['gap_median_{}'.format(band),'gap_mean_{}'.format(band),'gap_max_{}'.format(band)]
-        
+            names += ['gap_median_{}'.format(band), 'gap_mean_{}'.format(
+                band), 'gap_max_{}'.format(band)]
+
         if len(rv) > 0:
             info_season = np.rec.fromrecords(
-            rv, names=names)
+                rv, names=names)
 
-        #print('finished',time.time()-time_ref)
+        # print('finished',time.time()-time_ref)
         return info_season

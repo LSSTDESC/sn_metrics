@@ -68,7 +68,8 @@ class SNObsRateMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', visitExposureTimeCol='visitExposureTime',
-                 season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={}, **kwargs):
+                 season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={},
+                 verbose=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -81,13 +82,14 @@ class SNObsRateMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
-        self.visitExposureTimeCol=visitExposureTimeCol
+        self.visitExposureTimeCol = visitExposureTimeCol
         self.daystep = 1.
+        self.verbose = verbose
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol,self.visitExposureTimeCol]
+                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.visitExposureTimeCol]
         self.stacker = None
-    
+
         if coadd:
             #cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol,
@@ -118,7 +120,7 @@ class SNObsRateMetric(BaseMetric):
         self.names_ref = names_ref
         self.snr_ref = snr_ref
         self.nside = nside
-        self.verbose = False
+        self.verbose = verbose
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -150,14 +152,18 @@ class SNObsRateMetric(BaseMetric):
           frac_obs_band: observing fraction in the band.
 
         """
+        if self.verbose:
+            print('Running metric')
 
         goodFilters = np.in1d(dataSlice[self.filterCol], self.filterNames)
         dataSlice = dataSlice[goodFilters]
         if dataSlice.size == 0:
+            if self.verbose:
+                print('no data selected')
+
             return None
         dataSlice.sort(order=self.mjdCol)
 
-      
         """
         time = dataSlice[self.mjdCol]-dataSlice[self.mjdCol].min()
         """
@@ -173,23 +179,27 @@ class SNObsRateMetric(BaseMetric):
 
         if 'pixRa' not in dataSlice.dtype.names:
             self.healpixID, self.pixRa, self.pixDec = getPix(self.nside,
-                                              np.mean(dataSlice[self.RaCol]),
-                                              np.mean(dataSlice[self.DecCol]))
+                                                             np.mean(
+                                                                 dataSlice[self.RaCol]),
+                                                             np.mean(dataSlice[self.DecCol]))
 
-            dataSlice = rf.append_fields(dataSlice, 'healpixID', [self.healpixID]*len(dataSlice))
-            dataSlice = rf.append_fields(dataSlice, 'pixRa', [self.pixRa]*len(dataSlice))
-            dataSlice = rf.append_fields(dataSlice, 'pixDec', [self.pixDec]*len(dataSlice))
-            
+            dataSlice = rf.append_fields(dataSlice, 'healpixID', [
+                                         self.healpixID]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixRa', [self.pixRa]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixDec', [self.pixDec]*len(dataSlice))
+
         else:
             self.pixRa = np.mean(dataSlice['pixRa'])
             self.pixDec = np.mean(dataSlice['pixDec'])
             self.healpixID = np.mean(dataSlice['healpixID'])
 
-    
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
             if self.verbose:
-                print('after stacking',dataSlice[[self.filterCol,self.m5Col,self.visitExposureTimeCol]])
+                print('after stacking', dataSlice[[
+                      self.filterCol, self.m5Col, self.visitExposureTimeCol]])
         seasons = self.season
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
@@ -204,7 +214,7 @@ class SNObsRateMetric(BaseMetric):
         if self.info_season is None:
             r = []
             for seas in seasons:
-                r.append((seas, self.fieldRA, self.fieldDec,
+                r.append((int(seas), self.fieldRA, self.fieldDec,
                           self.pixRa, self.pixDec, self.healpixID,
                           0., self.bands))
 
@@ -257,6 +267,8 @@ class SNObsRateMetric(BaseMetric):
             'pixRa', 'pixDec', 'healpixId',
             'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
+        if self.verbose:
+            print('Processed', final_resu)
         return final_resu
 
     def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
@@ -356,11 +368,11 @@ class SNObsRateMetric(BaseMetric):
         # for these DayMax, estimate the phases of LC points corresponding to the current dataSlice MJDs
         # diff_time = dates[:, np.newaxis]-mjds
         time_for_lc = mjds-T0_lc[:, None]
-        
+
         phase = time_for_lc/(1.+self.z)  # phases of LC points
         if self.verbose:
-            print('time for lc',time_for_lc)
-            print('phase for lc',phase)
+            print('time for lc', time_for_lc)
+            print('phase for lc', phase)
         # flag: select LC points only in between min_rf_phase and max_phase
         # phase_max = self.shift/(1.+self.z)
         flag = (phase >= self.min_rf_phase) & (phase <= self.max_rf_phase)
@@ -374,10 +386,10 @@ class SNObsRateMetric(BaseMetric):
             time_for_lc, band, m5_vals, flag, season_vals, T0_lc)
 
         if self.verbose:
-            print('m5',m5_vals)
-            print('fluxes',fluxes_tot)
-            print('snr',snr)
-        
+            print('m5', m5_vals)
+            print('fluxes', fluxes_tot)
+            print('snr', snr)
+
         # now save the results in a record array
         snr_nomask = np.ma.copy(snr)
         _, idx = np.unique(snr['season'], return_inverse=True)
@@ -409,12 +421,12 @@ class SNObsRateMetric(BaseMetric):
             global_info = np.rec.fromrecords(global_list, names=names)
             snr = rf.append_fields(
                 snr, names, [global_info[name] for name in names])
- 
+
             # print('there pal', self.snr_ref[band],snr[['season','band', 'daymax',
             #                        'SNR_{}'.format(self.names_ref[0])]])
             idx = snr['SNR_{}'.format(self.names_ref[0])] >= self.snr_ref[band]
             snr = np.copy(snr[idx])
-           
+
         else:
             snr = None
 
@@ -453,7 +465,7 @@ class SNObsRateMetric(BaseMetric):
             season_length = mjd_max-mjd_min
             # Nvisits = np.median(slice_sel[self.nexpCol])
             Nvisits = len(slice_sel)
-            rv.append((float(season), cadence, season_length,
+            rv.append((int(season), cadence, season_length,
                        mjd_min, mjd_max, Nvisits))
 
         info_season = None
@@ -515,20 +527,21 @@ class SNObsRateMetric(BaseMetric):
 
         for ib, name in enumerate(self.names_ref):
             fluxes = self.lim_sn[band].fluxes[ib](np.copy(time_lc))
-            
+
             if name not in fluxes_tot.keys():
                 fluxes_tot[name] = fluxes
             else:
                 fluxes_tot[name] = np.concatenate((fluxes_tot[name], fluxes))
 
             flux_5sigma = self.lim_sn[band].mag_to_flux[ib](np.copy(m5_vals))
-            
+
             snr = fluxes**2/flux_5sigma**2
             if self.verbose:
-                print('times',time_lc)
-                print('fluxes',fluxes)
-                print('5sigma fluxes',flux_5sigma)
-                print('snr',snr*flag,np.sum(snr*flag),np.sqrt(np.sum(snr*flag)))
+                print('times', time_lc)
+                print('fluxes', fluxes)
+                print('5sigma fluxes', flux_5sigma)
+                print('snr', snr*flag, np.sum(snr*flag),
+                      np.sqrt(np.sum(snr*flag)))
             snr_season = 5.*np.sqrt(np.sum(snr*flag, axis=1))
             if snr_tab is None:
                 snr_tab = np.asarray(np.copy(snr_season), dtype=[
@@ -607,7 +620,7 @@ class SNObsRateMetric(BaseMetric):
         df = pd.DataFrame.from_records(snr)
         # these data are supposed to correspond to a given filter
         # so we have to group them according to (daymax,season)
-
+        df.season = df.season.astype(int)
         r = []
         for key, grp_season in df.groupby(['season', 'daymax']):
             if len(grp_season) == len(self.bands):
