@@ -296,9 +296,6 @@ class SNNSNMetric(BaseMetric):
             print('after simulation', season, time.time()-time_refb)
 
         if sn.empty:
-            print('sn empty')
-            print(lc)
-            print(sn)
             zlimsdf = self.errordf(
                 pixRa, pixDec, healpixID, season, self.status['nosn'])
             effi_seasondf = self.erroreffi(
