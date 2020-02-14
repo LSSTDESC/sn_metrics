@@ -1,152 +1,149 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
-#def plot_DDSummary(metricValues,markerdict,colordict,colors_cad):
-def plot_DDSummary(metricValues,forPlot):
 
-    print(metricValues.dtype)
+def plot_DDSummary(metricValues, forPlot, sntype='faint'):
+    """
+    Plot to display NSN results for DD fields
 
-    r = []
-    rsum = []
-    for cadence in np.unique(metricValues['cadence']):
-        idxa = (metricValues['cadence']==cadence)&(metricValues['zlim_faint']>0.)
-        sela = metricValues[idxa]
-        rsum.append((cadence,
-                      np.sum(sela['nsn_zfaint']),
-                      np.sum(sela['nsn_zmedium']),
-                      np.median(sela['zlim_faint']),
-                      np.median(sela['zlim_medium'])))
+    Parameters
+    ----------------
+    metricValues: numpy array
+     array of data to display:
+      healpixID: healpixID of the pixel SN
+      season: season to plot
+      pixRa: RA of the pixel SN
+      pixDec: Dec of the pixel SN
+      zlim_faint: redshift corresponding to faintest SN (x1=-2.0,color=0.2)
+      zlim_medium: redshift corresponding to medium SN (x1=0.0,color=0.0)
+      nsn_med_zfaint: number of medium SN with z<zlim_faint
+      nsn_med_zmedium: number of medium SN with z<zlim_medium
+      nsn_zfaint: number of SN with z<zlim_faint
+      nsn_zmedium: number of medium SN with z<zlim_medium
+      fieldname: name of the field
+      fieldnum: number of the field
+      cadence: cadence name
+      nside: nside value for healpix tessallation
+      pixArea: pixel area
+    forPlot: numpy array
+     array with a set of plotting information (marker, color) for each cadence:
+     dbName: cadence name
+     newName: new cadence name
+     group: name of the group the cadence is bzelonging to
+     Namepl: name of the cadence for plotting
+     color: marker color
+     marker: marker type
+    sntype: str
+      type of the supernova (faint or medium) (default: faint) for display
 
-        for fieldname in np.unique(sela['fieldname']):
-            idxb = sela['fieldname']==fieldname
-            selb = sela[idxb]
-            print(cadence,fieldname,
-                      np.sum(selb['nsn_zfaint']),
-                      np.sum(selb['nsn_zmedium']),
-                      np.median(selb['zlim_faint']),
-                      np.median(selb['zlim_medium']))
-            r.append((cadence,fieldname,
-                      np.sum(selb['nsn_zfaint']),
-                      np.sum(selb['nsn_zmedium']),
-                      np.median(selb['zlim_faint']),
-                      np.median(selb['zlim_medium'])))
-            """
-            for season in np.unique(selb['season']):
-                idxc = selb['season']==season
-                selc = selb[idxc]
-                
-                print(cadence,fieldname,season,
-                      np.sum(selc['nsn_zfaint']),
-                      np.sum(selc['nsn_zmedium']),
-                      np.median(selc['zlim_faint']),
-                      np.median(selc['zlim_medium']))
-            """          
-            
-    summary_fields = np.rec.fromrecords(r, names=['cadence','fieldname','nsn_zfaint','nsn_zmedium','zlim_faint','zlim_medium'])
 
-    summary= np.rec.fromrecords(rsum, names=['cadence','nsn_zfaint','nsn_zmedium','zlim_faint','zlim_medium'])
+    Returns
+    -----------
+    Plot (NSN, zlim)
 
-    summary.sort(order='nsn_zfaint')
 
-    print('Summary')
-    for val in summary:
-        if 'nodither' not in val['cadence']:
-            print(val['cadence'],int(val['nsn_zfaint']),int(val['nsn_zmedium']),np.round(val['zlim_faint'],2),np.round(val['zlim_medium'],2))
+    """
 
-    Plot_NSNTot(summary,forPlot,sntype='faint')
-    #Plot_NSNField(summary_fields,colordict,markerdict,sntype='medium')
-    plt.show()
+    # select data with zlim_faint>0. and NSN > 10.
 
-#def Plot_NSNTot(summary,colors_cad,markerdict,sntype='faint'):
-def Plot_NSNTot(summary,forPlot,sntype='faint'):
+    idx = metricValues['zlim_faint'] > 0.
+    #idx &= metricValues['nsn_zfaint'] > 10.
+    sel = metricValues[idx]
+
+    # estimate some stats to display
+
+    data = pd.DataFrame(np.copy(sel))
+
+    summary = data.groupby(['cadence']).agg({'nsn_zfaint': 'sum',
+                                             'nsn_zmedium': 'sum',
+                                             'zlim_faint': 'median',
+                                             'zlim_medium': 'median', }).reset_index()
+
+    summary_fields = data.groupby(['cadence', 'fieldname']).agg({'nsn_zfaint': 'sum',
+                                                                 'nsn_zmedium': 'sum',
+                                                                 'zlim_faint': 'median',
+                                                                 'zlim_medium': 'median', }).reset_index()
+
+    summary_fields_seasons = data.groupby(['cadence', 'fieldname', 'season']).agg({'nsn_zfaint': 'sum',
+                                                                                   'nsn_zmedium': 'sum',
+                                                                                   'zlim_faint': 'median',
+                                                                                   'zlim_medium': 'median', }).reset_index()
+
+    # change some of the type for printing
+    summary.round({'zlim_faint': 2, 'zlim_medium': 2})
+    summary['nsn_zfaint'] = summary['nsn_zfaint'].astype(int)
+    summary['nsn_zmedium'] = summary['nsn_zmedium'].astype(int)
+
+    # plot the results
+
+    # Summary plot: one (NSN,zlim) per cadence (sum for NSN, median zlim over the fields/seasons)
+    Plot_NSN(summary, forPlot, sntype=sntype)
+    # More detailed plot:
+    # per field, for all seasons
+    Plot_NSN(summary_fields, forPlot, sntype=sntype)
+    # per field and per season
+    Plot_NSN(summary_fields_seasons, forPlot, sntype=sntype)
+
+
+def Plot_NSN(summary, forPlot, sntype='faint'):
+    """
+    Plot NSN vs redshift limit
+
+    Parameters
+    ----------------
+    summary: pandas Dataframe
+     data to display:
+      cadence: name of the cadence
+      zlim_faint: redshift corresponding to faintest SN (x1=-2.0,color=0.2)
+      zlim_medium: redshift corresponding to medium SN (x1=0.0,color=0.0)
+      nsn_zfaint: number of SN with z<zlim_faint
+      nsn_zmedium: number of medium SN with z<zlim_medium
+    forPlot: numpy array
+      array with a set of plotting information (marker, color) for each cadence:
+      dbName: cadence name
+      newName: new cadence name
+      group: name of the group the cadence is bzelonging to
+      Namepl: name of the cadence for plotting
+      color: marker color
+      marker: marker type
+    sntype: str,opt
+      type of the supernova (faint or medium) for the display (default: faint)
+
+    Returns
+    -----------
+    Plot (NSN, zlim)
+
+
+    """
+
     fontsize = 12
     fig, ax = plt.subplots()
-    for cadence in np.unique(summary['cadence']):
-        idx = summary['cadence']==cadence
-        sela = summary[idx]
+    varx = 'zlim_{}'.format(sntype)
+    vary = 'nsn_z{}'.format(sntype)
+    xshift = 1.0
+    yshift = 1.01
 
-        idp = forPlot['dbName']==cadence.strip()
-        custplot = forPlot[idp]
-        #print('oi',cadence,custplot)
-        #print(forPlot['dbName'])
-        mfc = 'None'
-        cadence_small = '_'.join(cadence.split('_')[:2])
-        if 'no' not in cadence:
-            mfc = 'auto'
-            xshift = 1.0
-            yshift = 1.005
+    for group in np.unique(forPlot['group']):
+        idx = forPlot['group'] == group
+        sel = forPlot[idx]
+        #print(group, sel['dbName'])
+        marker = sel['marker'].unique()[0]
+        color = sel['color'].unique()[0]
 
-            if 'descddf_illum15_' in cadence:
-                yshift= 0.99
-                xshift = 0.98
-                
-            if 'descddf_illum4_' in cadence:
-                yshift= 0.99
-                
-            if 'descddf_illum5_' in cadence:
-                yshift = 1.002
+        print('ici', sel['dbName'].str.strip(), summary['cadence'])
+        selcad = summary[summary['cadence'].str.strip().isin(
+            sel['dbName'].str.strip())]
 
-            #ax.text(xshift*sela['zlim_{}'.format(sntype)],yshift*sela['nsn_z{}'.format(sntype)],cadence_small,color=colors_cad[cadence_small])
-            ax.text(xshift*sela['zlim_{}'.format(sntype)],yshift*sela['nsn_z{}'.format(sntype)],cadence_small,color=custplot['color'][0])
-        ax.plot(sela['zlim_{}'.format(sntype)],sela['nsn_z{}'.format(sntype)],marker=custplot['marker'][0],mfc=mfc,color=custplot['color'][0])
+        # plot
+        ax.plot(selcad[varx], selcad[vary], color=color,
+                marker=marker, lineStyle='None')
+
+        # get the centroid of the data and write it
+        centroid_x = selcad[varx].mean()
+        centroid_y = selcad[vary].mean()
+        ax.text(xshift*centroid_x, yshift*centroid_y, group, color=color)
 
     ax.grid()
-    ax.set_xlabel('$z_{'+sntype+'}$',fontsize=fontsize)
-    ax.set_ylabel('$N_{SN} (z<)$',fontsize=fontsize)
-        #horizontalalignment='center',verticalalignment='center', transform=ax.transAxes,fontsize=15)
-    #ax.legend(loc='upper right')
-
-def Plot_NSNField(summary_fields,colordict,markerdict,sntype='faint'):
-    al = []
-    bl = []
-    ac = []
-    bc = []
-    fontsize = 12
-    figb, axb = plt.subplots()
-    fdraw = {}
-    for icad,cadence in enumerate(np.unique(summary_fields['cadence'])):
-        idx = summary_fields['cadence']==cadence
-        sela = summary_fields[idx]
-        mfc = 'auto'
-        if 'no' in cadence:
-            mfc = 'None'
-        
-        for ifd, fieldname in enumerate(np.unique(sela['fieldname'])):
-            idxb = sela['fieldname']==fieldname
-            selb = sela[idxb]
-            print(ifd,'fieldname',fieldname)
-            if ifd == 0:
-                axb.plot(selb['zlim_{}'.format(sntype)],selb['nsn_z{}'.format(sntype)],color=colordict[fieldname],marker=markerdict[''.join(cadence.split())],mfc=mfc)
-                
-                ab, = axb.plot(5.*selb['zlim_{}'.format(sntype)],5.*selb['nsn_z{}'.format(sntype)],color = 'k',marker=markerdict[''.join(cadence.split())],linestyle='None')
-                
-                ac.append(ab)
-                ac.append(cadence)
-               
-                
-            else:
-                axb.plot(selb['zlim_{}'.format(sntype)],selb['nsn_z{}'.format(sntype)],color=colordict[fieldname],marker=markerdict[''.join(cadence.split())],mfc=mfc)
-                
-            if not fieldname in fdraw.keys():
-                ab, = axb.plot(5.*selb['zlim_{}'.format(sntype)],5.*selb['nsn_z{}'.format(sntype)],color=colordict[fieldname],marker='o',linestyle='None')
-                al.append(ab)
-                bl.append(fieldname)
-                fdraw[fieldname]=1
-                
-
-    print(np.min(summary_fields['zlim_{}'.format(sntype)]),np.max(summary_fields['zlim_{}'.format(sntype)]))
-    zvals = summary_fields['zlim_{}'.format(sntype)]
-    nsn = summary_fields['nsn_z{}'.format(sntype)]
-    axb.set_xlim(0.99*np.min(zvals),1.01*np.max(zvals))
-    axb.set_ylim(0.95*np.min(nsn),1.05*np.max(nsn))
-        
-    print(al,bl)
-    axb.legend(al,bl,loc='upper left')
-    #axb.legend(ac,bc,loc='upper right')
-    axb.set_xlabel('$z_{faint}$',fontsize=fontsize)
-    axb.set_ylabel('$N_{SN} (z<)$',fontsize=fontsize)
-    axb.grid()
-    plt.show()
-
-    
-
+    ax.set_xlabel('$z_{'+sntype+'}$', fontsize=fontsize)
+    ax.set_ylabel('$N_{SN} (z<)$', fontsize=fontsize)
