@@ -670,12 +670,12 @@ def plotDDLoop(nside, dbNames, tabtot,
 
 
 def plotDDLoop_barh(tabtot,
-                    what, legx):
+                    what, legx,fields=[]):
     """
     Loop of plots for DDF
 
     Parameters
-    --------------
+    ----------------
 
     tabtot: array
      array of values
@@ -685,7 +685,7 @@ def plotDDLoop_barh(tabtot,
      legend to display
 
     Returns
-    ---------
+    -----------
     None
 
     """
@@ -700,46 +700,31 @@ def plotDDLoop_barh(tabtot,
     dfa = pd.DataFrame(np.copy(tabtot))
 
     df = dfa.groupby(['cadence', 'fieldname']).median().reset_index()
-    df['cadence'] = df['cadence'].map(lambda x: '_'.join(x.split('_')[:2]))
-    for fieldname in df['fieldname'].unique():
+    print(df['cadence'].unique())
+    df['cadence'] = df['cadence'].map(lambda x: '_'.join(x.split('_')[:4]))
+
+   
+    for fieldname in fields:
 
         fig, ax = plt.subplots(figsize=(9, 5))
         fig.suptitle('{}'.format(fieldname))
         idf = df['fieldname'] == fieldname
         sel = df[idf]
-        sel = sel.sort_values(by=[what])
+        sel = sel.sort_values(by=what)
+        print(sel[['cadence',what]])
         ax.barh(sel['cadence'], sel[what])
+        #sel[['cadence',what]].sort(ascending=0).plot(kind='barh')
+        #ax = sel.plot.barh(x='cadence', y=what, rot=0)
         ax.set_xlabel(r'{}'.format(legx), fontsize=fontsize)
         ax.tick_params(axis='y', labelsize=fontsize-5.)
-
-    """
-    for io, cadenceName in enumerate(dbNames):
-        print('hello',cadenceName.ljust(adjl))
-        idx = (df['cadence'] == cadenceName.ljust(
-            adjl)) & (df['nside'] == nside)
-        #idx = (tabtot['cadence'] == cadenceName) 
-        #idx &= (tabtot['nside'] == nside)
-
-        #plotDD(df[idx],'_'.join(cadenceName.split('_')[:2]), what, ax, markers[io],colors[io],mfc[io])
-        tab = df[idx]
-        ax.plot(tab['fieldnum'], tab[what],
-                marker=markers[io], color=colors[io], linestyle='None', mfc=mfc[io], label=cadenceName, ms=10)
-    ax.set_ylabel(legx, fontsize=fontsize)
-    ax.tick_params(labelsize=fontsize)
-    #fields = getFields(0.)
-    plt.xticks(fields['fieldnum'], fields['name'], fontsize=fontsize)
-    # plt.legend(fontsize=fontsize)
-    ax.legend(loc='upper center', bbox_to_anchor=(1.15, 0.8),
-              ncol=1, fancybox=True, shadow=True, fontsize=10)
-    """
-
+        
 
 def plotDDCorrel(tab, cadenceName, whatx, whaty, ax, marker, color, mfc):
     """
     plot display for DD correlation
 
     Parameters
-    --------------
+    ----------------
 
     tab: array
      array of values
@@ -953,36 +938,3 @@ def plotDDCadence_barh(tab, what, legx, scale=1.):
         ax.set_xlabel(r'{}'.format(legx), fontsize=fontsize)
         ax.tick_params(axis='y', labelsize=fontsize-7.)
         ax.grid(axis='x')
-    # plt.tight_layout()
-    """
-
-    fcolors = 'cgyrm'
-    fmarkers = ['o','*','s','v','^']
-    fmfc = ['None']*len(fcolors)
-    fontsize = 15.
-    fig,ax = plt.subplots()
-    nodither = dbName.split('_')[-1]
-    dbName_new = dbName
-    if 'nodither' in nodither:
-        dbName_new = '{} - {}'.format('_'.join(dbName.split('_')[:2]),'nodither')
-    fig.suptitle('{}'.format(dbName_new))
-    fig.subplots_adjust(right=0.85)
-    #select data for this cadence
-    ia = tab['cadence'] == dbName.ljust(adjl)
-    sela = tab[ia]
-    # loop on bands and plot
-    for io,band in enumerate('grizy'):
-        idx = sela['filter']==band
-        selb = sela[idx]
-        ax.plot(selb['fieldnum'], selb[what],
-            marker=fmarkers[io], color=fcolors[io], linestyle='None', mfc=fmfc[io], label='{}'.format(band), ms=10)
-    
-    plt.xticks(fields['fieldnum'], fields['name'], fontsize=fontsize)
-    # plt.legend(fontsize=fontsize)
-    ax.legend(loc='upper center', bbox_to_anchor=(1.1, 0.7),
-              ncol=1, fancybox=True, shadow=True, fontsize=15)
-
-    ax.set_ylabel(legx,fontsize=fontsize)
-    ax.tick_params(axis='y', labelsize=fontsize)
-
-    """
