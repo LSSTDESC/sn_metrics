@@ -669,8 +669,8 @@ def plotDDLoop(nside, dbNames, tabtot,
               ncol=1, fancybox=True, shadow=True, fontsize=10)
 
 
-def plotDDLoop_barh(tabtot,
-                    what, legx,fields=[]):
+def plotDDCadence_barh(tabtot,
+                     what, legx,bands=['all'],fields=['COSMOS'],scale=1):
     """
     Loop of plots for DDF
 
@@ -683,6 +683,12 @@ def plotDDLoop_barh(tabtot,
      name of the variable to display
     legx: str
      legend to display
+    bands: str list, opt
+     list of the bands to show (default: ['all'])
+    fields: str list, opt
+     list of Fields to display (default: ['COSMOS'])
+    scale: float, opt
+     scale to apply for display results
 
     Returns
     -----------
@@ -691,32 +697,25 @@ def plotDDLoop_barh(tabtot,
     """
 
     fontsize = 15
-    """
-    fig, ax = plt.subplots(figsize=(9, 5))
-    fig.suptitle(figleg, fontsize=fontsize)
-    fig.subplots_adjust(right=0.8)
-    """
 
     dfa = pd.DataFrame(np.copy(tabtot))
 
-    df = dfa.groupby(['cadence', 'fieldname']).median().reset_index()
-    print(df['cadence'].unique())
+    df = dfa.groupby(['cadence', 'fieldname','filter']).median().reset_index()
+
     df['cadence'] = df['cadence'].map(lambda x: '_'.join(x.split('_')[:4]))
 
-   
     for fieldname in fields:
-
-        fig, ax = plt.subplots(figsize=(9, 5))
-        fig.suptitle('{}'.format(fieldname))
         idf = df['fieldname'] == fieldname
-        sel = df[idf]
-        sel = sel.sort_values(by=what)
-        print(sel[['cadence',what]])
-        ax.barh(sel['cadence'], sel[what])
-        #sel[['cadence',what]].sort(ascending=0).plot(kind='barh')
-        #ax = sel.plot.barh(x='cadence', y=what, rot=0)
-        ax.set_xlabel(r'{}'.format(legx), fontsize=fontsize)
-        ax.tick_params(axis='y', labelsize=fontsize-5.)
+        sela = df[idf]
+        for b in bands:
+            fig, ax = plt.subplots(figsize=(9, 5))
+            fig.suptitle('{} - {} band'.format(fieldname,b))
+            idfb = sela['filter'] == b
+            sel = sela[idfb]
+            sel = sel.sort_values(by=what)
+            ax.barh(sel['cadence'], sel[what]/scale)
+            ax.set_xlabel(r'{}'.format(legx), fontsize=fontsize)
+            ax.tick_params(axis='y', labelsize=fontsize-5.)
         
 
 def plotDDCorrel(tab, cadenceName, whatx, whaty, ax, marker, color, mfc):
@@ -875,15 +874,10 @@ def plotDDCadence(tab, dbName, what, legx, adjl, fields):
     fmfc = ['None']*len(fcolors)
     fontsize = 15.
     fig, ax = plt.subplots()
-    nodither = dbName.split('_')[-1]
-    dbName_new = dbName
-    if 'nodither' in nodither:
-        dbName_new = '{} - {}'.format('_'.join(dbName.split('_')
-                                               [:2]), 'nodither')
-    fig.suptitle('{}'.format(dbName_new))
+    fig.suptitle('{}'.format(dbName))
     fig.subplots_adjust(right=0.85)
     # select data for this cadence
-    ia = tab['cadence'] == dbName.ljust(adjl)
+    ia = tab['cadence'] == dbName
     sela = tab[ia]
     # loop on bands and plot
     for io, band in enumerate('grizy'):
@@ -899,42 +893,3 @@ def plotDDCadence(tab, dbName, what, legx, adjl, fields):
 
     ax.set_ylabel(legx, fontsize=fontsize)
     ax.tick_params(axis='y', labelsize=fontsize)
-
-
-def plotDDCadence_barh(tab, what, legx, scale=1.):
-    """
-    DDF cadence plot
-
-    Parameters
-    --------------
-
-    tab: array
-     array of values
-    dbNames: list(str)
-      list of cadences to consider
-    what: str
-     name of the variable to display
-    legx: str
-     legend for the variable to display
-    adjl: int
-     to adjust cadence names on the same length
-    fields: array
-     fields to display
-
-    """
-
-    df = pd.DataFrame(np.copy(tab))
-    df['cadence'] = df['cadence'].map(lambda x: '_'.join(x.split('_')[:2]))
-
-    sela = df.groupby(['cadence', 'filter']).max().reset_index()
-    fontsize = 15
-    for io, band in enumerate('grizy'):
-        fig, ax = plt.subplots()
-        fig.suptitle('{} band'.format(band))
-        idx = sela['filter'] == band
-        selb = sela[idx]
-        selb = selb.sort_values(by=[what])
-        ax.barh(selb['cadence'], selb[what]/scale)
-        ax.set_xlabel(r'{}'.format(legx), fontsize=fontsize)
-        ax.tick_params(axis='y', labelsize=fontsize-7.)
-        ax.grid(axis='x')
