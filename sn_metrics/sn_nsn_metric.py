@@ -23,56 +23,64 @@ class SNNSNMetric(BaseMetric):
 
     Parameters
     --------------
-    lim_sn : str
-       SN reference data (LC)
-    names_ref : str
-       names of the simulator used to generate reference files
+    lc_reference : dict
+       SN reference data (LC)(key: (x1,color); vals: sn_tools.sn_utils.GetReference
     metricName : str, opt
-      metric name
-      Default : SNSNRMetric
+      metric name (default : SNSNRMetric)
     mjdCol : str, opt
-      mjd column name
-      Default : observationStartMJD,
+      mjd column name (default : observationStartMJD)
     RaCol : str,opt
-      Right Ascension column name
-      Default : fieldRA
+      Right Ascension column name (default : fieldRA)
     DecCol : str,opt
-      Declinaison column name
-      Default : fieldDec
+      Declinaison column name (default : fieldDec)
     filterCol : str,opt
-       filter column name
-       Default: filter
+       filter column name (default: filter)
     m5Col : str, opt
-       five-sigma depth column name
-       Default : fiveSigmaDepth
+       five-sigma depth column name (default : fiveSigmaDepth)
     exptimeCol : str,opt
-       exposure time column name
-       Default : visitExposureTime
+       exposure time column name (default : visitExposureTime)
     nightCol : str,opt
-       night column name
-       Default : night
+       night column name (default : night)
     obsidCol : str,opt
-      observation id column name
-      Default : observationId
+      observation id column name (default : observationId)
     nexpCol : str,opt
-      number of exposure column name
-      Default : numExposures
+      number of exposure column name (default : numExposures)
      vistimeCol : str,opt
-        visit time column name
-        Default : visitTime
-    coadd : bool,opt
-       coaddition per night (and per band)
-       Default : True
+        visit time column name (default : visitTime)
     season : list,opt
-       list of seasons to process (float)
-       Default : -1. (all seasons)
-    shift : float,opt
-       T0 of the SN to consider = MJD-shift
-       Default: 10.
-    z : float,opt
-       redshift for the study
-       Default : 0.01
-
+       list of seasons to process (float)(default: -1 = all seasons)
+    coadd : bool,opt
+       coaddition per night (and per band) (default : True)
+    zmin : float,opt
+       min redshift for the study (default: 0.0)
+    zmax : float,opt
+       max redshift for the study (default: 1.2)
+    pixArea: float, opt
+       pixel area (default: 9.6)
+    outputType: str, opt
+      output type requested (defauls: zlims)
+    verbose: bool,opt
+      verbose mode (default: False)
+    ploteffi: bool, opt
+      display efficiencies during processing (default:False)
+    proxy_level: int, opt
+     proxy level for the processing (default: 0)
+    N_bef: int, opt
+      number of LC points LC before T0 (default:5)
+    N_aft: int, opt
+      number of LC points after T0 (default: 10)
+     snr_min: float, opt
+       minimal SNR of LC points (default: 5.0)
+     N_phase_min: int, opt
+       number of LC points with phase<= -5(default:1)
+    N_phase_max: int, opt
+      number of LC points with phase>= 20 (default: 1)
+    x1_color_dist: ,opt
+     (x1,color) distribution (default: None)
+    lightOutput: bool, opt
+      output level of information (light or more) (default:True)
+    T0s: str,opt
+       T0 values for the processing (default: all)
 
     """
 
@@ -126,21 +134,24 @@ class SNNSNMetric(BaseMetric):
 
         self.lcFast = {}
 
+        # loading reference LC files
         for key, vals in lc_reference.items():
             self.lcFast[key] = LCfast(vals, key[0], key[1], telescope,
                                       self.mjdCol, self.RaCol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol,
                                       self.snr_min, lightOutput=lightOutput)
-        self.zmin = zmin
-        self.zmax = zmax
-        self.zStep = 0.05  # zstep
-        self.daymaxStep = 3.  # daymax step
-        self.min_rf_phase = -20.
-        self.max_rf_phase = 40.
 
-        self.min_rf_phase_qual = -15.
-        self.max_rf_phase_qual = 25.
+        # loading parameters
+        self.zmin = zmin #zmin for the study
+        self.zmax = zmax # zmax for the study
+        self.zStep = 0.05  # zstep
+        self.daymaxStep = 1.  # daymax step
+        self.min_rf_phase = -20. # min ref phase for LC points selection
+        self.max_rf_phase = 40. # max ref phase for LC points selection
+
+        self.min_rf_phase_qual = -15. # min ref phase for bounds effects
+        self.max_rf_phase_qual = 25. # max ref phase for bounds effects
 
         # snrate
         self.rateSN = SN_Rate(
@@ -149,26 +160,48 @@ class SNNSNMetric(BaseMetric):
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
         # self.verbose = True
-        # Two SN considered
-        # self.nameSN = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
-
+        
         # status of the pixel after processing
         self.status = dict(
             zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters'], [1, -1, -2, -3, -4]))
 
+        # supernovae parameters
         self.params = ['x0', 'x1', 'daymax', 'color']
 
+        # output type and proxy level
         self.outputType = outputType  # this is to choose the output: lc, sn, effi, zlims
         self.proxy_level = proxy_level  # proxy level chosen by the user: 0, 1, 2
 
-        print('pixel area', self.pixArea)
-
     def run(self, dataSlice,  slicePoint=None):
+        """
+        Run method of the metric
 
+        Parameters
+        --------------
+        dataSlice: numpy array
+          data to process (scheduler simulations)
+        slicePoint: bool, opt
+          (default: None)
+
+        Returns
+        ----------
+        Depend on self.outputType:
+          self.outputType == 'zlims':  numpy array 
+      
+          self.outputType == 'sn':  numpy array 
+          
+          self.outputType == 'lc':  numpy array
+          
+          self.outputType == 'effi':  numpy array
+        """
+
+        # time 0 for performance estimation purpose
         time_ref = time.time()
 
+        # get the seasons
         seasons = self.season
 
+        # if seasons = -1: process the seasons seen in data
         if self.season == -1:
             seasons = np.unique(dataSlice[self.seasonCol])
 
@@ -177,9 +210,33 @@ class SNNSNMetric(BaseMetric):
 
         #effi_totdf = pd.DataFrame()
         #zlim_nsndf = pd.DataFrame()
+
+        # get redshift range for processing
+        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
+        if zRange[0] < 1.e-6:
+            zRange[0] = 0.01
+
+        self.zRange = zRange
+        
+        #season infos
+        dfa = pd.DataFrame(np.copy(dataSlice))
+        season_info = dfa.groupby(['season']).apply(lambda x : self.seasonInfo(x)).reset_index()
+        
+        # select seasons of at least 30 days
+        idx = season_info['season_length'] >= 30
+        season_info = season_info[idx]
+        # get season length depending on the redshift
+        dur_z = season_info.groupby(['season']).apply(lambda x: self.duration_z(x)).reset_index()
+        if dur_z.empty:
+            return None
+        # get simulation parameters
+        gen_par = dur_z.groupby(['z','season']).apply(lambda x: self.calcDaymax(x)).reset_index()
+
+        # prepare pandas DataFrames for output 
         vara_totdf = pd.DataFrame()
         varb_totdf = pd.DataFrame()
-
+        
+        # loop on seasons
         for seas in seasons:
             """
             effi_seasondf, zlimsdf = self.run_seasons(dataSlice,[seas])
@@ -187,15 +244,18 @@ class SNNSNMetric(BaseMetric):
             zlim_nsndf = pd.concat([zlim_nsndf, zlimsdf], sort=False)
             effi_totdf = pd.concat([effi_totdf, effi_seasondf], sort=False)
             """
-            vara_df, varb_df = self.run_seasons(dataSlice, [seas])
+            # get seasons processing
+            vara_df, varb_df = self.run_seasons(dataSlice, [seas],gen_par,dur_z)
             # print(seas,effi_seasondf)
             vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
             varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
 
+        # estimate time of processing
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
             print(varb_totdf)
 
+        # return the output as chosen by the user (outputType)
         if self.outputType == 'lc':
             return varb_totdf.to_records()
 
@@ -207,7 +267,24 @@ class SNNSNMetric(BaseMetric):
 
         return varb_totdf.to_records()
 
-    def run_seasons(self, dataSlice, seasons):
+    def run_seasons(self, dataSlice, seasons, gen_par,dura_z):
+        """
+        Method to run on seasons
+
+        Parameters
+        --------------
+        dataSlice: numpy array, opt
+          data to process (scheduler simulations)
+        seasons: list(int)
+          list of seasons to process
+
+        Returns
+        ---------
+        effi_seasondf: pandas df
+          efficiency curves
+        zlimsdf: pandas df
+          redshift limits and number of supernovae
+        """
 
         time_ref = time.time()
 
@@ -218,89 +295,48 @@ class SNNSNMetric(BaseMetric):
 
         if self.verbose:
             print('#### Processing season', seasons, healpixID)
-        # get infos on seasons
-        self.info_season = self.seasonInfo(dataSlice, seasons)
-
-        if self.info_season is None:
-            return None
-
+            
         groupnames = ['pixRa', 'pixDec', 'healpixID', 'season', 'x1', 'color']
 
-        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
-        if zRange[0] < 1.e-6:
-            zRange[0] = 0.01
-
-        gen_par = None
-        duration_z = None
-        obs = None
-        for seas in self.info_season:
-            # for each season:
-            season = seas['season']
-            if seas['season_length'] < 30.:
-                # season too short -> not considered
-                if self.verbose:
-                    print('season too short', season, seas['season_length'])
-                zlimsdf = self.errordf(
-                    pixRa, pixDec, healpixID, season, self.status['season_length'])
-                effi_seasondf = self.erroreffi(
-                    pixRa, pixDec, healpixID, season)
-
-                return effi_seasondf, zlimsdf
-
-            # generate simulation parameters
-
-            gen_par_season, duration_z_season = self.simuParameters(
-                season, zRange)
-            if gen_par_season is None:
-                if self.verbose:
-                    print('No simulation params could be estimated')
-                zlimsdf = self.errordf(
-                    pixRa, pixDec, healpixID, season, self.status['simu_parameters'])
-                effi_seasondf = self.erroreffi(
-                    pixRa, pixDec, healpixID, season)
-                return effi_seasondf, zlimsdf
-
-            if gen_par is None:
-                gen_par = gen_par_season
-            else:
-                gen_par = np.concatenate((gen_par, gen_par_season))
-            if duration_z is None:
-                duration_z = duration_z_season
-            else:
-                duration_z = np.concatenate((duration_z, duration_z_season))
-            idx = dataSlice['season'] == season
-            if obs is None:
-                obs = np.copy(dataSlice[idx])
-            else:
-                obs = np.concatenate((obs, np.copy(dataSlice[idx])))
-
-        if self.verbose:
-            time_refb = time.time()
-
-        if self.stacker is not None:
-            obs = self.stacker._run(obs)
+        gen_p = gen_par[gen_par['season'].isin(seasons)]
+        if gen_p.empty:
             if self.verbose:
-                print('after stacking', season, time.time()-time_refb)
-
-        # simulate supernovae
+                print('No generator parameter found')
+            return None, None
+        dur_z = dura_z[dura_z['season'].isin(seasons)]
+        obs = pd.DataFrame(np.copy(dataSlice))
+        obs = obs[obs['season'].isin(seasons)]
+   
+            
         if self.verbose:
-            print('simulation SN', len(gen_par))
-            # print(gen_par)
             time_refb = time.time()
 
-        sn, lc = self.run_season_slice(obs, gen_par)
+        # coaddition per night and per band (if requested by the user)
+        if self.stacker is not None:
+            obs = self.stacker._run(obs.to_records(index=False))
+            if self.verbose:
+                print('after stacking', seasons, time.time()-time_refb)
+
+        # simulate supernovae and lc
+        if self.verbose:
+            print('simulation SN', len(gen_p))
+            time_refb = time.time()
+
+        sn, lc = self.gen_LC_SN(obs, gen_p.to_records(index=False))
 
         if self.outputType == 'lc' or self.outputType == 'sn':
             return sn, lc
         if self.verbose:
-            print('after simulation', season, time.time()-time_refb)
+            print('after simulation', seasons, time.time()-time_refb)
 
         if sn.empty:
+            # no LC could be simulated -> fill output with errors
             zlimsdf = self.errordf(
                 pixRa, pixDec, healpixID, season, self.status['nosn'])
             effi_seasondf = self.erroreffi(
                 pixRa, pixDec, healpixID, season)
         else:
+            # LC could be simulated -> estimate efficiencies
             if self.verbose:
                 print('estimating efficiencies')
                 time_refb = time.time()
@@ -314,7 +350,7 @@ class SNNSNMetric(BaseMetric):
 
             # estimate zlims
             zlimsdf = effi_seasondf.groupby(groupnames).apply(
-                lambda x: self.zlimdf(x, duration_z)).reset_index(level=list(range(len(groupnames))))
+                lambda x: self.zlimdf(x, dur_z)).reset_index(level=list(range(len(groupnames))))
 
             if self.verbose:
                 print('zlims', zlimsdf)
@@ -324,13 +360,19 @@ class SNNSNMetric(BaseMetric):
             # estimate number of supernovae - medium one
 
             zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
-                x, 0.0, 0.0, effi_seasondf, duration_z), axis=1)
+                x, 0.0, 0.0, effi_seasondf, dur_z), axis=1)
 
-            #zlimsdf['nsn'] = self.nsn_typedf(zlimsdf,0.0, 0.0, effi_seasondf, duration_z)
+            if self.verbose:
+                print('Number of supernovae')
+                print(zlimsdf)
 
-            # estimate number of supernovae - total
+            if self.proxy_level >0:
+                zlimsdf['nsn'] = -1
+                return effi_seasondf, zlimsdf
 
-            zlimsdf['nsn'] = self.nsn_tot(effi_seasondf, zlimsdf, duration_z)
+            # estimate number of supernovae - total - proxy_level = 0
+
+            zlimsdf['nsn'] = self.nsn_tot(effi_seasondf, zlimsdf, dur_z)
 
             if self.verbose:
                 print('final result ', zlimsdf)
@@ -342,219 +384,86 @@ class SNNSNMetric(BaseMetric):
 
         return effi_seasondf, zlimsdf
 
-    def run_loop_seasons(self, dataSlice,  slicePoint=None):
+    def duration_z(self, grp):
+        """
+        Method to estimate the season length vs redshift
+        This is necessary to take into account boundary effects
+        when estimating the number of SN that can be detected
 
-        time_ref = time.time()
+        daymin, daymax = min and max MJD of a season
+        T0_min(z) =  daymin-(1+z)*min_rf_phase_qual
+        T0_max(z) =  daymax-(1+z)*max_rf_phase_qual
+        season_length(z) = T0_max(z)-T0_min(z) 
 
-        seasons = self.season
+        Parameters
+        --------------
+        grp: pandas df group
+          data to process: season infos
 
-        if self.season == -1:
-            seasons = np.unique(dataSlice[self.seasonCol])
+        Returns
+        ----------
+        pandas df with season_length, z, T0_min and T0_max cols
 
-        # get infos on seasons
-        self.info_season = self.seasonInfo(dataSlice, seasons)
-        if self.info_season is None:
-            return None
+        """
+        
+        daymin = grp['MJD_min'].values
+        daymax = grp['MJD_max'].values
+        dur_z = pd.DataFrame(self.zRange,columns=['z'])
+        dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
+        dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
+        dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
 
-        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
-        if zRange[0] < 1.e-6:
-            zRange[0] = 0.01
+        return dur_z
 
-        pixRa = np.unique(dataSlice['pixRa'])[0]
-        pixDec = np.unique(dataSlice['pixDec'])[0]
-        healpixID = int(np.unique(dataSlice['healpixID'])[0])
+    def calcDaymax(self, grp):
+        """
+        Method to estimate T0 (daymax) values for simulation.
 
-        # possible outputs - by default zlim are returned
-        # effi_tot = Table()  # efficiencies vs z
-        # zlim_nsn = Table()  # zlim
+        Parameters
+        --------------
+        grp: group (pandas df sense)
+         group of data to process with the following cols:
+           T0_min: T0 min value (per season)
+           T0_max: T0 max value (per season)
 
-        effi_totdf = pd.DataFrame()
-        zlim_nsndf = pd.DataFrame()
+        Returns
+        ----------
+        pandas df with daymax, min_rf_phase, max_rf_phase values
 
-        if self.verbose:
-            print('Field', pixRa, pixDec, healpixID)
-            print('Info seasons', self.info_season)
-
-        # Loop on seasons
-
-        # outvals, namesout = self.fillOutput(pixRa, pixDec, healpixID)
-
-        # print('here', outvals, namesout)
-        groupnames = ['pixRa', 'pixDec', 'healpixID', 'season', 'x1', 'color']
-        for seas in self.info_season:
-            # for each season:
-            # generate simulation parameters
-            # estimate LC points from fast simu (LCfast)
-            # get error on color
-            # estimate efficiency curve
-
-            season = seas['season']
-            # define output table here
-            """
-            rp = []
-
-            for ival in range(len(outvals)):
-                rp = outvals[ival]+[season]
-            # names = namesout+['season']
-            zlims = Table(rows=[rp], names=namesout)
-            # zlims = pd.DataFrame(rp, columns=namesout)
-            """
-            if self.verbose:
-                print('#### PROCESSING SEASON', season, pixRa, pixDec)
-
-            time_refseas = time.time()
-            time_refb = time.time()
-            # select obs for this season
-            idx = dataSlice['season'] == season
-            obs = dataSlice[idx]
-
-            if seas['season_length'] < 50.:
-                # season too short -> not considered
-                if self.verbose:
-                    print('season too short', season, seas['season_length'])
-                zlimsdf = self.errordf(
-                    pixRa, pixDec, healpixID, season, self.status['season_length'])
-                effi_seasondf = self.erroreffi(
-                    pixRa, pixDec, healpixID, season)
-
-            else:
-                # stack obs (per band and per night) if necessary
-                if self.stacker is not None:
-                    print('stacker')
-                    obs = self.stacker._run(obs)
-                    if self.verbose:
-                        print('after stackong', season, time.time()-time_refb)
-
-                # Simulation parameters
-                gen_par, duration_z = self.simuParameters(season, zRange)
-
-                # nslice = 1
-                # nperSlice = int(nz/nslice)
-
-                if self.verbose:
-                    print('NSN to simulate:', len(
-                        gen_par), time.time()-time_ref)
-
-                # get the supernova
-                sn = self.run_season_slice(obs, gen_par)
-
-                if sn is None:
-                    # no SN generated
-                    if self.verbose:
-                        print('No supernova generated')
-
-                    zlimsdf = self.errordf(
-                        pixRa, pixDec, healpixID, season, self.status['nosn'])
-                    effi_seasondf = self.erroreffi(
-                        pixRa, pixDec, healpixID, season)
-                else:
-                    # Estimate efficiencies
-                    if self.verbose:
-                        print('estimating efficiencies')
-                        time_refb = time.time()
-                    # effi_season = self.effi(sn)
-                    effi_seasondf = self.effidf(sn)
-                    # concatenate all efficiencies over seasons
-                    # effi_tot = vstack([effi_tot, effi_season])
-
-                    if self.verbose:
-                        print('after effis', time.time()-time_refb)
-
-                    # Estimate zlim
-                    # zlims = self.zlim(effi_season, rateInterp, season, zlims)
-
-                    if self.verbose:
-                        print('estimating zlimits')
-                        time_refb = time.time()
-                    zlimsdf = effi_seasondf.groupby(groupnames).apply(
-                        lambda x: self.zlimdf(x, duration_z)).reset_index(level=list(range(len(groupnames))))
-
-                    # print('alors', zlimsdf.columns)
-                    # print(test)
-
-                    if self.verbose:
-                        print('zlims', zlimsdf)
-                        print('after zlims', time.time()-time_refb)
-                    # estimate number of supernovae
-                    # znsn = self.nsn_type(
-                    #    0.0, 0.0, effi_season, zlims, rateInterp)
-
-                    if self.verbose:
-                        print('Estimating number of supernovae')
-                        time_refb = time.time()
-
-                    zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
-                        x, 0.0, 0.0, effi_seasondf, duration_z), axis=1)
-
-                    # print(znsn)
-                    # print(zlimsdf)
-                    if self.verbose:
-                        print('final result ', zlimsdf)
-                        print('after nsn', time.time()-time_refb)
-                    # stack the results
-                    # zlim_nsn = vstack([zlim_nsn, znsn])
-                    # print(zlimsdf.dtypes)
-                    # print(test)
-            zlim_nsndf = pd.concat([zlim_nsndf, zlimsdf], sort=False)
-            effi_totdf = pd.concat([effi_totdf, effi_seasondf], sort=False)
-            # print(zlimsdf, effi_totdf)
-            if self.verbose:
-                print('#### SEASON processed', time.time()-time_refseas,
-                      season, pixRa, pixDec)
-
-        # return np.array(effi_tot)
-        # print('hello',zlim_nsn)
-        #print('resultat', zlim_nsndf.columns)
-        if self.verbose:
-            print('finally - eop', time.time()-time_ref)
-        return zlim_nsndf.to_records()
-        # return np.array(zlim_nsn)
-
-    def simuParameters(self, season, zRange):
-
-        idseas = self.info_season['season'] == season
-        daymin = self.info_season[idseas]['MJD_min']
-        daymax = self.info_season[idseas]['MJD_max']
-        # print('hello',daymin,daymax)
-        season_length = daymax-daymin
-
-        # define T0 range for simulation
-        daymaxRange = np.arange(daymin, daymax, self.daymaxStep)
-        r_durz = []
-        nz = int((self.zmax-self.zmin)/self.zStep)
-
-        r = []
-
-        for z in zRange:
-            # for z in zRange[i*nperSlice:(i+1)*nperSlice]:
-
-            T0_min = daymin-(1.+z)*self.min_rf_phase_qual
-            T0_max = daymax-(1.+z)*self.max_rf_phase_qual
-            r_durz.append((z, np.asscalar(T0_max-T0_min), season))
-            widthWindow = T0_max-T0_min
-            if widthWindow < 1.:
-                break
-            if self.T0s == 'all':
-                daymaxRange = np.arange(T0_min, T0_max, self.daymaxStep)
-            else:
-                daymaxRange = [0.]
-
-            for mydaymax in daymaxRange:
-                r.append(
-                    (z, mydaymax, self.min_rf_phase, self.max_rf_phase, season))
-        # print('simu',r)
-        if len(r) == 0:
-            return None, None
-
-        gen_par = np.rec.fromrecords(
-            r, names=['z', 'daymax', 'min_rf_phase', 'max_rf_phase', 'season'])
-
-        duration_z = np.rec.fromrecords(
-            r_durz, names=['z', 'season_length', 'season'])
-        return gen_par, duration_z
-
+        """
+        
+        T0_max = grp['T0_max'].values
+        T0_min= grp['T0_min'].values
+        num = (T0_max-T0_min)/self.daymaxStep
+        if T0_max-T0_min > 10:
+            df = pd.DataFrame(np.linspace(T0_min,T0_max,int(num)),columns=['daymax'])
+        else:
+            df = pd.DataFrame([-1],columns=['daymax'])
+            
+        df['min_rf_phase'] =self.min_rf_phase_qual
+        df['max_rf_phase'] = self.max_rf_phase_qual
+        
+        return df
+        
     def errordf(self, pixRa, pixDec, healpixID, season, errortype):
+        """
+        Method to return error df related to zlims values
+        
+        Parameters
+        --------------
+        pixRa: float
+          pixel Ra
+        pixDec: float
+          pixel Dec
+        healpixID: int
+          healpix ID
+        season: int
+          season 
+        errortype: str
+          type of error
 
+        """
+        
         return pd.DataFrame({'pixRa': [np.round(pixRa, 4)],
                              'pixDec': [np.round(pixDec, 4)],
                              'healpixID': [healpixID],
@@ -567,7 +476,23 @@ class SNNSNMetric(BaseMetric):
                              'status': [int(errortype)]})
 
     def erroreffi(self, pixRa, pixDec, healpixID, season):
+        """
+        Method to return error df related to efficiencies
+        
+        Parameters
+        --------------
+        pixRa: float
+          pixel Ra
+        pixDec: float
+          pixel Dec
+        healpixID: int
+          healpix ID
+        season: int
+          season 
+        errortype: str
+          type of error
 
+        """
         return pd.DataFrame({'pixRa': [np.round(pixRa)],
                              'pixDec': [np.round(pixDec)],
                              'healpixID': [healpixID],
@@ -578,43 +503,79 @@ class SNNSNMetric(BaseMetric):
                              'effi': [-1.0],
                              'effi_err': [-1.0]})
 
-    def effidf(self, sn_tot):
+    def effidf(self, sn_tot,color_cut=0.04):
+        """
+        Method estimating efficiency vs z for a sigma_color cut
 
+        Parameters
+        ---------------
+        sn_tot: 
+
+        Returns
+        ----------
+
+        """
+
+        
         sndf = pd.DataFrame(sn_tot)
 
         listNames = ['season', 'pixRa', 'pixDec', 'healpixID', 'x1', 'color']
         groups = sndf.groupby(listNames)
 
         effi = groups['Cov_colorcolor', 'z'].apply(
-            lambda x: self.effiObsdf(x)).reset_index(level=list(range(len(listNames))))
+            lambda x: self.effiObsdf(x,color_cut)).reset_index(level=list(range(len(listNames))))
 
-        # print(effi)
-        # print(test)
 
+        # this is to plot efficiencies and also sigma_color vs z
         if self.ploteffi:
             import matplotlib.pylab as plt
             fig, ax = plt.subplots()
+            figb, axb = plt.subplots()
 
+            self.plot(ax,effi,'effi','effi_err','Observing Efficiencies')
+            self.plot(axb,sndf,'Cov_colorcolor',None,'$\sigma_{color}^2$')
             # get efficiencies vs z
-            grb = effi.groupby(['x1', 'color'])
-            for key, grp in grb:
-                x1 = grp['x1'].unique()[0]
-                color = grp['color'].unique()[0]
-                ax.errorbar(grp['z'], grp['effi'], yerr=grp['effi_err'],
-                            marker='o', label='(x1,color)=({},{})'.format(x1, color))
-
-            ftsize = 15
-            ax.set_xlabel('z', fontsize=ftsize)
-            ax.set_ylabel('Observing efficiency', fontsize=ftsize)
-            ax.xaxis.set_tick_params(labelsize=ftsize)
-            ax.yaxis.set_tick_params(labelsize=ftsize)
-            plt.legend(fontsize=ftsize)
+           
             plt.show()
 
         return effi
 
-        return effi
+    def plot(self, ax, effi,vary,erry=None,legy=''):
+        """
+        Simple method to plot vs z
 
+        Parameters
+        --------------
+        ax: 
+          axis where to plot
+        effi: pandas df
+          data to plot
+        vary: str
+          variable (column of effi) to plot
+        erry: str, opt
+          error on y-axis (default: None)
+        legy: str, opt
+          y-axis legend (default: '')
+
+        """
+        grb = effi.groupby(['x1', 'color'])
+        yerr = None
+        for key, grp in grb:
+            x1 = grp['x1'].unique()[0]
+            color = grp['color'].unique()[0]
+            if erry is not None:
+                yerr=grp[erry]
+            ax.errorbar(grp['z'], grp[vary], yerr=yerr,
+                        marker='o', label='(x1,color)=({},{})'.format(x1, color),lineStyle='None')
+            
+        ftsize = 15
+        ax.set_xlabel('z', fontsize=ftsize)
+        ax.set_ylabel(legy, fontsize=ftsize)
+        ax.xaxis.set_tick_params(labelsize=ftsize)
+        ax.yaxis.set_tick_params(labelsize=ftsize)
+        ax.legend(fontsize=ftsize)
+        
+    
     def zlimdf(self, grp, duration_z):
 
         zlimit = 0.0
@@ -951,7 +912,31 @@ class SNNSNMetric(BaseMetric):
         print(nsn_res)
         return nsn_res
 
-    def seasonInfo(self, dataSlice, seasons):
+    def seasonInfo(self,grp):
+        """
+        Method to estimate seasonal info (cadence, season length, ...)
+
+        Parameters
+        --------------
+        grp: pandas df group
+
+        Returns
+        ---------
+        pandas df with the cfollowing cols:
+        
+        """
+        df = pd.DataFrame([len(grp)],columns=['Nvisits'])
+        df['MJD_min'] = grp[self.mjdCol].min()
+        df['MJD_max'] =grp[self.mjdCol].max()
+        df['season_length'] = df['MJD_max']-df['MJD_min']
+        df['cadence'] = 0.
+        if len(grp) > 5:
+            df['cadence'] = grp[self.mjdCol].diff().mean()
+        
+        return df
+        
+    
+    def seasonInfo_old(self, dataSlice, seasons):
         """
         Get info on seasons for each dataSlice
         Parameters
@@ -1135,16 +1120,34 @@ class SNNSNMetric(BaseMetric):
         else:
             return resfi
 
-    def effiObsdf(self, data):
+    def effiObsdf(self, data, color_cut=0.04):
+        """
+        Method to estimate observing efficiencies for supernovae
 
+        Parameters
+        --------------
+        data: pandas df - grp
+          data to process
+
+        Returns
+        ----------
+        pandas df with the following cols:
+          - cols used to make the group
+          - effi, effi_err: observing efficiency and associated error
+
+        """
+
+        # reference df to estimate efficiencies
         df = data.loc[lambda dfa:  np.sqrt(dfa['Cov_colorcolor']) < 100000., :]
 
-        df_sel = df.loc[lambda dfa:  np.sqrt(dfa['Cov_colorcolor']) < 0.04, :]
+        # selection on sigma_c<= 0.04
+        df_sel = df.loc[lambda dfa:  np.sqrt(dfa['Cov_colorcolor']) <= color_cut, :]
 
+        # make groups (with z)
         group = df.groupby('z')
-
         group_sel = df_sel.groupby('z')
-
+        
+        # Take the ratio to get efficiencies
         rb = (group_sel.size()/group.size())
         err = np.sqrt(rb*(1.-rb)/group.size())
 
@@ -1158,8 +1161,20 @@ class SNNSNMetric(BaseMetric):
                              'effi': rb,
                              'effi_err': err})
 
-    def run_season_slice(self, obs, gen_par):
+    def gen_LC_SN(self, obs, gen_par):
+        """
+        Method to simulate LC and supernovae
 
+        Parameters
+        ---------------
+        obs: numpy array
+          array of observations (from scheduler)
+        gen_par: numpy array
+          array of parameters for simulation
+
+
+        """
+        
         time_ref = time.time()
         # LC estimation
 
@@ -1172,13 +1187,16 @@ class SNNSNMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, -1, gen_par_cp, bands='grizy')
+            if self.ploteffi:
+                self.plotLC(lc)
             if self.outputType == 'lc':
                 lc_tot = pd.concat([lc_tot, lc], sort=False)
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
 
             # estimate SN
-
+            
+            
             sn = pd.DataFrame()
             if len(lc) > 0:
                 #sn = self.process(Table.from_pandas(lc))
@@ -1202,6 +1220,32 @@ class SNNSNMetric(BaseMetric):
 
         return sn_tot, lc_tot
 
+    def plotLC(self, lc, zref=0.01):
+        
+        import matplotlib.pyplot as plt
+
+        lc = lc.round({'daymax':6})
+        sel = lc[np.abs(lc['z']-zref)<1.e-5]
+        #sel = sel[sel['band']=='LSST::g']
+
+        #print(sel['daymax'].unique())
+        fig, ax = plt.subplots(ncols=2,nrows=3)
+        pos = dict(zip('ugrizy',[(0,0),(0,1),(1,0),(1,1),(2,0),(2,1)]))
+
+        fig.suptitle('(x1,color)=({},{})'.format(sel['x1'].unique(),sel['color'].unique()))
+        for band in sel['band'].unique():
+            idxb = sel['band'] == band
+            selb = sel[idxb]
+            ix = pos[band.split(':')[-1]][0]
+            iy = pos[band.split(':')[-1]][1]
+            for daymax in selb['daymax'].unique():
+                selc = selb[selb['daymax']==daymax]
+                ax[ix][iy].plot(selc['time'],selc['flux_e_sec'])
+            
+        plt.show()
+        
+
+    
 # oldies
 
 
