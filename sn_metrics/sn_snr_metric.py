@@ -160,7 +160,7 @@ class SNSNRMetric(BaseMetric):
 
         seasons = self.season
 
-        if self.season == -1:
+        if self.season == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
 
         # get infos on seasons
