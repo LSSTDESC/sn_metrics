@@ -15,12 +15,13 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
 from scipy.interpolate import RegularGridInterpolator
-
+from functools import wraps
 # Define decorators
 
 # estimate processing time
 def time_this(arg):
-    def time_init(original_function):                        
+    def time_init(original_function):
+        @wraps(original_function)                       
         def new_function(*args,**kwargs):
             if kwargs['timer']:
                 import datetime                 
@@ -28,19 +29,25 @@ def time_this(arg):
             x = original_function(*args,**kwargs)
             if kwargs['timer']:
                 after = datetime.datetime.now()                      
-                print("Elapsed Time for {} = {}".format(arg,after-before)      )
-            return x                                             
+                print("Elapsed Time for {} = {}".format(arg,after-before))
+            #x.__doc__ = original_function.__doc__
+            return x
+        #new_function.__doc__ = x.__doc__
         return new_function
+    #time_init.__doc__ = new_function.__doc__
     return time_init
 # verbose mode
 def verbose_this(arg):
-    def verbose(original_function):              
+    def verbose(original_function):
+        @wraps(original_function)               
         def new_function(*args,**kwargs):
             if kwargs['verbose']:
                 print(arg)           
             x = original_function(*args,**kwargs)
             return x
+        #new_function.__doc__ = x.__doc__
         return new_function
+    #verbose.__doc__ = new_function.__doc__
     return verbose
 
 class SNNSNMetric(BaseMetric):
@@ -228,7 +235,7 @@ class SNNSNMetric(BaseMetric):
         seasons = self.season
 
         # if seasons = -1: process the seasons seen in data
-        if self.season == -1:
+        if self.season == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
 
         # get redshift range for processing
@@ -1191,6 +1198,16 @@ class SNNSNMetric(BaseMetric):
         return sn_tot, lc_tot
 
     def plotLC(self, lc, zref=0.01):
+        """
+        Method to plot LC
+
+        Parameters
+        --------------
+        lc: pandas df of lc points
+        zref: redshift value chosen for the display
+
+        """
+
         
         import matplotlib.pyplot as plt
 
@@ -1217,9 +1234,44 @@ class SNNSNMetric(BaseMetric):
     @verbose_this('Estimating redshift limits')
     @time_this('redshift limits')
     def zlims(self,effi_seasondf,dur_z,groupnames,**kwargs):
+        """
+        Method to estimate redshift limits
+
+        Parameters
+        --------------
+        effi_seasondf: pandas df
+            season: season
+          pixRa: Ra of the pixel
+          pixDec: Dec of the pixel
+          healpixID: pixel ID 
+          x1: SN stretch
+          color: SN color
+          z: redshift
+          effi: efficiency
+          effi_err: efficiency error (binomial)
+        dur_z: pandas df with the following cols:
+           season: season
+           z: redshift
+           T0_min: min daymax
+           T0_max: max daymax
+            season_length: season length
+        groupnames: list(str)
+          list of columns to use to define the groups
+
+        Returns
+        ----------
+        pandas df with the following cols: pixRa: Ra of the pixel
+           pixDec: Dec of the pixel
+           healpixID: pixel ID 
+           season: season number 
+           x1: SN stretch
+           color: SN color
+           zlim: redshift limit
+           status: status of the processing
+        """
         
         res = effi_seasondf.groupby(groupnames).apply(
             lambda x: self.zlimdf(x, dur_z)).reset_index(level=list(range(len(groupnames))))
-        
+
         return res        
 
