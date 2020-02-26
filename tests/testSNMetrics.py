@@ -4,6 +4,8 @@ from sn_metrics.sn_snr_metric import SNSNRMetric
 import sn_plotters.sn_snrPlotters as sn_snr_plot
 import sn_plotters.sn_cadencePlotters as sn_cadence_plot
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
+from sn_metrics.sn_nsn_metric import SNNSNMetric
+from sn_tools.sn_utils import GetReference
 import matplotlib.pyplot as plt
 import yaml
 import lsst.utils.tests
@@ -12,13 +14,29 @@ import numpy as np
 from builtins import zip
 import matplotlib
 matplotlib.use("Agg")
-# import lsst.sims.maf.metrics as metrics
-
 
 m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
 
+def load(fname, gamma_reference,instrument):
+    """
+     Method to load reference LC files
 
+     Parameters
+     --------------
+     fname: str
+       name of the reference file
+    
+     Returns
+    ----------
+     
+
+     """
+    lc_ref = GetReference(
+        fname, gamma_reference, instrument)
+
+    return lc_ref
+    
 def fakeData(band, season=1):
 
     # Define fake data
@@ -26,10 +44,12 @@ def fakeData(band, season=1):
              'fiveSigmaDepth', 'visitExposureTime',
              'numExposures', 'visitTime', 'season',
              'seeingFwhmEff', 'seeingFwhmGeom',
-             'airmass', 'sky', 'moonPhase']
+             'airmass', 'sky', 'moonPhase','pixRa','pixDec']
 
     types = ['f8']*len(names)
     names += ['night']
+    types += ['i2']
+    names += ['healpixID']
     types += ['i2']
     names += ['filter']
     types += ['O']
@@ -54,7 +74,10 @@ def fakeData(band, season=1):
     data['airmass'] = 1.2
     data['sky'] = 20.0
     data['moonPhase'] = 0.5
-
+    data['pixRa'] = 0.0
+    data['pixDec'] = 0.0
+    data['healpixID'] = 1
+    
     return data
 
 
@@ -139,7 +162,7 @@ class TestSNmetrics(unittest.TestCase):
         assert(np.abs(zlim-zres) < 1.e-5)
 
     def testSNRMetric(self):
-        # Test the SN SNR metric
+        """Test the SNR metric """
 
         # Load required SN info to run the metric
         f = open('config/param_snr_metric.yaml', 'r')
@@ -204,10 +227,7 @@ class TestSNmetrics(unittest.TestCase):
         # plt.show()
 
     def testObsRateMetric(self):
-        """
-        Test ObsRate metric
-
-        """
+        """Test the  ObsRate metric """
 
         # Load required SN info to run the metric
         f = open('config/param_obsrate_metric.yaml', 'r')
@@ -252,13 +272,105 @@ class TestSNmetrics(unittest.TestCase):
         result_ref = 0.125
         assert(np.abs(result_metric-result_ref) < 1.e-5)
 
-"""
+    def testNSNMetric(self):
+        """Test the NSN metric """
+        
+        # reference dir
+        dir_ref = '../../reference_files/'
+        # template dir
+        dir_template = '../../Templates_final_new'
+        
+        # input parameters for this metric
+        name='NSN'
+        season=1
+        coadd=True,
+        fieldType='DD',
+        nside=64
+        ramin=0.
+        ramax=360.
+        decmin=-1.0,
+        decmax=-1.0
+        metadata={}
+        outDir='MetricOutput'
+        proxy_level = 1
 
+        # An instrument is needed
+        Instrument = {}
+        Instrument['name'] = 'LSST'  # name of the telescope (internal)
+        # dir of throughput
+        Instrument['throughput_dir'] = 'LSST_THROUGHPUTS_BASELINE'
+        Instrument['atmos_dir'] = 'THROUGHPUTS_DIR'  # dir of atmos
+        Instrument['airmass'] = 1.2  # airmass value
+        Instrument['atmos'] = True  # atmos
+        Instrument['aerosol'] = False  # aerosol
 
-def setup_module(module):
-    lsst.utils.tests.init()
+        lc_reference = {}
+        gamma_reference = '{}/gamma.hdf5'.format(dir_ref)
+            
+        x1_colors = [(-2.0, 0.2), (0.0, 0.0)]
+        
+        #load ref files here
+        for j in range(len(x1_colors)):
+            x1 = x1_colors[j][0]
+            color = x1_colors[j][1]
+            fname = '{}/LC_{}_{}_vstack.hdf5'.format(
+                dir_template, x1, color)
+            
+            lc_reference[x1_colors[j]] = load(fname,gamma_reference,Instrument)
 
-"""
+        # LC selection criteria
+
+        N_bef = 2
+        N_aft = 5
+        snr_min = 5.
+        N_phase_min = 1
+        N_phase_max = 1
+
+        # additional parameters requested to run the metric
+        zmax = 1.0
+        season = [1]
+        pixArea = 9.6
+        
+        # load x1_color_dist
+
+        x1_color_dist = np.genfromtxt('{}/Dist_X1_Color_JLA_high_z.txt'.format(dir_ref), dtype=None,
+                                      names=('x1', 'color', 'weight_x1', 'weight_x1', 'weight_tot'))
+
+         # metric instance
+        metric = SNNSNMetric(
+            lc_reference, season=season, zmax=zmax, pixArea=pixArea,
+            verbose=False, timer=False,
+            ploteffi=False,
+            N_bef=N_bef, N_aft=N_aft,
+            snr_min=snr_min,
+            N_phase_min=N_phase_min,
+            N_phase_max=N_phase_max,
+            outputType='zlims',
+            proxy_level=proxy_level,
+            x1_color_dist=x1_color_dist,
+            coadd=coadd, lightOutput=False, T0s='all')
+
+        # get some data to run the metric
+        bands = 'grizy'
+        cadence = dict(zip(bands, [10, 20, 20, 26, 20]))
+        #cadence = dict(zip('grizy', [1, 1, 1, 1, 1]))
+        data = None
+        for band in bands:
+            for i in range(cadence[band]):
+                fakes = fakeData(band)
+                if data is None:
+                    data = fakes
+                else:
+                    data = np.concatenate((data, fakes))        
+
+        # now run the metric
+        res = metric.run(data)
+
+        # compare the results to reference: this is the unit test
+        zlim_ref = np.asarray([0.60029217,0.76329939])
+        #print(res['zlim'],zlim_ref,np.isclose(res['zlim'],zlim_ref))
+        assert(np.isclose(res['zlim'],zlim_ref).all())
+            
 if __name__ == "__main__":
     lsst.utils.tests.init()
     unittest.main(verbosity=5)
