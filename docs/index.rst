@@ -16,7 +16,8 @@ Welcome to sn_metrics's documentation!
    NSN metric <api/sn_metrics.sn_nsn_metric>
    cadence plotter <api/sn_plotters.sn_cadencePlotters>
    SNR plotter <api/sn_plotters.sn_snrPlotters>
-
+   NSN plotter <api/sn_plotters.sn_NSNPlotters>
+   
 Indices and tables
 ==================
 
