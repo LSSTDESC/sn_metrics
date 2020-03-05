@@ -13,7 +13,7 @@ def plot_DDSummary(metricValues, forPlot, sntype='faint'):
      array of data to display:
       healpixID: healpixID of the pixel SN
       season: season to plot
-      pixRa: RA of the pixel SN
+      pixRA: RA of the pixel SN
       pixDec: Dec of the pixel SN
       zlim_faint: redshift corresponding to faintest SN (x1=-2.0,color=0.2)
       zlim_medium: redshift corresponding to medium SN (x1=0.0,color=0.0)

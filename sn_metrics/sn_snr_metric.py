@@ -28,7 +28,7 @@ class SNSNRMetric(BaseMetric):
     mjdCol : str, opt
       mjd column name
       Default : observationStartMJD,
-    RaCol : str,opt
+    RACol : str,opt
       Right Ascension column name
       Default : fieldRA
     DecCol : str,opt
@@ -73,19 +73,19 @@ class SNSNRMetric(BaseMetric):
 
     def __init__(self, lim_sn, names_ref, fake_file,
                  metricName='SNSNRMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', seeingaCol='seeingFwhmEff',
                  seeingbCol='seeingFwhmGeom',
                  # airmassCol='airmass',skyCol='sky', moonCol='moonPhase'
-                 season=-1, shift=10., coadd=True, z=0.01,
+                 season=[-1], shift=10., coadd=True, z=0.01,
                  display=False, nside=64, band='r', verbose=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.seasonCol = 'season'
@@ -104,7 +104,7 @@ class SNSNRMetric(BaseMetric):
         self.stacker = None
         if coadd:
             cols += ['coadd']
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime', seeingaCol=self.seeingaCol, seeingbCol=self.seeingbCol)
 
         super(SNSNRMetric, self).__init__(
@@ -217,7 +217,7 @@ class SNSNRMetric(BaseMetric):
         m5_eff: mean m5 of obs passing the min_phase, max_phase cut
         fieldRA: mean field RA
         fieldDec: mean field Dec
-        pixRa: mean field pixRa
+        pixRA: mean field pixRA
         pixDec: mean field pixDec
         healpixID: field healpix Id
         band:  band
@@ -238,22 +238,22 @@ class SNSNRMetric(BaseMetric):
         if len(sel) == 0:
             return None
 
-        if 'pixRa' not in sel.dtype.names:
-            healpixID, pixRa, pixDec = getPix(self.nside,
-                                              np.mean(sel[self.RaCol]),
+        if 'pixRA' not in sel.dtype.names:
+            healpixID, pixRA, pixDec = getPix(self.nside,
+                                              np.mean(sel[self.RACol]),
                                               np.mean(sel[self.DecCol]))
 
             sel = rf.append_fields(sel, 'healpixID', [
                 healpixID]*len(sel))
             sel = rf.append_fields(
-                sel, 'pixRa', [pixRa]*len(sel))
+                sel, 'pixRA', [pixRA]*len(sel))
             sel = rf.append_fields(
                 sel, 'pixDec', [pixDec]*len(sel))
 
         # Get few infos: RA, Dec, Nvisits, m5, exptime
-        fieldRA = np.mean(sel[self.RaCol])
+        fieldRA = np.mean(sel[self.RACol])
         fieldDec = np.mean(sel[self.DecCol])
-        pixRa = np.mean(sel['pixRa'])
+        pixRA = np.mean(sel['pixRA'])
         pixDec = np.mean(sel['pixDec'])
         healpixID = int(np.unique(sel['healpixID'])[0])
 
@@ -306,10 +306,10 @@ class SNSNRMetric(BaseMetric):
         snr = rf.append_fields(snr, 'MJD', dates)
         snr = rf.append_fields(snr, 'm5_eff', np.mean(
             np.ma.array(m5_vals, mask=~flag), axis=1))
-        global_info = [(fieldRA, fieldDec, pixRa, pixDec, healpixID, band, m5,
+        global_info = [(fieldRA, fieldDec, pixRA, pixDec, healpixID, band, m5,
                         Nvisits, exptime)]*len(snr)
         names = ['fieldRA', 'fieldDec',
-                 'pixRa', 'pixDec',
+                 'pixRA', 'pixDec',
                  'healpixID', 'band',
                  'm5', 'Nvisits',
                  'ExposureTime']
@@ -510,7 +510,7 @@ class SNSNRMetric(BaseMetric):
           observationStartMJD (float)
           fieldRA (float)
           fieldDec (float)
-          pixRa (float)
+          pixRA (float)
           pixDec (float)
           healpixID (int)
           filter (U1)
@@ -520,12 +520,12 @@ class SNSNRMetric(BaseMetric):
           season (int)
         """
         slice_sel.sort(order=self.mjdCol)
-        fieldRA = np.mean(slice_sel[self.RaCol])
+        fieldRA = np.mean(slice_sel[self.RACol])
         fieldDec = np.mean(slice_sel[self.DecCol])
-        pixRa, pixDec, healpixID = 0., 0., 0
+        pixRA, pixDec, healpixID = 0., 0., 0
 
-        if 'pixRa' in slice_sel.dtype.names:
-            pixRa = np.mean(slice_sel['pixRa'])
+        if 'pixRA' in slice_sel.dtype.names:
+            pixRA = np.mean(slice_sel['pixRA'])
             pixDec = np.mean(slice_sel['pixDec'])
             healpixID = int(np.unique(slice_sel['healpixID'])[0])
         mjds_season = slice_sel[self.mjdCol]
@@ -540,7 +540,7 @@ class SNSNRMetric(BaseMetric):
         f = open(self.fakeFile, 'r')
         config_fake = yaml.load(f, Loader=yaml.FullLoader)
         f.close()
-        config_fake['Ra'] = fieldRA
+        config_fake['RA'] = fieldRA
         config_fake['Dec'] = fieldDec
         config_fake['bands'] = [band]
         config_fake['Cadence'] = [cadence]
@@ -555,8 +555,8 @@ class SNSNRMetric(BaseMetric):
 
         fake_obs_season = GenerateFakeObservations(config_fake).Observations
 
-        fake_obs_season = rf.append_fields(fake_obs_season, 'pixRa', [
-                                           pixRa]*len(fake_obs_season))
+        fake_obs_season = rf.append_fields(fake_obs_season, 'pixRA', [
+                                           pixRA]*len(fake_obs_season))
         fake_obs_season = rf.append_fields(fake_obs_season, 'pixDec', [
                                            pixDec]*len(fake_obs_season))
         fake_obs_season = rf.append_fields(fake_obs_season, 'healpixID', [
@@ -688,7 +688,7 @@ class SNSNRMetric(BaseMetric):
 
         ra = np.mean(snr_obs['fieldRA'])
         dec = np.mean(snr_obs['fieldDec'])
-        pixRa = np.mean(snr_obs['pixRa'])
+        pixRA = np.mean(snr_obs['pixRA'])
         pixDec = np.mean(snr_obs['pixDec'])
         healpixID = int(np.unique(snr_obs['healpixID'])[0])
 
@@ -703,8 +703,8 @@ class SNSNRMetric(BaseMetric):
             sel_fakes = snr_fakes[idxb]
             sel_obs.sort(order='MJD')
             sel_fakes.sort(order='MJD')
-            r = [ra, dec, pixRa, pixDec, healpixID, season, band]
-            names = [self.RaCol, self.DecCol, 'pixRa',
+            r = [ra, dec, pixRA, pixDec, healpixID, season, band]
+            names = [self.RACol, self.DecCol, 'pixRA',
                      'pixDec', 'healpixID', 'season', 'band']
             for sim in self.names_ref:
                 fakes = interpolate.interp1d(

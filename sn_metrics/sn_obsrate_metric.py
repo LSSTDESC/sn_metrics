@@ -28,7 +28,7 @@ class SNObsRateMetric(BaseMetric):
       metric name (default: SNSNRMetric)
     mjdCol : str, opt
       mjd column name (default: observationStartMJD)
-    RaCol : str,opt
+    RACol : str,opt
       Right Ascension column name (default: fieldRA)
     DecCol : str,opt
       Declinaison column name (default: fieldDec)
@@ -64,7 +64,7 @@ class SNObsRateMetric(BaseMetric):
 
     def __init__(self, lim_sn, names_ref,
                  metricName='SNObsRateMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', visitExposureTimeCol='visitExposureTime',
@@ -74,7 +74,7 @@ class SNObsRateMetric(BaseMetric):
         self.mjdCol = mjdCol
         self.m5Col = m5Col
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.seasonCol = 'season'
@@ -93,7 +93,7 @@ class SNObsRateMetric(BaseMetric):
         if coadd:
             #cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol,
-                                        RaCol=self.RaCol, DecCol=self.DecCol,
+                                        RACol=self.RACol, DecCol=self.DecCol,
                                         m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol,
                                         visitTimeCol=self.vistimeCol, visitExposureTimeCol=self.visitExposureTimeCol)
@@ -143,7 +143,7 @@ class SNObsRateMetric(BaseMetric):
 
           fieldDec: median(fieldDec) of the dataSlice
 
-          pixRa: Ra of the pixel corresponding to (fieldRA,fieldDec)
+          pixRA: RA of the pixel corresponding to (fieldRA,fieldDec)
 
           pixDec: Dec of the pixel corresponding to (fieldRA,fieldDec)
 
@@ -174,24 +174,24 @@ class SNObsRateMetric(BaseMetric):
             dataSlice = seasonCalc(dataSlice)
 
         # get fieldRA, fieldDec and healpix infos
-        self.fieldRA = np.mean(dataSlice[self.RaCol])
+        self.fieldRA = np.mean(dataSlice[self.RACol])
         self.fieldDec = np.mean(dataSlice[self.DecCol])
 
-        if 'pixRa' not in dataSlice.dtype.names:
-            self.healpixID, self.pixRa, self.pixDec = getPix(self.nside,
+        if 'pixRA' not in dataSlice.dtype.names:
+            self.healpixID, self.pixRA, self.pixDec = getPix(self.nside,
                                                              np.mean(
-                                                                 dataSlice[self.RaCol]),
+                                                                 dataSlice[self.RACol]),
                                                              np.mean(dataSlice[self.DecCol]))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
                                          self.healpixID]*len(dataSlice))
             dataSlice = rf.append_fields(
-                dataSlice, 'pixRa', [self.pixRa]*len(dataSlice))
+                dataSlice, 'pixRA', [self.pixRA]*len(dataSlice))
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [self.pixDec]*len(dataSlice))
 
         else:
-            self.pixRa = np.mean(dataSlice['pixRa'])
+            self.pixRA = np.mean(dataSlice['pixRA'])
             self.pixDec = np.mean(dataSlice['pixDec'])
             self.healpixID = np.mean(dataSlice['healpixID'])
 
@@ -215,12 +215,12 @@ class SNObsRateMetric(BaseMetric):
             r = []
             for seas in seasons:
                 r.append((int(seas), self.fieldRA, self.fieldDec,
-                          self.pixRa, self.pixDec, self.healpixID,
+                          self.pixRA, self.pixDec, self.healpixID,
                           0., self.bands))
 
             return np.rec.fromrecords(r, names=[
                 'season', 'fieldRA', 'fieldDec',
-                'pixRa', 'pixDec', 'healpixId',
+                'pixRA', 'pixDec', 'healpixId',
                 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         seasons = self.info_season['season']
@@ -259,12 +259,12 @@ class SNObsRateMetric(BaseMetric):
             else:
                 rat = 0.
             r.append((season, self.fieldRA, self.fieldDec,
-                      self.pixRa, self.pixDec, self.healpixID,
+                      self.pixRA, self.pixDec, self.healpixID,
                       rat, self.bands))
 
         final_resu = np.rec.fromrecords(r, names=[
             'season', 'fieldRA', 'fieldDec',
-            'pixRa', 'pixDec', 'healpixId',
+            'pixRA', 'pixDec', 'healpixId',
             'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         if self.verbose:

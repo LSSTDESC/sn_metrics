@@ -12,7 +12,7 @@ import time
 
 class SLSNMetric(BaseMetric):
     def __init__(self, metricName='SLSNMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', m5Col='fiveSigmaDepth', season=-1,
@@ -29,7 +29,7 @@ class SLSNMetric(BaseMetric):
         mjdCol : str, opt
          mjd column name
          Default : observationStartMJD, 
-        RaCol : str,opt
+        RACol : str,opt
          Right Ascension column name
          Default : fieldRA
         DecCol : str,opt
@@ -62,7 +62,7 @@ class SLSNMetric(BaseMetric):
         """
         self.mjdCol = mjdCol
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.nightCol = nightCol
@@ -87,7 +87,7 @@ class SLSNMetric(BaseMetric):
 
         # stacker
         if coadd:
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
 
     def run(self, dataSlice, slicePoint=None):
@@ -121,18 +121,18 @@ class SLSNMetric(BaseMetric):
 
         # get coordinates for this pixel
         """
-        Ra = np.mean(dataSlice[self.RaCol])
+        RA = np.mean(dataSlice[self.RACol])
         Dec = np.mean(dataSlice[self.DecCol])
             
 
         
-        print('oooo',Ra,Dec)
-        table = hp.ang2vec([Ra], [Dec], lonlat=True)
+        print('oooo',RA,Dec)
+        table = hp.ang2vec([RA], [Dec], lonlat=True)
         
         healpixs = hp.vec2pix(self.nside, table[:, 0], table[:, 1], table[:, 2], nest=True)
         coord = hp.pix2ang(self.nside, healpixs, nest=True, lonlat=True)
         
-        healpixId, pixRa, pixDec = healpixs[0], coord[0][0],coord[1][0]
+        healpixId, pixRA, pixDec = healpixs[0], coord[0][0],coord[1][0]
         """
 
         seasons = self.season
@@ -150,11 +150,11 @@ class SLSNMetric(BaseMetric):
         # print(info_season)
 
         healpixId = int(np.unique(dataSlice['healpixID'])[0])
-        pixRa = np.unique(dataSlice['pixRa'])[0]
+        pixRA = np.unique(dataSlice['pixRA'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
 
-        r = [healpixId, pixRa, pixDec]
-        names = ['healpixId', 'pixRa', 'pixDec']
+        r = [healpixId, pixRA, pixDec]
+        names = ['healpixId', 'pixRA', 'pixDec']
         # get the cumulative season length
 
         season_length = np.sum(info_season['season_length'])

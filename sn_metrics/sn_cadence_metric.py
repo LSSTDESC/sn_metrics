@@ -21,7 +21,7 @@ class SNCadenceMetric(BaseMetric):
     mjdCol : str, opt
       mjd column name
       Default : observationStartMJD,
-    RaCol : str,opt
+    RACol : str,opt
       Right Ascension column name
       Default : fieldRA
     DecCol : str,opt
@@ -58,7 +58,7 @@ class SNCadenceMetric(BaseMetric):
     """
 
     def __init__(self, metricName='SNCadenceMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', coadd=True, season=-1, nside=64, verbose=False,
@@ -67,7 +67,7 @@ class SNCadenceMetric(BaseMetric):
         self.mjdCol = mjdCol
         self.m5Col = m5Col
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.seasonCol = 'season'
@@ -82,7 +82,7 @@ class SNCadenceMetric(BaseMetric):
         self.stacker = None
         if coadd:
             cols += ['coadd']
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
 
         super(SNCadenceMetric, self).__init__(
@@ -125,7 +125,7 @@ class SNCadenceMetric(BaseMetric):
         cadence_mean: mean cadence (over the season) (float)
         Nobs: number of observation (int)
         healpixID: healpix Id (int)
-        pixRa: Ra of the pixel (float)
+        pixRA: RA of the pixel (float)
         pixDec: Dec of the pixel (float)
         deltaT_max: max internight gap (float)
         frac_dT_5: fraction of gaps higher than 5 days (float)
@@ -137,17 +137,17 @@ class SNCadenceMetric(BaseMetric):
         visitExposureTime: median exposure time per season
         """
 
-        # add pixRa, pixDec and healpixID if not already included
-        if 'pixRa' not in dataSlice.dtype.names:
-            healpixID, pixRa, pixDec = getPix(self.nside,
+        # add pixRA, pixDec and healpixID if not already included
+        if 'pixRA' not in dataSlice.dtype.names:
+            healpixID, pixRA, pixDec = getPix(self.nside,
                                               np.mean(
-                                                  np.copy(dataSlice[self.RaCol])),
+                                                  np.copy(dataSlice[self.RACol])),
                                               np.mean(np.copy(dataSlice[self.DecCol])))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
                                          healpixID]*len(dataSlice))
             dataSlice = rf.append_fields(
-                dataSlice, 'pixRa', [pixRa]*len(dataSlice))
+                dataSlice, 'pixRA', [pixRA]*len(dataSlice))
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [pixDec]*len(dataSlice))
 
@@ -268,7 +268,7 @@ class SNCadenceMetric(BaseMetric):
         Nobs: number of observations
         season_length: season length
         gap_max: max gap
-        pixRa: median pixRA
+        pixRA: median pixRA
         pixDec: median pixDec
         gap_5,10,15,20: fraction of gaps bigger than 5,10,15, 20 days
         numExposures: median number of exposures
@@ -341,7 +341,7 @@ class SNCadenceMetric(BaseMetric):
                                'Nobs': [len(dataSlice)],
                                'season_length': season_length,
                                'gap_max': gap_max,
-                               'pixRa': np.median(dataSlice['pixRa']),
+                               'pixRA': np.median(dataSlice['pixRA']),
                                'pixDec': np.median(dataSlice['pixDec'])})
 
         for io in range(len(internights)):

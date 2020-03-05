@@ -62,7 +62,7 @@ class SNNSNMetric(BaseMetric):
       metric name (default : SNSNRMetric)
     mjdCol : str, opt
       mjd column name (default : observationStartMJD)
-    RaCol : str,opt
+    RACol : str,opt
       Right Ascension column name (default : fieldRA)
     DecCol : str,opt
       Declinaison column name (default : fieldDec)
@@ -119,7 +119,7 @@ class SNNSNMetric(BaseMetric):
 
     def __init__(self, lc_reference,
                  metricName='SNNSNMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=-1, coadd=True, zmin=0.0, zmax=1.2,
@@ -130,7 +130,7 @@ class SNNSNMetric(BaseMetric):
         self.mjdCol = mjdCol
         self.m5Col = m5Col
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.seasonCol = 'season'
@@ -149,7 +149,7 @@ class SNNSNMetric(BaseMetric):
         self.stacker = None
         if coadd:
             cols += ['coadd']
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RaCol=self.RaCol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
+            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
         super(SNNSNMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
@@ -170,7 +170,7 @@ class SNNSNMetric(BaseMetric):
         # loading reference LC files
         for key, vals in lc_reference.items():
             self.lcFast[key] = LCfast(vals, key[0], key[1], telescope,
-                                      self.mjdCol, self.RaCol, self.DecCol,
+                                      self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol,
                                       self.snr_min, lightOutput=lightOutput)
@@ -312,14 +312,14 @@ class SNNSNMetric(BaseMetric):
         time_ref = time.time()
 
         # get pixel id
-        pixRa = np.unique(dataSlice['pixRa'])[0]
+        pixRA = np.unique(dataSlice['pixRA'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
         healpixID = int(np.unique(dataSlice['healpixID'])[0])
 
         if self.verbose:
             print('#### Processing season', seasons, healpixID)
             
-        groupnames = ['pixRa', 'pixDec', 'healpixID', 'season', 'x1', 'color']
+        groupnames = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color']
 
         gen_p = gen_par[gen_par['season'].isin(seasons)]
         if gen_p.empty:
@@ -351,9 +351,9 @@ class SNNSNMetric(BaseMetric):
             # no LC could be simulated -> fill output with errors
             for seas in seasons:
                 zlimsdf = self.errordf(
-                    pixRa, pixDec, healpixID, seas, self.status['nosn'])
+                    pixRA, pixDec, healpixID, seas, self.status['nosn'])
                 effi_seasondf = self.erroreffi(
-                    pixRa, pixDec, healpixID, seas)
+                    pixRA, pixDec, healpixID, seas)
         else:
             # LC could be simulated -> estimate efficiencies
             effi_seasondf = self.effidf(sn,verbose=self.verbose,timer=self.timer)
@@ -445,14 +445,14 @@ class SNNSNMetric(BaseMetric):
         
         return df
         
-    def errordf(self, pixRa, pixDec, healpixID, season, errortype):
+    def errordf(self, pixRA, pixDec, healpixID, season, errortype):
         """
         Method to return error df related to zlims values
         
         Parameters
         --------------
-        pixRa: float
-          pixel Ra
+        pixRA: float
+          pixel RA
         pixDec: float
           pixel Dec
         healpixID: int
@@ -464,7 +464,7 @@ class SNNSNMetric(BaseMetric):
 
         """
         
-        return pd.DataFrame({'pixRa': [np.round(pixRa, 4)],
+        return pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
                              'pixDec': [np.round(pixDec, 4)],
                              'healpixID': [healpixID],
                              'season': [int(season)],
@@ -475,14 +475,14 @@ class SNNSNMetric(BaseMetric):
                              'nsn': [-1.0],
                              'status': [int(errortype)]})
 
-    def erroreffi(self, pixRa, pixDec, healpixID, season):
+    def erroreffi(self, pixRA, pixDec, healpixID, season):
         """
         Method to return error df related to efficiencies
         
         Parameters
         --------------
-        pixRa: float
-          pixel Ra
+        pixRA: float
+          pixel RA
         pixDec: float
           pixel Dec
         healpixID: int
@@ -493,7 +493,7 @@ class SNNSNMetric(BaseMetric):
           type of error
 
         """
-        return pd.DataFrame({'pixRa': [np.round(pixRa)],
+        return pd.DataFrame({'pixRA': [np.round(pixRA)],
                              'pixDec': [np.round(pixDec)],
                              'healpixID': [healpixID],
                              'season': [int(season)],
@@ -520,7 +520,7 @@ class SNNSNMetric(BaseMetric):
         ----------
         effi: pandas df with the following cols:
           season: season
-          pixRa: Ra of the pixel
+          pixRA: RA of the pixel
           pixDec: Dec of the pixel
           healpixID: pixel ID 
           x1: SN stretch
@@ -532,7 +532,7 @@ class SNNSNMetric(BaseMetric):
 
         sndf = pd.DataFrame(sn_tot)
 
-        listNames = ['season', 'pixRa', 'pixDec', 'healpixID', 'x1', 'color']
+        listNames = ['season', 'pixRA', 'pixDec', 'healpixID', 'x1', 'color']
         groups = sndf.groupby(listNames)
 
         # estimating efficiencies
@@ -599,7 +599,7 @@ class SNNSNMetric(BaseMetric):
           efficiencies to estimate redshift limits;
           columns:
            season: season
-           pixRa: Ra of the pixel
+           pixRA: RA of the pixel
            pixDec: Dec of the pixel
            healpixID: pixel ID 
            x1: SN stretch
@@ -694,7 +694,7 @@ class SNNSNMetric(BaseMetric):
         Parameters
         --------------
         grp: pandas series with the following infos:
-         pixRa: pixelRa
+         pixRA: pixelRA
          pixDec: pixel Dec
          healpixID: pixel ID
          season: season
@@ -705,7 +705,7 @@ class SNNSNMetric(BaseMetric):
         x1, color: SN params to estimate the number
         effi_tot: pandas df with columns:
            season: season
-           pixRa: Ra of the pixel
+           pixRA: RA of the pixel
            pixDec: Dec of the pixel
            healpixID: pixel ID 
            x1: SN stretch
@@ -762,7 +762,7 @@ class SNNSNMetric(BaseMetric):
           T0_max: max daymax
           season_length: season length
         zlims: pandas df with the cols:
-          pixRa: Ra pixel
+          pixRA: RA pixel
           pixDec:  Dec pixel
           healpixID: pixel ID
           season: season
@@ -795,7 +795,7 @@ class SNNSNMetric(BaseMetric):
         ---------------
         effi: pandas df with the following cols:
           season: season
-          pixRa: Ra of the pixel
+          pixRA: RA of the pixel
           pixDec: Dec of the pixel
           healpixID: pixel ID 
           x1: SN stretch
@@ -804,7 +804,7 @@ class SNNSNMetric(BaseMetric):
           effi: efficiency
           effi_err: efficiency error (binomial)
         zlim: pandas df with the cols:
-          pixRa: Ra pixel
+          pixRA: RA pixel
           pixDec:  Dec pixel
           healpixID: pixel ID
           season: season
@@ -947,7 +947,7 @@ class SNNSNMetric(BaseMetric):
         --------------
         effi: pandas df grp of efficiencies
           season: season
-          pixRa: Ra of the pixel
+          pixRA: RA of the pixel
           pixDec: Dec of the pixel
           healpixID: pixel ID 
           x1: SN stretch
@@ -1038,7 +1038,7 @@ class SNNSNMetric(BaseMetric):
           zp:  zero-point
           season: season number
           healpixID: pixel ID
-          pixRa: pixel Ra
+          pixRA: pixel RA
           pixDec: pixel Dec
           z: redshift
           daymax: T0
@@ -1057,10 +1057,10 @@ class SNNSNMetric(BaseMetric):
 
         """
         # now groupby
-        tab = tab.round({'pixRa': 4, 'pixDec': 4, 'daymax': 3,
+        tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
                          'z': 3, 'x1': 2, 'color': 2})
         groups = tab.groupby(
-            ['pixRa', 'pixDec', 'daymax', 'season', 'z', 'healpixID', 'x1', 'color'])
+            ['pixRA', 'pixDec', 'daymax', 'season', 'z', 'healpixID', 'x1', 'color'])
 
 
         tosum = []
@@ -1241,7 +1241,7 @@ class SNNSNMetric(BaseMetric):
         --------------
         effi_seasondf: pandas df
             season: season
-          pixRa: Ra of the pixel
+          pixRA: RA of the pixel
           pixDec: Dec of the pixel
           healpixID: pixel ID 
           x1: SN stretch
@@ -1260,7 +1260,7 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         ----------
-        pandas df with the following cols: pixRa: Ra of the pixel
+        pandas df with the following cols: pixRA: RA of the pixel
            pixDec: Dec of the pixel
            healpixID: pixel ID 
            season: season number 

@@ -4,14 +4,14 @@ import healpy as hp
 import numpy.lib.recfunctions as rf
 
 
-def SNRPlot(Ra, Dec, season, data, data_fakes, config, metric, z, draw_fakes=True):
+def SNRPlot(RA, Dec, season, data, data_fakes, config, metric, z, draw_fakes=True):
     """
     Signal-to-Ratio vs MJD plot for one field and one season
     SNR of  a SN with T0=MJD-10 days
 
     Parameters
     -------------
-    Ra : float
+    RA : float
       right ascension of the field
     Dec : float
        declination of the field
@@ -61,7 +61,7 @@ def SNRPlot(Ra, Dec, season, data, data_fakes, config, metric, z, draw_fakes=Tru
 
     figa, axa = plt.subplots(ncols=ncols, nrows=nrows, figsize=(15, 10))
 
-    figa.suptitle('Ra = '+str(np.round(Ra, 2))+' Dec = '+str(np.round(Dec, 2)) +
+    figa.suptitle('RA = '+str(np.round(RA, 2))+' Dec = '+str(np.round(Dec, 2)) +
                   ' \n '+' Season '+str(int(season))+' - z = '+str(z), fontsize=fontsize)
     for ib, band in enumerate(bands):
         tot_label = []

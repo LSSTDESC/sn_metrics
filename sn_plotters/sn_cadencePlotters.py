@@ -431,7 +431,7 @@ def plotMollview(nside, tab, xval, legx, unitx, minx, maxx, band, dbName, saveFi
     type: str, opt
      type of display: mollview (default) or cartview
     fieldzoom: bool, opt
-     to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
+     to make a zoom centered on (fieldzoom['RA'],fieldzoom['Dec'])
      (default: None)
     healpixId: str, opt
      string to identify healpixId (default: healpixID)
@@ -492,7 +492,7 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx, band, dbName, saveF
     type: str, opt
      type of display: mollview (default) or cartview
     fieldzoom: bool, opt
-     to make a zoom centered on (fieldzoom['Ra'],fieldzoom['Dec'])
+     to make a zoom centered on (fieldzoom['RA'],fieldzoom['Dec'])
      (default: None)    
     healpixId: str, opt
      string to identify healpixId (default: healpixID)
@@ -550,9 +550,9 @@ def plotViewIndiv(nside, tab, xval, legx, unitx, minx, maxx, band, dbName, saveF
         lonra = [-180., 180.]
         latra = [-90., 90.]
         if fieldzoom is not None:
-            Ra = fieldzoom['Ra'][0]
+            RA = fieldzoom['RA'][0]
             Dec = fieldzoom['Dec'][0]
-            lonra = [Ra-5., Ra+5.]
+            lonra = [RA-5., RA+5.]
             latra = [Dec-5., Dec+5.]
         hp.cartview(hpxmap, min=minx, max=maxx, cmap=cmap,
                     title=leg, nest=True, lonra=lonra, latra=latra)

@@ -8,7 +8,7 @@ import numpy.lib.recfunctions as rf
 
 class SNGlobalMetric(BaseMetric):
     def __init__(self, metricName='SNGlobalMetric',
-                 mjdCol='observationStartMJD', RaCol='fieldRA', DecCol='fieldDec',
+                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime',
@@ -25,7 +25,7 @@ class SNGlobalMetric(BaseMetric):
         mjdCol : str, opt
          mjd column name
          Default : observationStartMJD, 
-        RaCol : str,opt
+        RACol : str,opt
          Right Ascension column name
          Default : fieldRA
         DecCol : str,opt
@@ -53,7 +53,7 @@ class SNGlobalMetric(BaseMetric):
         """
         self.mjdCol = mjdCol
         self.filterCol = filterCol
-        self.RaCol = RaCol
+        self.RACol = RACol
         self.DecCol = DecCol
         self.exptimeCol = exptimeCol
         self.nightCol = nightCol
@@ -153,15 +153,15 @@ class SNGlobalMetric(BaseMetric):
     def area(self,obs):
         polylist = []
         for val in obs:
-            polylist.append(LSSTPointing(val[self.RaCol],val[self.DecCol]))
+            polylist.append(LSSTPointing(val[self.RACol],val[self.DecCol]))
 
         return unary_union(MultiPolygon(polylist)).area
         
     def fieldType(self,obs):
         
         rDDF = []
-        for ra, dec in np.unique(obs[[self.RaCol, self.DecCol]]):
-            idx = np.abs(obs[self.RaCol]-ra) < 1.e-5
+        for ra, dec in np.unique(obs[[self.RACol, self.DecCol]]):
+            idx = np.abs(obs[self.RACol]-ra) < 1.e-5
             idx &= np.abs(obs[self.DecCol]-dec) < 1.e-5
             sel = obs[idx]
             if len(sel) >= 10:
@@ -170,9 +170,9 @@ class SNGlobalMetric(BaseMetric):
         nddf = len(rDDF)
         rtype = np.array(['WFD']*len(obs))
         if len(rDDF) > 0:
-            RaDecDDF = np.rec.fromrecords(rDDF, names=[self.RaCol, self.DecCol])
-            for (ra,dec) in RaDecDDF[[self.RaCol, self.DecCol]]:
-                idx = np.argwhere((np.abs(obs[self.RaCol]-ra)<1.e-5)&(np.abs(obs[self.DecCol]-dec)<1.e-5))
+            RADecDDF = np.rec.fromrecords(rDDF, names=[self.RACol, self.DecCol])
+            for (ra,dec) in RADecDDF[[self.RACol, self.DecCol]]:
+                idx = np.argwhere((np.abs(obs[self.RACol]-ra)<1.e-5)&(np.abs(obs[self.DecCol]-dec)<1.e-5))
                 rtype[idx] = 'DD'
 
         obs = rf.append_fields(obs,'fieldType',rtype)

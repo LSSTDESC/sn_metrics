@@ -44,7 +44,7 @@ def fakeData(band, season=1):
              'fiveSigmaDepth', 'visitExposureTime',
              'numExposures', 'visitTime', 'season',
              'seeingFwhmEff', 'seeingFwhmGeom',
-             'airmass', 'sky', 'moonPhase','pixRa','pixDec']
+             'airmass', 'sky', 'moonPhase','pixRA','pixDec']
 
     types = ['f8']*len(names)
     names += ['night']
@@ -74,7 +74,7 @@ def fakeData(band, season=1):
     data['airmass'] = 1.2
     data['sky'] = 20.0
     data['moonPhase'] = 0.5
-    data['pixRa'] = 0.0
+    data['pixRA'] = 0.0
     data['pixDec'] = 0.0
     data['healpixID'] = 1
     
@@ -208,14 +208,14 @@ class TestSNmetrics(unittest.TestCase):
         """
         detec_frac = result
         """
-        for inum, (Ra, Dec, season) in enumerate(np.unique(snr_obs[['fieldRA', 'fieldDec', 'season']])):
-            idx = (snr_obs['fieldRA'] == Ra) & (
+        for inum, (RA, Dec, season) in enumerate(np.unique(snr_obs[['fieldRA', 'fieldDec', 'season']])):
+            idx = (snr_obs['fieldRA'] == RA) & (
                 snr_obs['fieldDec'] == Dec) & (snr_obs['season'] == season)
             sel_obs = snr_obs[idx]
-            idxb = (np.abs(snr_fakes['fieldRA'] - Ra) < 1.e-5) & (np.abs(
+            idxb = (np.abs(snr_fakes['fieldRA'] - RA) < 1.e-5) & (np.abs(
                 snr_fakes['fieldDec'] - Dec) < 1.e-5) & (snr_fakes['season'] == season)
             sel_fakes = snr_fakes[idxb]
-            sn_snr_plot.SNRPlot(Ra, Dec, season, sel_obs,
+            sn_snr_plot.SNRPlot(RA, Dec, season, sel_obs,
                                 sel_fakes, config, metric, z)
         """
         sn_snr_plot.detecFracPlot(detec_frac, config['Pixelisation']
@@ -278,8 +278,8 @@ class TestSNmetrics(unittest.TestCase):
         # reference dir
         dir_ref = '../../reference_files/'
         # template dir
-        dir_template = '../../Templates_final_new'
-        
+        #dir_template = '../../Templates_final_new'
+        dir_template = '../../../..'
         # input parameters for this metric
         name='NSN'
         season=1
