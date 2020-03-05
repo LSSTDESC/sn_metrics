@@ -61,7 +61,7 @@ class SNCadenceMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', coadd=True, season=-1, nside=64, verbose=False,
+                 vistimeCol='visitTime', coadd=True, season=[-1], nside=64, verbose=False,
                  uniqueBlocks=False, config=None, **kwargs):
 
         self.mjdCol = mjdCol

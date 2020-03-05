@@ -122,7 +122,7 @@ class SNNSNMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=-1, coadd=True, zmin=0.0, zmax=1.2,
+                 vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False,ploteffi=False, proxy_level=0,
                  N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1,
                  x1_color_dist=None, lightOutput=True, T0s='all', **kwargs):

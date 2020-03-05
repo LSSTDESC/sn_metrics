@@ -15,7 +15,7 @@ class SLSNMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', m5Col='fiveSigmaDepth', season=-1,
+                 vistimeCol='visitTime', m5Col='fiveSigmaDepth', season=[-1],
                  nside=64, coadd=False, verbose=False,
                  uniqueBlocks=False, **kwargs):
         """

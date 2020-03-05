@@ -68,7 +68,7 @@ class SNObsRateMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', visitExposureTimeCol='visitExposureTime',
-                 season=-1, coadd=True, z=0.1, bands='griz', nside=64, snr_ref={},
+                 season=[-1], coadd=True, z=0.1, bands='griz', nside=64, snr_ref={},
                  verbose=False, **kwargs):
 
         self.mjdCol = mjdCol
