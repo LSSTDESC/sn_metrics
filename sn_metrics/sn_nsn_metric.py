@@ -342,6 +342,8 @@ class SNNSNMetric(BaseMetric):
                 print('timing:',time.time()-time_refb)
 
         # simulate supernovae and lc
+        if self.verbose:
+            print("LC generation")
         sn, lc = self.gen_LC_SN(obs, gen_p.to_records(index=False),verbose=self.verbose,timer=self.timer)
 
         if self.outputType == 'lc' or self.outputType == 'sn':
@@ -349,6 +351,8 @@ class SNNSNMetric(BaseMetric):
         
         if sn.empty:
             # no LC could be simulated -> fill output with errors
+            if self.verbose:
+                print('no simulation possible!!')
             for seas in seasons:
                 zlimsdf = self.errordf(
                     pixRA, pixDec, healpixID, seas, self.status['nosn'])
@@ -365,11 +369,11 @@ class SNNSNMetric(BaseMetric):
             zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                 x, 0.0, 0.0, effi_seasondf, dur_z), axis=1)
 
-            if self.proxy_level >0:
+            if self.proxy_level ==2:
                 zlimsdf['nsn'] = -1
                 return effi_seasondf, zlimsdf
 
-            # estimate number of supernovae - total - proxy_level = 0
+            # estimate number of supernovae - total - proxy_level = 0 or 1
 
             zlimsdf['nsn'] = self.nsn_tot(effi_seasondf, zlimsdf, dur_z,verbose=self.verbose,timer=self.timer)
 
@@ -838,11 +842,22 @@ class SNNSNMetric(BaseMetric):
         if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi']) < 1.e-5:
             return -1.0
 
-        #get interpolated efficiencies
+        #get interpolated efficiencies for the set of reference SN
         effi_grp = effi.groupby(['x1', 'color'])['x1', 'color', 'effi', 'effi_err', 'z'].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
-        # print(zlim)
+        
+        grpdf = pd.DataFrame(effi_grp)
+        season = np.median(zlim['season'])
+        idxb = duration_z['season'] == season
+        duration = duration_z[idxb]
+ 
+        # get the weighted number of supernovae
+        nsn_tot = pd.DataFrame(effi_grp).groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
+            x, duration_z[idxb], zlim))
+
+        print(nsn_tot)
+        print(test)
 
         # Now construct the griddata
 
@@ -1164,12 +1179,14 @@ class SNNSNMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, -1, gen_par_cp, bands='grizy')
-            if self.ploteffi:
+            if self.verbose:
+                print('End of simulation', key, time.time()-time_refs)
+            if self.ploteffi and len(lc)>0:
                 self.plotLC(lc)
             if self.outputType == 'lc':
                 lc_tot = pd.concat([lc_tot, lc], sort=False)
             if self.verbose:
-                print('End of simulation', key, time.time()-time_refs)
+                print('End of simulation after concat', key, time.time()-time_refs)
 
             # estimate SN
             
