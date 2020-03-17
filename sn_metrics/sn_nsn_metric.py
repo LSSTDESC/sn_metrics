@@ -32,11 +32,11 @@ def time_this(arg):
             if kwargs['timer']:
                 after = datetime.datetime.now()
                 print("Elapsed Time for {} = {}".format(arg, after-before))
-            #x.__doc__ = original_function.__doc__
+            # x.__doc__ = original_function.__doc__
             return x
-        #new_function.__doc__ = x.__doc__
+        # new_function.__doc__ = x.__doc__
         return new_function
-    #time_init.__doc__ = new_function.__doc__
+    # time_init.__doc__ = new_function.__doc__
     return time_init
 # verbose mode
 
@@ -49,9 +49,9 @@ def verbose_this(arg):
                 print(arg)
             x = original_function(*args, **kwargs)
             return x
-        #new_function.__doc__ = x.__doc__
+        # new_function.__doc__ = x.__doc__
         return new_function
-    #verbose.__doc__ = new_function.__doc__
+    # verbose.__doc__ = new_function.__doc__
     return verbose
 
 
@@ -224,9 +224,9 @@ class SNNSNMetric(BaseMetric):
         Returns
         ----------
         Depend on self.outputType:
-          self.outputType == 'zlims':  numpy array 
+          self.outputType == 'zlims':  numpy array
 
-          self.outputType == 'sn':  numpy array 
+          self.outputType == 'sn':  numpy array
 
           self.outputType == 'lc':  numpy array
 
@@ -410,7 +410,7 @@ class SNNSNMetric(BaseMetric):
         daymin, daymax = min and max MJD of a season
         T0_min(z) =  daymin-(1+z)*min_rf_phase_qual
         T0_max(z) =  daymax-(1+z)*max_rf_phase_qual
-        season_length(z) = T0_max(z)-T0_min(z) 
+        season_length(z) = T0_max(z)-T0_min(z)
 
         Parameters
         --------------
@@ -476,7 +476,7 @@ class SNNSNMetric(BaseMetric):
         healpixID: int
           healpix ID
         season: int
-          season 
+          season
         errortype: str
           type of error
 
@@ -506,7 +506,7 @@ class SNNSNMetric(BaseMetric):
         healpixID: int
           healpix ID
         season: int
-          season 
+          season
         errortype: str
           type of error
 
@@ -540,7 +540,7 @@ class SNNSNMetric(BaseMetric):
           season: season
           pixRA: RA of the pixel
           pixDec: Dec of the pixel
-          healpixID: pixel ID 
+          healpixID: pixel ID
           x1: SN stretch
           color: SN color
           z: redshift
@@ -577,7 +577,7 @@ class SNNSNMetric(BaseMetric):
 
         Parameters
         --------------
-        ax: 
+        ax:
           axis where to plot
         effi: pandas df
           data to plot
@@ -618,7 +618,7 @@ class SNNSNMetric(BaseMetric):
            season: season
            pixRA: RA of the pixel
            pixDec: Dec of the pixel
-           healpixID: pixel ID 
+           healpixID: pixel ID
            x1: SN stretch
            color: SN color
            z: redshift
@@ -645,7 +645,7 @@ class SNNSNMetric(BaseMetric):
         # z range for the study
         zplot = list(np.arange(self.zmin, self.zmax, 0.001))
 
-        #print(grp['z'], grp['effi'])
+        # print(grp['z'], grp['effi'])
 
         if len(grp['z']) <= 3:
             return pd.DataFrame({'zlim': [zlimit],
@@ -724,7 +724,7 @@ class SNNSNMetric(BaseMetric):
            season: season
            pixRA: RA of the pixel
            pixDec: Dec of the pixel
-           healpixID: pixel ID 
+           healpixID: pixel ID
            x1: SN stretch
            color: SN color
            z: redshift
@@ -768,9 +768,9 @@ class SNNSNMetric(BaseMetric):
         Parameters
         --------------
         effi: pandas df with efficiencies:
-          effi: efficiencies  
+          effi: efficiencies
           effi_err: efficiency errors
-          z: redshift  
+          z: redshift
           weight: weight
         duration_z: pandas df with the following cols:
           season: season
@@ -791,7 +791,7 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         ----------
-        pandas df with weighted number of supernovae 
+        pandas df with weighted number of supernovae
 
         """
         x1 = effi.name[0]
@@ -814,7 +814,7 @@ class SNNSNMetric(BaseMetric):
           season: season
           pixRA: RA of the pixel
           pixDec: Dec of the pixel
-          healpixID: pixel ID 
+          healpixID: pixel ID
           x1: SN stretch
           color: SN color
           z: redshift
@@ -859,7 +859,7 @@ class SNNSNMetric(BaseMetric):
         effi_grp = effi.groupby(['x1', 'color'])['x1', 'color', 'effi', 'effi_err', 'z'].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
-        #print('hello', self.x1_color_dist)
+        # print('hello', self.x1_color_dist)
 
         if self.proxy_level == 1:
             grpdf = pd.DataFrame(effi_grp)
@@ -869,7 +869,7 @@ class SNNSNMetric(BaseMetric):
                 effidf, left_on=['x1', 'color'], right_on=['x1', 'color'])
 
             totdf = totdf.rename(columns={'weight_tot': 'weight'})
-            #print(totdf[['x1', 'color', 'weight_tot']])
+            # print(totdf[['x1', 'color', 'weight_tot']])
             print(totdf.columns)
             season = np.median(zlim['season'])
             idxb = duration_z['season'] == season
@@ -880,8 +880,6 @@ class SNNSNMetric(BaseMetric):
                 x, duration_z[idxb], zlim))
 
             return nsn_tot.sum(axis=0)
-        # print(nsn_tot)
-        # print(test)
 
         # Now construct the griddata
 
@@ -894,9 +892,10 @@ class SNNSNMetric(BaseMetric):
         n_color = len(color_vals)
         n_z = len(z_vals)
 
-        # build the griddata
-        index = np.lexsort((effi_grp['x1'], effi_grp['color'], effi_grp['z']))
+        # build the griddata - be careful of the order here
+        index = np.lexsort((effi_grp['z'], effi_grp['color'], effi_grp['x1']))
         effi_resh = np.reshape(effi_grp[index]['effi'], (n_x1, n_color, n_z))
+        #effi_resh = effi_grp[index]['effi']
         effi_err_resh = np.reshape(
             effi_grp[index]['effi_err'], (n_x1, n_color, n_z))
 
@@ -931,14 +930,31 @@ class SNNSNMetric(BaseMetric):
         df_test.loc[:, 'x1'] = np.round(x1_tile, 2)
         df_test.loc[:, 'color'] = np.round(color_tile, 2)
         df_test.loc[:, 'z'] = z_tile
-        #df_test.loc[:, 'weight'] = np.round(weight_tile, 2)
+        # df_test.loc[:, 'weight'] = np.round(weight_tile, 2)
         df_test.loc[:, 'weight'] = weight_tile
         season = np.median(zlim['season'])
         idxb = duration_z['season'] == season
 
         # this is a check
-        print('tttt', np.unique(df_test[['x1', 'color', 'weight']]))
+        """
+        idx = np.abs(df_test['x1']) < 1.e-8
+        idx &= np.abs(df_test['color']) < 1.e-8
+        print('tttt', df_test[idx][['x1', 'color', 'z', 'effi', 'weight']])
 
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        idxf = np.abs(effi_grp['x1']) < 1.e-8
+        idxf &= np.abs(effi_grp['color']) < 1.e-8
+        print('tttt', effi_grp[idxf][['x1', 'color', 'z', 'effi']])
+        ax.plot(df_test[idx]['z'], df_test[idx]['effi'], 'ko')
+        ax.plot(effi_grp[idxf]['z'], effi_grp[idxf]['effi'], 'r*')
+        test_effi = effi_grid((
+            effi_grp['x1'][idxf], effi_grp['color'][idxf], effi_grp['z'][idxf]))
+        # ax.plot(effi_grp['z'][idxf], test_effi,
+        #        'b.', mfc='None')
+
+        plt.show()
+        """
         # get the weighted number of supernovae
         nsn_tot = df_test.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
             x, duration_z[idxb], zlim))
@@ -988,7 +1004,7 @@ class SNNSNMetric(BaseMetric):
           season: season
           pixRA: RA of the pixel
           pixDec: Dec of the pixel
-          healpixID: pixel ID 
+          healpixID: pixel ID
           x1: SN stretch
           color: SN color
           z: redshift
@@ -1026,7 +1042,7 @@ class SNNSNMetric(BaseMetric):
                                                        survey_area=self.pixArea)
 
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
-        #nsn_cum = np.cumsum(rateInterp(zplot))*dz
+        # nsn_cum = np.cumsum(rateInterp(zplot))*dz
         nsn_interp = interp1d(zplot, nsn_cum)
 
         return np.asscalar(nsn_interp(zlim))
@@ -1216,7 +1232,7 @@ class SNNSNMetric(BaseMetric):
 
             sn = pd.DataFrame()
             if len(lc) > 0:
-                #sn = self.process(Table.from_pandas(lc))
+                # sn = self.process(Table.from_pandas(lc))
                 sn = self.process(pd.DataFrame(
                     lc), verbose=self.verbose, timer=self.timer)
 
@@ -1253,7 +1269,7 @@ class SNNSNMetric(BaseMetric):
 
         lc = lc.round({'daymax': 6})
         sel = lc[np.abs(lc['z']-zref) < 1.e-5]
-        #sel = sel[sel['band']=='LSST::g']
+        # sel = sel[sel['band']=='LSST::g']
 
         # print(sel['daymax'].unique())
         fig, ax = plt.subplots(ncols=2, nrows=3)
@@ -1285,7 +1301,7 @@ class SNNSNMetric(BaseMetric):
             season: season
           pixRA: RA of the pixel
           pixDec: Dec of the pixel
-          healpixID: pixel ID 
+          healpixID: pixel ID
           x1: SN stretch
           color: SN color
           z: redshift
@@ -1304,8 +1320,8 @@ class SNNSNMetric(BaseMetric):
         ----------
         pandas df with the following cols: pixRA: RA of the pixel
            pixDec: Dec of the pixel
-           healpixID: pixel ID 
-           season: season number 
+           healpixID: pixel ID
+           season: season number
            x1: SN stretch
            color: SN color
            zlim: redshift limit
