@@ -1,10 +1,5 @@
 import numpy as np
 from lsst.sims.maf.metrics import BaseMetric
-import itertools
-from sn_tools.sn_obs import LSSTPointing
-from shapely.ops import unary_union
-from shapely.geometry import MultiPolygon
-import numpy.lib.recfunctions as rf
 import healpy as hp
 from sn_stackers.coadd_stacker import CoaddStacker
 import time
