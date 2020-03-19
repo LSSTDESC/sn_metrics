@@ -6,6 +6,7 @@ from shapely.ops import unary_union
 from shapely.geometry import MultiPolygon
 import numpy.lib.recfunctions as rf
 
+
 class SNGlobalMetric(BaseMetric):
     def __init__(self, metricName='SNGlobalMetric',
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
@@ -13,7 +14,6 @@ class SNGlobalMetric(BaseMetric):
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime',
                  uniqueBlocks=False, **kwargs):
-
         """
         Estimate global properties (per night) of a given cadence
 
@@ -61,11 +61,9 @@ class SNGlobalMetric(BaseMetric):
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
 
-
-
-        cols = [self.nightCol,self.filterCol, self.mjdCol, self.obsidCol,
+        cols = [self.nightCol, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol]
-       
+
         super(SNGlobalMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -100,24 +98,24 @@ class SNGlobalMetric(BaseMetric):
         nvisits_y: y-band total number of visits
         """
 
-        #sort data
+        # sort data
         dataSlice.sort(order=self.mjdCol)
 
-        #get the night number
+        # get the night number
         night = np.unique(dataSlice['night'])[0]
 
         dataSlice, nddf = self.fieldType(dataSlice)
 
-        #estimate the number of filter changes this night
+        # estimate the number of filter changes this night
 
         nfc = len(list(itertools.groupby(dataSlice[self.filterCol])))-1
         iwfd = dataSlice['fieldType'] == 'WFD'
         selwfd = dataSlice[iwfd]
         nfc_noddf = len(list(itertools.groupby(selwfd[self.filterCol])))-1
-        
-        #estimate the area observed that night (LSST focal plane)
+
+        # estimate the area observed that night (LSST focal plane)
         # in total and per filter
-        
+
         obs_area = {}
         nvisits = {}
         obs_area['all'] = self.area(dataSlice)
@@ -133,15 +131,15 @@ class SNGlobalMetric(BaseMetric):
 
         r = []
         names = []
-        r = [night,nfc,nfc_noddf,obs_area['all'],nvisits['all'],nddf]
-        names = ['night','nfc','nfc_noddf','obs_area','nvisits','nddf']
+        r = [night, nfc, nfc_noddf, obs_area['all'], nvisits['all'], nddf]
+        names = ['night', 'nfc', 'nfc_noddf', 'obs_area', 'nvisits', 'nddf']
         r += [obs_area[band] for band in 'ugrizy']
         names += ['obs_area_{}'.format(band) for band in 'ugrizy']
         r += [nvisits[band] for band in 'ugrizy']
         names += ['nvisits_{}'.format(band) for band in 'ugrizy']
-        
-        #get Moon vals
-        for val in ['moonRA','moonDec','moonAlt','moonAz','moonDistance','moonPhase']:
+
+        # get Moon vals
+        for val in ['moonRA', 'moonDec', 'moonAlt', 'moonAz', 'moonDistance', 'moonPhase']:
             r += [np.median(dataSlice[val])]
             names += ['med_{}'.format(val)]
 
@@ -149,31 +147,61 @@ class SNGlobalMetric(BaseMetric):
 
         return res
 
-        
-    def area(self,obs):
+    def area(self, obs):
+        """
+        Method to estimate the area surveyed per night
+
+        Parameters
+        ---------------
+        obs: numpy array
+          array of observations
+
+        Returns
+        -----------
+        union of polygon used to scan the area that night
+
+        """
         polylist = []
         for val in obs:
-            polylist.append(LSSTPointing(val[self.RACol],val[self.DecCol]))
+            polylist.append(LSSTPointing(val[self.RACol], val[self.DecCol]))
 
         return unary_union(MultiPolygon(polylist)).area
-        
-    def fieldType(self,obs):
-        
+
+    def fieldType(self, obs):
+        """
+        Method to estimate the type of field on the basis of observations
+
+        Parameters
+        ---------------
+        obs: numpy array
+          array of observations
+
+        Returns
+        ----------
+        obs: numpy array
+         original array with fieldtype
+        nddf: int
+          number of ddf found
+
+        """
+
         rDDF = []
         for ra, dec in np.unique(obs[[self.RACol, self.DecCol]]):
             idx = np.abs(obs[self.RACol]-ra) < 1.e-5
             idx &= np.abs(obs[self.DecCol]-dec) < 1.e-5
             sel = obs[idx]
             if len(sel) >= 10:
-                rDDF.append((ra,dec))
+                rDDF.append((ra, dec))
 
         nddf = len(rDDF)
         rtype = np.array(['WFD']*len(obs))
         if len(rDDF) > 0:
-            RADecDDF = np.rec.fromrecords(rDDF, names=[self.RACol, self.DecCol])
-            for (ra,dec) in RADecDDF[[self.RACol, self.DecCol]]:
-                idx = np.argwhere((np.abs(obs[self.RACol]-ra)<1.e-5)&(np.abs(obs[self.DecCol]-dec)<1.e-5))
+            RADecDDF = np.rec.fromrecords(
+                rDDF, names=[self.RACol, self.DecCol])
+            for (ra, dec) in RADecDDF[[self.RACol, self.DecCol]]:
+                idx = np.argwhere(
+                    (np.abs(obs[self.RACol]-ra) < 1.e-5) & (np.abs(obs[self.DecCol]-dec) < 1.e-5))
                 rtype[idx] = 'DD'
 
-        obs = rf.append_fields(obs,'fieldType',rtype)
+        obs = rf.append_fields(obs, 'fieldType', rtype)
         return obs, nddf
