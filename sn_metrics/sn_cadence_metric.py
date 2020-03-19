@@ -116,7 +116,7 @@ class SNCadenceMetric(BaseMetric):
 
         Returns
         -----------
-        record array with the following fields:
+        pandas df  with the following cols:
         fieldRA: RA of the field considered (float)
         fieldDec: Dec of the field considered (float)
         season:  season num (float)
@@ -191,7 +191,7 @@ class SNCadenceMetric(BaseMetric):
 
         if self.verbose:
             print('processed', res)
-        return res.to_records(index=False)
+        return res
 
     def seq(self, dataSlice):
         """

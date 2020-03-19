@@ -16,6 +16,7 @@ from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
 from scipy.interpolate import RegularGridInterpolator
 from functools import wraps
+
 # Define decorators
 
 # estimate processing time
@@ -287,15 +288,15 @@ class SNNSNMetric(BaseMetric):
 
         # return the output as chosen by the user (outputType)
         if self.outputType == 'lc':
-            return varb_totdf.to_records()
+            return varb_totdf
 
         if self.outputType == 'sn':
-            return vara_totdf.to_records()
+            return vara_totdf
 
         if self.outputType == 'effi':
-            return vara_totdf.to_records()
+            return vara_totdf
 
-        return varb_totdf.to_records()
+        return varb_totdf
 
     @verbose_this('Processing season')
     @time_this('Processing season')
@@ -350,6 +351,13 @@ class SNNSNMetric(BaseMetric):
             if self.timer:
                 print('timing:', time.time()-time_refb)
 
+        # estimate m5 median and gaps
+        m5_med = np.median(obs[self.m5Col])
+        obs.sort(order=self.mjdCol)
+        diffs = np.diff(obs[self.mjdCol])
+        gap_max = np.max(diffs)
+        gap_med = np.median(diffs)
+
         # simulate supernovae and lc
         if self.verbose:
             print("LC generation")
@@ -365,7 +373,9 @@ class SNNSNMetric(BaseMetric):
                 print('no simulation possible!!')
             for seas in seasons:
                 zlimsdf = self.errordf(
-                    pixRA, pixDec, healpixID, seas, self.status['nosn'])
+                    pixRA, pixDec, healpixID, seas,
+                    self.status['nosn'],
+                    m5_med, gap_max, gap_med)
                 effi_seasondf = self.erroreffi(
                     pixRA, pixDec, healpixID, seas)
         else:
@@ -376,6 +386,10 @@ class SNNSNMetric(BaseMetric):
             # estimate zlims
             zlimsdf = self.zlims(
                 effi_seasondf, dur_z, groupnames, verbose=self.verbose, timer=self.timer)
+            # add median m5
+            zlimsdf.loc[:, 'm5_med'] = m5_med
+            zlimsdf.loc[:, 'gap_max'] = gap_max
+            zlimsdf.loc[:, 'gap_med'] = gap_med
 
             # estimate number of medium supernovae
             zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
@@ -463,7 +477,8 @@ class SNNSNMetric(BaseMetric):
 
         return df
 
-    def errordf(self, pixRA, pixDec, healpixID, season, errortype):
+    def errordf(self, pixRA, pixDec, healpixID, season, errortype,
+                m5_med, gap_max, gap_med):
         """
         Method to return error df related to zlims values
 
@@ -479,7 +494,12 @@ class SNNSNMetric(BaseMetric):
           season
         errortype: str
           type of error
-
+        m5_med: float
+          median m5 value
+        gap_max: float
+          max internight gap
+        gap_med: float
+          median internight gap
         """
 
         return pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
@@ -491,7 +511,10 @@ class SNNSNMetric(BaseMetric):
                              'zlim': [-1.0],
                              'nsn_med': [-1.0],
                              'nsn': [-1.0],
-                             'status': [int(errortype)]})
+                             'status': [int(errortype)],
+                             'm5_med': [m5_med],
+                             'gap_max': [gap_max],
+                             'gap_med': [gap_med]})
 
     def erroreffi(self, pixRA, pixDec, healpixID, season):
         """
@@ -554,7 +577,7 @@ class SNNSNMetric(BaseMetric):
         groups = sndf.groupby(listNames)
 
         # estimating efficiencies
-        effi = groups['Cov_colorcolor', 'z'].apply(
+        effi = groups[['Cov_colorcolor', 'z']].apply(
             lambda x: self.effiObsdf(x, color_cut)).reset_index(level=list(range(len(listNames))))
 
         # this is to plot efficiencies and also sigma_color vs z
@@ -856,7 +879,7 @@ class SNNSNMetric(BaseMetric):
             return -1.0
 
         # get interpolated efficiencies for the set of reference SN
-        effi_grp = effi.groupby(['x1', 'color'])['x1', 'color', 'effi', 'effi_err', 'z'].apply(
+        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_err', 'z']].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
         # print('hello', self.x1_color_dist)
@@ -895,7 +918,7 @@ class SNNSNMetric(BaseMetric):
         # build the griddata - be careful of the order here
         index = np.lexsort((effi_grp['z'], effi_grp['color'], effi_grp['x1']))
         effi_resh = np.reshape(effi_grp[index]['effi'], (n_x1, n_color, n_z))
-        #effi_resh = effi_grp[index]['effi']
+        # effi_resh = effi_grp[index]['effi']
         effi_err_resh = np.reshape(
             effi_grp[index]['effi_err'], (n_x1, n_color, n_z))
 

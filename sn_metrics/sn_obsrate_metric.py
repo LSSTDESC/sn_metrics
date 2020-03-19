@@ -218,11 +218,16 @@ class SNObsRateMetric(BaseMetric):
                           self.pixRA, self.pixDec, self.healpixID,
                           0., self.bands))
 
+            return pd.DataFrame(r, columns=[
+                'season', 'fieldRA', 'fieldDec',
+                'pixRA', 'pixDec', 'healpixId',
+                'frac_obs_{}'.format(self.names_ref[0]), 'band'])
+            """
             return np.rec.fromrecords(r, names=[
                 'season', 'fieldRA', 'fieldDec',
                 'pixRA', 'pixDec', 'healpixId',
                 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
-
+            """
         seasons = self.info_season['season']
 
         snr_tot = None
@@ -269,7 +274,8 @@ class SNObsRateMetric(BaseMetric):
 
         if self.verbose:
             print('Processed', final_resu)
-        return final_resu
+
+        return pd.DataFrame(final_resu)
 
     def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """

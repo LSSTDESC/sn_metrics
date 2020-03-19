@@ -3,6 +3,7 @@ from lsst.sims.maf.metrics import BaseMetric
 import healpy as hp
 from sn_stackers.coadd_stacker import CoaddStacker
 import time
+import pandas as pd
 
 
 class SLSNMetric(BaseMetric):
@@ -97,8 +98,14 @@ class SLSNMetric(BaseMetric):
 
         Returns
         -----------
-        record array with the following fields:
-
+        pandas df with the following cols:
+        healpixId, pixRA, pixDec: pixel ID, RA and Dec
+        season_length: cumulative season length
+        gap_median: median gap (all filters)
+        gap_max: max gap (all filters)
+        gap_median_u, g, r,i,z: median gap for filters u,g,r,i,z
+        gap_max_u, g, r,i,z: max gap for filters u,g,r,i,z
+        area: area of observation (pixel area here)
         """
 
         # sort data
@@ -176,7 +183,7 @@ class SLSNMetric(BaseMetric):
 
         if self.verbose:
             print('processed', res)
-        return res
+        return pd.DataFrame(res)
 
     def seasonInfo(self, dataSlice, seasons):
         """
