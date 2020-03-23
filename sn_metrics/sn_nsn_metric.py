@@ -39,9 +39,9 @@ def time_this(arg):
         return new_function
     # time_init.__doc__ = new_function.__doc__
     return time_init
+
+
 # verbose mode
-
-
 def verbose_this(arg):
     def verbose(original_function):
         @wraps(original_function)
@@ -392,16 +392,16 @@ class SNNSNMetric(BaseMetric):
             zlimsdf.loc[:, 'gap_med'] = gap_med
 
             # estimate number of medium supernovae
-            zlimsdf['nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
-                x, 0.0, 0.0, effi_seasondf, dur_z), axis=1)
+            zlimsdf['nsn_med'],  zlimsdf['var_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
+                x, 0.0, 0.0, effi_seasondf, dur_z), axis=1, result_type='expand').T.values
 
             if self.proxy_level == 2:
                 zlimsdf['nsn'] = -1
+                zlimsdf['var_nsn'] = -1
                 return effi_seasondf, zlimsdf
 
             # estimate number of supernovae - total - proxy_level = 0 or 1
-
-            zlimsdf['nsn'] = self.nsn_tot(
+            zlimsdf['nsn'], zlimsdf['var_nsn'] = self.nsn_tot(
                 effi_seasondf, zlimsdf, dur_z, verbose=self.verbose, timer=self.timer)
 
             if self.verbose:
@@ -510,7 +510,9 @@ class SNNSNMetric(BaseMetric):
                              'color': [-1.0],
                              'zlim': [-1.0],
                              'nsn_med': [-1.0],
+                             'var_nsn_med': [-1.0],
                              'nsn': [-1.0],
+                             'var_nsn': [-1.0],
                              'status': [int(errortype)],
                              'm5_med': [m5_med],
                              'gap_max': [gap_max],
@@ -780,9 +782,9 @@ class SNNSNMetric(BaseMetric):
         else:
             effisel = effi_tot
 
-        nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
+        nsn, var_nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
 
-        return nsn
+        return (nsn, var_nsn)
 
     def nsn_typedf_weight(self, effi, duration_z, zlims):
         """
@@ -814,16 +816,16 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         ----------
-        pandas df with weighted number of supernovae
+        pandas df with weighted number of supernovae and variances
 
         """
         x1 = effi.name[0]
         color = effi.name[1]
         weight = np.mean(effi['weight'])
-        nsn = zlims.apply(lambda x: self.nsn_typedf(
-            x, x1, color, effi, duration_z, search=True), axis=1)
+        nsn, var_nsn = zlims.apply(lambda x: self.nsn_typedf(
+            x, x1, color, effi, duration_z, search=True), axis=1, result_type='expand').T.values
 
-        return nsn*weight
+        return pd.DataFrame({'nsn': [nsn*weight], 'var_nsn': [var_nsn*weight*weight]})
 
     @verbose_this('Estimating the total number of supernovae')
     @time_this('Total number of supernovae')
@@ -863,8 +865,8 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         -----------
-        nsn: float
-          total number of supernovae
+        nsn, var_nsn: float,float
+          total number of supernovae and associated variance
 
         """
 
@@ -899,10 +901,10 @@ class SNNSNMetric(BaseMetric):
             duration = duration_z[idxb]
 
             # get the weighted number of supernovae
-            nsn_tot = totdf.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
+            nsn_tot, var_tot = totdf.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
                 x, duration_z[idxb], zlim))
 
-            return nsn_tot.sum(axis=0)
+            return nsn_tot.sum(axis=0), var_tot.sum(axis=0)
 
         # Now construct the griddata
 
@@ -979,10 +981,10 @@ class SNNSNMetric(BaseMetric):
         plt.show()
         """
         # get the weighted number of supernovae
-        nsn_tot = df_test.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
+        resdf = df_test.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
             x, duration_z[idxb], zlim))
 
-        return nsn_tot.sum(axis=0)
+        return resdf['nsn'].sum(axis=0), resdf['var_nsn'].sum(axis=0)
 
     def effi_interp(self, grp, zvals):
         """
@@ -1044,19 +1046,23 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         ----------
-        nsn: float
-          number of supernovae with z<zlim
+        nsn, var_nsn : float
+          number of supernovae (and variance) with z<zlim
 
         """
 
         if zlim < 1.e-3:
-            return -1.0
+            return -1.0, -1.0
 
         dz = 0.001
         zplot = list(np.arange(self.zmin, self.zmax, dz))
         # interpolate efficiencies vs z
         effiInterp = interp1d(
             effi['z'], effi['effi'], kind='linear', bounds_error=False, fill_value=0.)
+        # interpolate error efficiency vs z
+        effi_errInterp = interp1d(
+            effi['z'], effi['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
+
         # estimate the cumulated number of SN vs z
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
                                                        zmax=self.zmax,
@@ -1065,10 +1071,23 @@ class SNNSNMetric(BaseMetric):
                                                        survey_area=self.pixArea)
 
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
+        var_cum = np.cumsum((nsn*effi_errInterp(zplot)) ** 2) + \
+            np.cumsum((effiInterp(zplot)*err_nsn)**2)
+
         # nsn_cum = np.cumsum(rateInterp(zplot))*dz
         nsn_interp = interp1d(zplot, nsn_cum)
+        var_interp = interp1d(zplot, var_cum)
+        """
+        # estimate numbers if we had efficiencies equal to one...
+        nsn_all = interp1d(zplot, np.cumsum(nsn))
+        err_all = interp1d(zplot, np.cumsum(err_nsn*err_nsn))
+        print('ici all', nsn_all(zlim), np.sqrt(err_all(zlim)))
 
-        return np.asscalar(nsn_interp(zlim))
+        """
+        nsn = np.asscalar(nsn_interp(zlim))
+        var_nsn = np.asscalar(var_interp(zlim))
+
+        return [nsn, var_nsn]
 
     def seasonInfo(self, grp):
         """
