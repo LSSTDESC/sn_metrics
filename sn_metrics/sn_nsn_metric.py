@@ -544,7 +544,8 @@ class SNNSNMetric(BaseMetric):
                              'color': [-1.0],
                              'z': [-1.0],
                              'effi': [-1.0],
-                             'effi_err': [-1.0]})
+                             'effi_err': [-1.0],
+                             'effi_var': [-1.0]})
 
     @verbose_this('Estimate efficiencies')
     @time_this('Efficiencies')
@@ -881,7 +882,7 @@ class SNNSNMetric(BaseMetric):
             return -1.0
 
         # get interpolated efficiencies for the set of reference SN
-        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_err', 'z']].apply(
+        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_var', 'z']].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
         # print('hello', self.x1_color_dist)
@@ -921,14 +922,14 @@ class SNNSNMetric(BaseMetric):
         index = np.lexsort((effi_grp['z'], effi_grp['color'], effi_grp['x1']))
         effi_resh = np.reshape(effi_grp[index]['effi'], (n_x1, n_color, n_z))
         # effi_resh = effi_grp[index]['effi']
-        effi_err_resh = np.reshape(
-            effi_grp[index]['effi_err'], (n_x1, n_color, n_z))
+        effi_var_resh = np.reshape(
+            effi_grp[index]['effi_var'], (n_x1, n_color, n_z))
 
         effi_grid = RegularGridInterpolator(
             (x1_vals, color_vals, z_vals), effi_resh, method='linear', bounds_error=False, fill_value=0.)
 
-        effi_err_grid = RegularGridInterpolator(
-            (x1_vals, color_vals, z_vals), effi_err_resh, method='linear', bounds_error=False, fill_value=0.)
+        effi_var_grid = RegularGridInterpolator(
+            (x1_vals, color_vals, z_vals), effi_var_resh, method='linear', bounds_error=False, fill_value=0.)
 
         nsnTot = None
         ip = -1
@@ -950,7 +951,7 @@ class SNNSNMetric(BaseMetric):
         df_test = pd.DataFrame()
 
         df_test.loc[:, 'effi'] = effi_grid((x1_tile, color_tile, z_tile))
-        df_test.loc[:, 'effi_err'] = effi_err_grid(
+        df_test.loc[:, 'effi_var'] = effi_var_grid(
             (x1_tile, color_tile, z_tile))
         df_test.loc[:, 'x1'] = np.round(x1_tile, 2)
         df_test.loc[:, 'color'] = np.round(color_tile, 2)
@@ -1014,9 +1015,12 @@ class SNNSNMetric(BaseMetric):
                           bounds_error=False, fill_value=0.)
         interp_err = interp1d(grp['z'], grp['effi_err'],
                               bounds_error=False, fill_value=0.)
+        interp_var = interp1d(grp['z'], grp['effi_var'],
+                              bounds_error=False, fill_value=0.)
 
         return pd.DataFrame({'effi': interp(zvals),
                              'effi_err': interp_err(zvals),
+                             'effi_var': interp_var(zvals),
                              'z': zvals})
 
     def nsn(self, effi, zlim, duration_z):
@@ -1059,9 +1063,9 @@ class SNNSNMetric(BaseMetric):
         # interpolate efficiencies vs z
         effiInterp = interp1d(
             effi['z'], effi['effi'], kind='linear', bounds_error=False, fill_value=0.)
-        # interpolate error efficiency vs z
-        effi_errInterp = interp1d(
-            effi['z'], effi['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
+        # interpolate variance efficiency vs z
+        effi_varInterp = interp1d(
+            effi['z'], effi['effi_var'], kind='linear', bounds_error=False, fill_value=0.)
 
         # estimate the cumulated number of SN vs z
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
@@ -1071,10 +1075,10 @@ class SNNSNMetric(BaseMetric):
                                                        survey_area=self.pixArea)
 
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
-        var_cum = np.cumsum((nsn*effi_errInterp(zplot)) ** 2) + \
-            np.cumsum((effiInterp(zplot)*err_nsn)**2)
 
-        # nsn_cum = np.cumsum(rateInterp(zplot))*dz
+        var_cum = np.cumsum(nsn)*effiInterp(zplot) * \
+            (1.-effiInterp(zplot))+np.cumsum(err_nsn**2)
+
         nsn_interp = interp1d(zplot, nsn_cum)
         var_interp = interp1d(zplot, var_cum)
         """
@@ -1221,16 +1225,20 @@ class SNNSNMetric(BaseMetric):
         # Take the ratio to get efficiencies
         rb = (group_sel.size()/group.size())
         err = np.sqrt(rb*(1.-rb)/group.size())
+        var = rb*(1.-rb)*group.size()
 
         rb = rb.array
         err = err.array
+        var = var.array
 
         rb[np.isnan(rb)] = 0.
         err[np.isnan(err)] = 0.
+        var[np.isnan(var)] = 0.
 
         return pd.DataFrame({group.keys: list(group.groups.keys()),
                              'effi': rb,
-                             'effi_err': err})
+                             'effi_err': err,
+                             'effi_var': var})
 
     @verbose_this('Simulation SN')
     @time_this('Simulation SN')
