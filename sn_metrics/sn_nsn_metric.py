@@ -589,7 +589,8 @@ class SNNSNMetric(BaseMetric):
             fig, ax = plt.subplots()
             figb, axb = plt.subplots()
 
-            self.plot(ax, effi, 'effi', 'effi_err', 'Observing Efficiencies')
+            self.plot(ax, effi, 'effi', 'effi_err',
+                      'Observing Efficiencies', ls='-')
             self.plot(axb, sndf, 'Cov_colorcolor', None, '$\sigma_{color}^2$')
             # get efficiencies vs z
 
@@ -597,7 +598,7 @@ class SNNSNMetric(BaseMetric):
 
         return effi
 
-    def plot(self, ax, effi, vary, erry=None, legy=''):
+    def plot(self, ax, effi, vary, erry=None, legy='', ls='None'):
         """
         Simple method to plot vs z
 
@@ -623,7 +624,7 @@ class SNNSNMetric(BaseMetric):
             if erry is not None:
                 yerr = grp[erry]
             ax.errorbar(grp['z'], grp[vary], yerr=yerr,
-                        marker='o', label='(x1,color)=({},{})'.format(x1, color), lineStyle='None')
+                        marker='o', label='(x1,color)=({},{})'.format(x1, color), lineStyle=ls)
 
         ftsize = 15
         ax.set_xlabel('z', fontsize=ftsize)
