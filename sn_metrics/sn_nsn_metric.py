@@ -880,10 +880,10 @@ class SNNSNMetric(BaseMetric):
         idx = np.abs(effi['x1']) < 1.e-5
         idx &= np.abs(effi['color']) < 1.e-5
         if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi']) < 1.e-5:
-            return -1.0
+            return 0.0,0.0
 
         # get interpolated efficiencies for the set of reference SN
-        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_var', 'z']].apply(
+        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_err','effi_var', 'z']].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
         # print('hello', self.x1_color_dist)
