@@ -897,15 +897,18 @@ class SNNSNMetric(BaseMetric):
 
             totdf = totdf.rename(columns={'weight_tot': 'weight'})
             # print(totdf[['x1', 'color', 'weight_tot']])
-            print(totdf.columns)
+            #print(totdf.columns)
             season = np.median(zlim['season'])
             idxb = duration_z['season'] == season
             duration = duration_z[idxb]
 
             # get the weighted number of supernovae
-            nsn_tot, var_tot = totdf.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
+            dfsn = totdf.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
                 x, duration_z[idxb], zlim))
 
+            nsn_tot = dfsn['nsn']
+            var_tot = dfsn['var_nsn']
+        
             return nsn_tot.sum(axis=0), var_tot.sum(axis=0)
 
         # Now construct the griddata
