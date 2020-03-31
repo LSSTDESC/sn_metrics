@@ -18,7 +18,8 @@ matplotlib.use("Agg")
 m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
 
-def load(fname, gamma_reference,instrument):
+
+def load(fname, gamma_reference, instrument):
     """
      Method to load reference LC files
 
@@ -26,17 +27,18 @@ def load(fname, gamma_reference,instrument):
      --------------
      fname: str
        name of the reference file
-    
+
      Returns
     ----------
-     
+
 
      """
     lc_ref = GetReference(
         fname, gamma_reference, instrument)
 
     return lc_ref
-    
+
+
 def fakeData(band, season=1):
 
     # Define fake data
@@ -44,7 +46,7 @@ def fakeData(band, season=1):
              'fiveSigmaDepth', 'visitExposureTime',
              'numExposures', 'visitTime', 'season',
              'seeingFwhmEff', 'seeingFwhmGeom',
-             'airmass', 'sky', 'moonPhase','pixRA','pixDec']
+             'airmass', 'sky', 'moonPhase', 'pixRA', 'pixDec']
 
     types = ['f8']*len(names)
     names += ['night']
@@ -77,7 +79,7 @@ def fakeData(band, season=1):
     data['pixRA'] = 0.0
     data['pixDec'] = 0.0
     data['healpixID'] = 1
-    
+
     return data
 
 
@@ -147,11 +149,11 @@ class TestSNmetrics(unittest.TestCase):
                               'gap_10', 'gap_15', 'gap_20', 'season_length'],
                              [24.38, 5.0, 5., 1., 0., 0., 0., 245.]))
         for key in refResult.keys():
-            assert((np.abs(refResult[key]-result[key]) < 1.e-5))
+            assert((np.abs(refResult[key]-result[key].values) < 1.e-5))
 
         res_z = sn_cadence_plot.plotCadence(band, config['Li file'], config['Mag_to_flux file'],
                                             SNR[band],
-                                            result,
+                                            result.to_records(),
                                             config['names_ref'],
                                             mag_range=mag_range, dt_range=dt_range,
                                             dbName='Fakes')
@@ -198,7 +200,7 @@ class TestSNmetrics(unittest.TestCase):
         #    config['names_ref'][0])]
         result_metric = result['frac_obs_{}'.format(config['names_ref'][0])]
 
-        assert(np.abs(result_metric-result_ref) < 1.e-5)
+        assert(np.abs(result_metric.values-result_ref) < 1.e-5)
 
         # now let us test the plotter
         """
@@ -206,7 +208,7 @@ class TestSNmetrics(unittest.TestCase):
         snr_fakes = result['snr_fakes']
         detec_frac = result['detec_frac']
         """
-        detec_frac = result
+        detec_frac = result.to_records()
         """
         for inum, (RA, Dec, season) in enumerate(np.unique(snr_obs[['fieldRA', 'fieldDec', 'season']])):
             idx = (snr_obs['fieldRA'] == RA) & (
@@ -247,7 +249,7 @@ class TestSNmetrics(unittest.TestCase):
 
         # metric instance
         coadd = True
-        
+
         metric = SNObsRateMetric(lim_sn=lim_sn,
                                  names_ref=config['names_ref'],
                                  season=season, coadd=coadd,
@@ -270,28 +272,28 @@ class TestSNmetrics(unittest.TestCase):
         res = metric.run(data)
         result_metric = res['frac_obs_{}'.format(config['names_ref'][0])]
         result_ref = 0.125
-        assert(np.abs(result_metric-result_ref) < 1.e-5)
+        assert(np.abs(result_metric.values-result_ref) < 1.e-5)
 
     def testNSNMetric(self):
         """Test the NSN metric """
-        
+
         # reference dir
         dir_ref = '../../reference_files/'
         # template dir
-        #dir_template = '../../Templates_final_new'
-        dir_template = '../../../..'
+        dir_template = '../../../Templates'
+        #dir_template = '../../../..'
         # input parameters for this metric
-        name='NSN'
-        season=1
-        coadd=True,
-        fieldType='DD',
-        nside=64
-        ramin=0.
-        ramax=360.
-        decmin=-1.0,
-        decmax=-1.0
-        metadata={}
-        outDir='MetricOutput'
+        name = 'NSN'
+        season = 1
+        coadd = True,
+        fieldType = 'DD',
+        nside = 64
+        ramin = 0.
+        ramax = 360.
+        decmin = -1.0,
+        decmax = -1.0
+        metadata = {}
+        outDir = 'MetricOutput'
         proxy_level = 1
 
         # An instrument is needed
@@ -306,17 +308,18 @@ class TestSNmetrics(unittest.TestCase):
 
         lc_reference = {}
         gamma_reference = '{}/gamma.hdf5'.format(dir_ref)
-            
+
         x1_colors = [(-2.0, 0.2), (0.0, 0.0)]
-        
-        #load ref files here
+
+        # load ref files here
         for j in range(len(x1_colors)):
             x1 = x1_colors[j][0]
             color = x1_colors[j][1]
             fname = '{}/LC_{}_{}_vstack.hdf5'.format(
                 dir_template, x1, color)
-            
-            lc_reference[x1_colors[j]] = load(fname,gamma_reference,Instrument)
+
+            lc_reference[x1_colors[j]] = load(
+                fname, gamma_reference, Instrument)
 
         # LC selection criteria
 
@@ -330,13 +333,13 @@ class TestSNmetrics(unittest.TestCase):
         zmax = 1.0
         season = [1]
         pixArea = 9.6
-        
+
         # load x1_color_dist
 
         x1_color_dist = np.genfromtxt('{}/Dist_X1_Color_JLA_high_z.txt'.format(dir_ref), dtype=None,
                                       names=('x1', 'color', 'weight_x1', 'weight_x1', 'weight_tot'))
 
-         # metric instance
+        # metric instance
         metric = SNNSNMetric(
             lc_reference, season=season, zmax=zmax, pixArea=pixArea,
             verbose=False, timer=False,
@@ -361,16 +364,17 @@ class TestSNmetrics(unittest.TestCase):
                 if data is None:
                     data = fakes
                 else:
-                    data = np.concatenate((data, fakes))        
+                    data = np.concatenate((data, fakes))
 
         # now run the metric
         res = metric.run(data)
 
         # compare the results to reference: this is the unit test
-        zlim_ref = np.asarray([0.60029217,0.76329939])
-        #print(res['zlim'],zlim_ref,np.isclose(res['zlim'],zlim_ref))
-        assert(np.isclose(res['zlim'],zlim_ref).all())
-            
+        zlim_ref = np.asarray([0.599917, 0.763300])
+        #print(res['zlim'], zlim_ref, np.isclose(res['zlim'], zlim_ref))
+        assert(np.isclose(res['zlim'], zlim_ref).all())
+
+
 if __name__ == "__main__":
     lsst.utils.tests.init()
     unittest.main(verbosity=5)

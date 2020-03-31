@@ -1271,7 +1271,7 @@ class SNNSNMetric(BaseMetric):
             if key == (-2.0, 0.2):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
-            lc = vals(obs, -1, gen_par_cp, bands='grizy')
+            lc = vals(obs, gen_par_cp, bands='grizy')
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
             if self.ploteffi and len(lc) > 0:
