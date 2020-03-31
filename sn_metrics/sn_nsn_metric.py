@@ -7,7 +7,7 @@ import multiprocessing
 import yaml
 from scipy import interpolate
 import os
-from sn_tools.sn_calcFast import LCfast, covColor
+from sn_tools.sn_calcFast import LCfast, CovColor
 from sn_tools.sn_telescope import Telescope
 from astropy.table import Table, vstack, Column
 import time
@@ -880,10 +880,10 @@ class SNNSNMetric(BaseMetric):
         idx = np.abs(effi['x1']) < 1.e-5
         idx &= np.abs(effi['color']) < 1.e-5
         if len(effi[idx]['z']) < 3 or np.mean(effi[idx]['effi']) < 1.e-5:
-            return 0.0,0.0
+            return 0.0, 0.0
 
         # get interpolated efficiencies for the set of reference SN
-        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_err','effi_var', 'z']].apply(
+        effi_grp = effi.groupby(['x1', 'color'])[['x1', 'color', 'effi', 'effi_err', 'effi_var', 'z']].apply(
             lambda x: self.effi_interp(x, zvals)).reset_index().to_records(index=False)
 
         # print('hello', self.x1_color_dist)
@@ -897,7 +897,7 @@ class SNNSNMetric(BaseMetric):
 
             totdf = totdf.rename(columns={'weight_tot': 'weight'})
             # print(totdf[['x1', 'color', 'weight_tot']])
-            #print(totdf.columns)
+            # print(totdf.columns)
             season = np.median(zlim['season'])
             idxb = duration_z['season'] == season
             duration = duration_z[idxb]
@@ -908,7 +908,7 @@ class SNNSNMetric(BaseMetric):
 
             nsn_tot = dfsn['nsn']
             var_tot = dfsn['var_nsn']
-        
+
             return nsn_tot.sum(axis=0), var_tot.sum(axis=0)
 
         # Now construct the griddata
@@ -1186,7 +1186,7 @@ class SNNSNMetric(BaseMetric):
 
         # estimate the color for SN that passed the selection cuts
         if len(goodsn) > 0:
-            goodsn.loc[:, 'Cov_colorcolor'] = covColor(goodsn)
+            goodsn.loc[:, 'Cov_colorcolor'] = CovColor(goodsn).Cov_colorcolor
             finalsn = pd.concat([finalsn, goodsn], sort=False)
 
         badsn = pd.DataFrame(sums.loc[~idx])
