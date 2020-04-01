@@ -83,7 +83,7 @@ def fakeData(band, season=1):
     return data
 
 
-class TestSNmetrics(unittest.TestCase):
+class TestCadencemetrics(unittest.TestCase):
 
     def testCadenceMetric(self):
         """Test the SN cadence metric """
@@ -163,6 +163,8 @@ class TestSNmetrics(unittest.TestCase):
         zres = res_z['zlim_{}'.format(config['names_ref'][0])]
         assert(np.abs(zlim-zres) < 1.e-5)
 
+
+class TestSNRmetrics(unittest.TestCase):
     def testSNRMetric(self):
         """Test the SNR metric """
 
@@ -228,6 +230,9 @@ class TestSNmetrics(unittest.TestCase):
 
         # plt.show()
 
+
+class TestObsRatemetrics(unittest.TestCase):
+
     def testObsRateMetric(self):
         """Test the  ObsRate metric """
 
@@ -274,6 +279,8 @@ class TestSNmetrics(unittest.TestCase):
         result_ref = 0.125
         assert(np.abs(result_metric.values-result_ref) < 1.e-5)
 
+
+class TestNSNmetrics(unittest.TestCase):
     def testNSNMetric(self):
         """Test the NSN metric """
 
@@ -323,11 +330,11 @@ class TestSNmetrics(unittest.TestCase):
 
         # LC selection criteria
 
-        N_bef = 2
-        N_aft = 5
+        n_bef = 2
+        n_aft = 5
         snr_min = 5.
-        N_phase_min = 1
-        N_phase_max = 1
+        n_phase_min = 1
+        n_phase_max = 1
 
         # additional parameters requested to run the metric
         zmax = 1.0
@@ -344,10 +351,10 @@ class TestSNmetrics(unittest.TestCase):
             lc_reference, season=season, zmax=zmax, pixArea=pixArea,
             verbose=False, timer=False,
             ploteffi=False,
-            N_bef=N_bef, N_aft=N_aft,
+            n_bef=n_bef, n_aft=n_aft,
             snr_min=snr_min,
-            N_phase_min=N_phase_min,
-            N_phase_max=N_phase_max,
+            n_phase_min=n_phase_min,
+            n_phase_max=n_phase_max,
             outputType='zlims',
             proxy_level=proxy_level,
             x1_color_dist=x1_color_dist,
@@ -375,6 +382,15 @@ class TestSNmetrics(unittest.TestCase):
         assert(np.isclose(res['zlim'], zlim_ref).all())
 
 
+"""
 if __name__ == "__main__":
     lsst.utils.tests.init()
     unittest.main(verbosity=5)
+"""
+
+lsst.utils.tests.init()
+cadenceMetric = TestCadencemetrics
+SNRMetric = TestSNRmetrics
+ObsRateMetric = TestObsRatemetrics
+nSNMetric = TestNSNmetrics
+unittest.main(verbosity=5)
