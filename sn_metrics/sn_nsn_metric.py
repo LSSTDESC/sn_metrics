@@ -104,15 +104,15 @@ class SNNSNMetric(BaseMetric):
       display efficiencies during processing (default:False)
     proxy_level: int, opt
      proxy level for the processing (default: 0)
-    N_bef: int, opt
+    n_bef: int, opt
       number of LC points LC before T0 (default:5)
-    N_aft: int, opt
+    n_aft: int, opt
       number of LC points after T0 (default: 10)
      snr_min: float, opt
        minimal SNR of LC points (default: 5.0)
-     N_phase_min: int, opt
+     n_phase_min: int, opt
        number of LC points with phase<= -5(default:1)
-    N_phase_max: int, opt
+    n_phase_max: int, opt
       number of LC points with phase>= 20 (default: 1)
     x1_color_dist: ,opt
      (x1,color) distribution (default: None)
@@ -130,7 +130,7 @@ class SNNSNMetric(BaseMetric):
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
-                 N_bef=5, N_aft=10, snr_min=5., N_phase_min=1, N_phase_max=1,
+                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1,
                  x1_color_dist=None, lightOutput=True, T0s='all', **kwargs):
 
         self.mjdCol = mjdCol
@@ -165,11 +165,11 @@ class SNNSNMetric(BaseMetric):
         telescope = Telescope(airmass=1.2)
 
         # LC selection parameters
-        self.N_bef = N_bef  # nb points before peak
-        self.N_aft = N_aft  # nb points after peak
+        self.n_bef = n_bef  # nb points before peak
+        self.n_aft = n_aft  # nb points after peak
         self.snr_min = snr_min  # SNR cut for points before/after peak
-        self.N_phase_min = N_phase_min  # nb of point with phase <=-5
-        self.N_phase_max = N_phase_max  # nb of points with phase >=20
+        self.n_phase_min = n_phase_min  # nb of point with phase <=-5
+        self.n_phase_max = n_phase_max  # nb of points with phase >=20
 
         self.lcFast = {}
 
@@ -705,7 +705,7 @@ class SNNSNMetric(BaseMetric):
         if nsn_cum[-1] >= 1.e-5:
             nsn_cum_norm = nsn_cum/nsn_cum[-1]  # normalize
             zlim = interp1d(nsn_cum_norm, zplot)
-            zlimit = np.asscalar(zlim(0.95))
+            zlimit = zlim(0.95).item()
             status = self.status['ok']
 
             if self.ploteffi:
@@ -1092,8 +1092,8 @@ class SNNSNMetric(BaseMetric):
         print('ici all', nsn_all(zlim), np.sqrt(err_all(zlim)))
 
         """
-        nsn = np.asscalar(nsn_interp(zlim))
-        var_nsn = np.asscalar(var_interp(zlim))
+        nsn = nsn_interp(zlim).item()
+        var_nsn = var_interp(zlim).item()
 
         return [nsn, var_nsn]
 
@@ -1151,10 +1151,10 @@ class SNNSNMetric(BaseMetric):
           F_x0x0, ...F_colorcolor: Fisher matrix elements
           x1: x1 SN
           color: color SN
-          N_aft: number of LC points before daymax
-          N_bef: number of LC points after daymax
-          N_phmin: number of LC points with a phase<-5
-          N_phmax:  number of LC points with a phase > 20
+          n_aft: number of LC points before daymax
+          n_bef: number of LC points after daymax
+          n_phmin: number of LC points with a phase<-5
+          n_phmax:  number of LC points with a phase > 20
 
         Returns
         ----------
@@ -1171,15 +1171,15 @@ class SNNSNMetric(BaseMetric):
             for jb, valb in enumerate(self.params):
                 if jb >= ia:
                     tosum.append('F_'+vala+valb)
-        tosum += ['N_aft', 'N_bef', 'N_phmin', 'N_phmax']
+        tosum += ['n_aft', 'n_bef', 'n_phmin', 'n_phmax']
         # apply the sum on the group
         sums = groups[tosum].sum().reset_index()
 
         # select LC according to the number of points bef/aft peak
-        idx = sums['N_aft'] >= self.N_aft
-        idx &= sums['N_bef'] >= self.N_bef
-        idx &= sums['N_phmin'] >= self.N_phase_min
-        idx &= sums['N_phmax'] >= self.N_phase_max
+        idx = sums['n_aft'] >= self.n_aft
+        idx &= sums['n_bef'] >= self.n_bef
+        idx &= sums['n_phmin'] >= self.n_phase_min
+        idx &= sums['n_phmax'] >= self.n_phase_max
 
         finalsn = pd.DataFrame()
         goodsn = pd.DataFrame(sums.loc[idx])
