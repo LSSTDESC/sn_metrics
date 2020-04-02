@@ -284,7 +284,9 @@ class SNNSNMetric(BaseMetric):
         # estimate time of processing
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
-            print(varb_totdf)
+            toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color', 'zlim',
+                      'nsn_med', 'var_nsn_med']
+            print(varb_totdf[toshow])
 
         # return the output as chosen by the user (outputType)
         if self.outputType == 'lc':
@@ -350,6 +352,8 @@ class SNNSNMetric(BaseMetric):
                 print('after stacking', seasons)
             if self.timer:
                 print('timing:', time.time()-time_refb)
+        else:
+            obs = obs.to_records(index=False)
 
         # estimate m5 median and gaps
         m5_med = np.median(obs[self.m5Col])
