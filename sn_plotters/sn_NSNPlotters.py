@@ -1,6 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
+
+from . import plt
 
 
 def plot_DDSummary(metricValues, forPlot, sntype='faint'):
@@ -116,7 +117,7 @@ def Plot_NSN(summary, forPlot, sntype='faint'):
 
     """
 
-    fontsize = 12
+    fontsize = 15
     fig, ax = plt.subplots()
     varx = 'zlim_{}'.format(sntype)
     vary = 'nsn_z{}'.format(sntype)
@@ -141,8 +142,9 @@ def Plot_NSN(summary, forPlot, sntype='faint'):
         # get the centroid of the data and write it
         centroid_x = selcad[varx].mean()
         centroid_y = selcad[vary].mean()
-        ax.text(xshift*centroid_x, yshift*centroid_y, group, color=color)
+        ax.text(xshift*0.99*centroid_x, yshift *
+                1.01*centroid_y, group, color=color, fontsize=fontsize)
 
     ax.grid()
-    ax.set_xlabel('$z_{'+sntype+'}$', fontsize=fontsize)
-    ax.set_ylabel('$N_{SN} (z<)$', fontsize=fontsize)
+    ax.set_xlabel('$z_{'+sntype+'}$')
+    ax.set_ylabel('$N_{SN} (z<)$')
