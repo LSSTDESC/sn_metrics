@@ -184,7 +184,7 @@ class SNNSNMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.05  # zstep
+        self.zStep = 0.01  # zstep
         self.daymaxStep = 1.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 40.  # max ref phase for LC points selection
@@ -598,7 +598,8 @@ class SNNSNMetric(BaseMetric):
 
             self.plot(ax, effi, 'effi', 'effi_err',
                       'Observing Efficiencies', ls='-')
-            self.plot(axb, sndf, 'Cov_colorcolor', None, '$\sigma_{color}^2$')
+            sndf['sigma_color'] = np.sqrt(sndf['Cov_colorcolor'])
+            self.plot(axb, sndf, 'sigma_color', None, '$\sigma_{color}$')
             # get efficiencies vs z
 
             plt.show()
@@ -712,7 +713,7 @@ class SNNSNMetric(BaseMetric):
         if nsn_cum[-1] >= 1.e-5:
             nsn_cum_norm = nsn_cum/nsn_cum[-1]  # normalize
             zlim = interp1d(nsn_cum_norm, zplot)
-            zlimit = zlim(0.95).item()
+            zlimit = zlim(0.99).item()
             status = self.status['ok']
 
             if self.ploteffi:
