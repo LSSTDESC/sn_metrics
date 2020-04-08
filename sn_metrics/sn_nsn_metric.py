@@ -467,14 +467,17 @@ class SNNSNMetric(BaseMetric):
 
         """
 
-        T0_max = grp['T0_max'].values
-        T0_min = grp['T0_min'].values
-        num = (T0_max-T0_min)/self.daymaxStep
-        if T0_max-T0_min > 10:
-            df = pd.DataFrame(np.linspace(
-                T0_min, T0_max, int(num)), columns=['daymax'])
+        if self.T0s == 'all':
+            T0_max = grp['T0_max'].values
+            T0_min = grp['T0_min'].values
+            num = (T0_max-T0_min)/self.daymaxStep
+            if T0_max-T0_min > 10:
+                df = pd.DataFrame(np.linspace(
+                    T0_min, T0_max, int(num)), columns=['daymax'])
+            else:
+                df = pd.DataFrame([-1], columns=['daymax'])
         else:
-            df = pd.DataFrame([-1], columns=['daymax'])
+            df = pd.DataFrame([0.], columns=['daymax'])
 
         df['min_rf_phase'] = self.min_rf_phase_qual
         df['max_rf_phase'] = self.max_rf_phase_qual
