@@ -184,8 +184,8 @@ class SNNSNMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.01  # zstep
-        self.daymaxStep = 1.  # daymax step
+        self.zStep = 0.05  # zstep
+        self.daymaxStep = 3.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 40.  # max ref phase for LC points selection
 
@@ -249,7 +249,7 @@ class SNNSNMetric(BaseMetric):
         if zRange[0] < 1.e-6:
             zRange[0] = 0.01
 
-        self.zRange = zRange
+        self.zRange = np.unique(zRange)
 
         # season infos
         dfa = pd.DataFrame(np.copy(dataSlice))
@@ -259,12 +259,26 @@ class SNNSNMetric(BaseMetric):
         # select seasons of at least 30 days
         idx = season_info['season_length'] >= 30
         season_info = season_info[idx]
+
+        if self.verbose:
+            print('season infos', season_info)
+
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
+
+        # remove dur_z with negative season lengths
+        idx = dur_z['season_length'] >= 10.
+        dur_z = dur_z[idx]
+
+        if self.verbose:
+            print('duration vs z', dur_z)
+
         if dur_z.empty:
             return None
         # get simulation parameters
+        if self.verbose:
+            print('getting simulation parameters')
         gen_par = dur_z.groupby(['z', 'season']).apply(
             lambda x: self.calcDaymax(x)).reset_index()
 
@@ -713,7 +727,7 @@ class SNNSNMetric(BaseMetric):
         if nsn_cum[-1] >= 1.e-5:
             nsn_cum_norm = nsn_cum/nsn_cum[-1]  # normalize
             zlim = interp1d(nsn_cum_norm, zplot)
-            zlimit = zlim(0.99).item()
+            zlimit = zlim(0.95).item()
             status = self.status['ok']
 
             if self.ploteffi:
@@ -1123,8 +1137,10 @@ class SNNSNMetric(BaseMetric):
         df['MJD_max'] = grp[self.mjdCol].max()
         df['season_length'] = df['MJD_max']-df['MJD_min']
         df['cadence'] = 0.
+
         if len(grp) > 5:
-            df['cadence'] = grp[self.mjdCol].diff().mean()
+            to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
+            df['cadence'] = np.mean(to.diff())
 
         return df
 
