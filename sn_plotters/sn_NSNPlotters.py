@@ -52,21 +52,25 @@ def plot_DDSummary(metricValues, forPlot, sntype='faint'):
     #idx &= metricValues['nsn_zfaint'] > 10.
     sel = metricValues[idx]
 
+    print('selec', sel[['zlim_faint', 'nsn_zfaint', 'nsn_med_zfaint']])
     # estimate some stats to display
 
     data = pd.DataFrame(np.copy(sel))
 
     summary = data.groupby(['cadence']).agg({'nsn_zfaint': 'sum',
+                                             'nsn_med_zfaint': 'sum',
                                              'nsn_zmedium': 'sum',
                                              'zlim_faint': 'median',
                                              'zlim_medium': 'median', }).reset_index()
 
     summary_fields = data.groupby(['cadence', 'fieldname']).agg({'nsn_zfaint': 'sum',
+                                                                 'nsn_med_zfaint': 'sum',
                                                                  'nsn_zmedium': 'sum',
                                                                  'zlim_faint': 'median',
                                                                  'zlim_medium': 'median', }).reset_index()
 
     summary_fields_seasons = data.groupby(['cadence', 'fieldname', 'season']).agg({'nsn_zfaint': 'sum',
+                                                                                   'nsn_med_zfaint': 'sum',
                                                                                    'nsn_zmedium': 'sum',
                                                                                    'zlim_faint': 'median',
                                                                                    'zlim_medium': 'median', }).reset_index()
@@ -120,7 +124,7 @@ def Plot_NSN(summary, forPlot, sntype='faint'):
     fontsize = 15
     fig, ax = plt.subplots()
     varx = 'zlim_{}'.format(sntype)
-    vary = 'nsn_z{}'.format(sntype)
+    vary = 'nsn_med_z{}'.format(sntype)
     xshift = 1.0
     yshift = 1.01
 
