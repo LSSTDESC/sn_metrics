@@ -202,7 +202,7 @@ class SNNSNMetric(BaseMetric):
 
         # status of the pixel after processing
         self.status = dict(
-            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters','low_effi'], [1, -1, -2, -3, -4, -5]))
+            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters', 'low_effi'], [1, -1, -2, -3, -4, -5]))
 
         # supernovae parameters
         self.params = ['x0', 'x1', 'daymax', 'color']
@@ -257,8 +257,11 @@ class SNNSNMetric(BaseMetric):
             lambda x: self.seasonInfo(x)).reset_index()
 
         # select seasons of at least 30 days
-        idx = season_info['season_length'] >= 30
+        idx = season_info['season_length'] >= 60
         season_info = season_info[idx]
+
+        if season_info.empty:
+            return None
 
         if self.verbose:
             print('season infos', season_info)
@@ -402,18 +405,17 @@ class SNNSNMetric(BaseMetric):
                 sn, verbose=self.verbose, timer=self.timer)
 
             # zlims can only be estimated if efficiencies are ok
-            idx = effi_seasondf['z']<=0.2
+            idx = effi_seasondf['z'] <= 0.2
             x1ref = -2.0
-            colorref =0.2
-            idx &= np.abs(effi_seasondf['x1']-x1ref)<1.e-5
-            idx &= np.abs(effi_seasondf['color']-colorref)<1.e-5
+            colorref = 0.2
+            idx &= np.abs(effi_seasondf['x1']-x1ref) < 1.e-5
+            idx &= np.abs(effi_seasondf['color']-colorref) < 1.e-5
             sel = effi_seasondf[idx]
 
-            if np.mean(sel['effi'])>0.10:
+            if np.mean(sel['effi']) > 0.10:
                 # estimate zlims
                 zlimsdf = self.zlims(
                     effi_seasondf, dur_z, groupnames, verbose=self.verbose, timer=self.timer)
-            
 
                 # add median m5
                 zlimsdf.loc[:, 'm5_med'] = m5_med
@@ -424,7 +426,7 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf['nsn_med'],  zlimsdf['var_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                     x, 0.0, 0.0, effi_seasondf, dur_z), axis=1, result_type='expand').T.values
             else:
-                
+
                 for seas in seasons:
                     zlimsdf = self.errordf(
                         pixRA, pixDec, healpixID, seas,
