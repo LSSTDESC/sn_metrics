@@ -435,13 +435,14 @@ class SNNSNMetric(BaseMetric):
 
             # zlims can only be estimated if efficiencies are ok
             idx = effi_seasondf['z'] <= 0.2
+            idx &= effi_seasondf['z'] >= 0.05
             x1ref = -2.0
             colorref = 0.2
             idx &= np.abs(effi_seasondf['x1']-x1ref) < 1.e-5
             idx &= np.abs(effi_seasondf['color']-colorref) < 1.e-5
             sel = effi_seasondf[idx]
 
-            if np.mean(sel['effi']) > 0.10:
+            if np.mean(sel['effi']) > 0.02:
                 # estimate zlims
                 zlimsdf = self.zlims(
                     effi_seasondf, dur_z, groupnames, verbose=self.verbose, timer=self.timer)
