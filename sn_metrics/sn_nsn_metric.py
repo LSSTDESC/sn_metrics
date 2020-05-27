@@ -189,10 +189,10 @@ class SNNSNMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.025  # zstep
+        self.zStep = 0.05  # zstep
         self.daymaxStep = 3.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
-        self.max_rf_phase = 40.  # max ref phase for LC points selection
+        self.max_rf_phase = 60.  # max ref phase for LC points selection
 
         self.min_rf_phase_qual = -15.  # min ref phase for bounds effects
         self.max_rf_phase_qual = 25.  # max ref phase for bounds effects
@@ -877,7 +877,7 @@ class SNNSNMetric(BaseMetric):
         # get efficiencies
         effis = effiInterp(zplot)
         # select data with efficiency decrease
-        idx = np.where(np.diff(effis) < 0.)
+        idx = np.where(np.diff(effis) < -0.005)
         z_effi = np.array(zplot[idx], dtype={
             'names': ['z'], 'formats': [np.float]})
         # from this make some "z-periods" to avoid accidental zdecrease at low z
