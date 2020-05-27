@@ -760,7 +760,7 @@ class SNNSNMetric(BaseMetric):
         if self.zlim_coeff < 0.:
             # in that case zlim is estimated from efficiencies
             # first step: identify redshift domain with efficiency decrease
-            zlimit,status = self.zlim_from_effi(effiInterp, zplot)
+            zlimit, status = self.zlim_from_effi(effiInterp, zplot)
 
         else:
             zlimit, status = self.zlim_from_cumul(
@@ -769,7 +769,7 @@ class SNNSNMetric(BaseMetric):
         return pd.DataFrame({'zlim': [zlimit],
                              'status': [int(status)]})
 
-    def zlim_from_cumul(self, grp, duration_z, effiInterp, zplot):
+    def zlim_from_cumul(self, grp, duration_z, effiInterp, zplot, rate='cte'):
         """
         Method to estimate the redshift limit from the cumulative
         The redshift limit is estimated to be the z value corresponding to:
@@ -781,6 +781,14 @@ class SNNSNMetric(BaseMetric):
           data to process
         duration_z: array
            duration as a function of the redshift
+        effiInterp: interp1d
+          interpolator for efficiencies
+        zplot: interp1d
+          interpolator for redshift values
+        rate: str, opt
+          rate to estimate the number of SN to estimate zlimit
+          rate = cte: rate independent of z
+          rate = SN_rate: rate from SN_Rate class
 
         Returns
         ----------
@@ -790,25 +798,30 @@ class SNNSNMetric(BaseMetric):
           status of the estimation
         """
 
-        # get rate
-        season = np.median(grp['season'])
-        idx = duration_z['season'] == season
-        seas_duration_z = duration_z[idx]
+        if rate == 'SN_rate':
+            # get rate
+            season = np.median(grp['season'])
+            idx = duration_z['season'] == season
+            seas_duration_z = duration_z[idx]
 
-        durinterp_z = interp1d(
-            seas_duration_z['z'], seas_duration_z['season_length'], bounds_error=False, fill_value=0.)
+            durinterp_z = interp1d(
+                seas_duration_z['z'], seas_duration_z['season_length'], bounds_error=False, fill_value=0.)
 
-        # estimate the rates and nsn vs z
-        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
-                                                       zmax=self.zmax,
-                                                       duration_z=durinterp_z,
-                                                       survey_area=self.pixArea)
+            # estimate the rates and nsn vs z
+            zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
+                                                           zmax=self.zmax,
+                                                           duration_z=durinterp_z,
+                                                           survey_area=self.pixArea)
 
-        # rate interpolation
-        rateInterp = interp1d(zz, nsn, kind='linear',
-                              bounds_error=False, fill_value=0)
+            # rate interpolation
+            rateInterp = interp1d(zz, nsn, kind='linear',
+                                  bounds_error=False, fill_value=0)
+        else:
+            # this is for a rate z-independent
+            nsn = np.ones(len(zplot))
+            rateInterp = interp1d(zplot, nsn, kind='linear',
+                                  bounds_error=False, fill_value=0)
 
-        # estimate the cumulated number of SN vs z
         nsn_cum = np.cumsum(effiInterp(zplot)*rateInterp(zplot))
 
         if nsn_cum[-1] >= 1.e-5:
@@ -835,7 +848,6 @@ class SNNSNMetric(BaseMetric):
          data to process
 
         """
-
         import matplotlib.pylab as plt
         fig, ax = plt.subplots()
         x1 = grp['x1'].unique()[0]
@@ -877,12 +889,12 @@ class SNNSNMetric(BaseMetric):
 
         # get efficiencies
         effis = effiInterp(zplot)
-        if len(effis) <1:
-            return 0.0,self.status['low_effi']
+        if len(effis) < 1:
+            return 0.0, self.status['low_effi']
         # select data with efficiency decrease
         idx = np.where(np.diff(effis) < -0.005)
         if len(zplot[idx]) < 1:
-            return 0.0,self.status['low_effi']
+            return 0.0, self.status['low_effi']
 
         z_effi = np.array(zplot[idx], dtype={
             'names': ['z'], 'formats': [np.float]})
@@ -901,7 +913,7 @@ class SNNSNMetric(BaseMetric):
         idd = z_effi['season'] == np.max(z_effi['season'])
         zlimit = np.min(z_effi[idd]['z'])
 
-        return zlimit,self.status['ok']
+        return zlimit, self.status['ok']
 
     def nsn_typedf(self, grp, x1, color, effi_tot, duration_z, search=True):
         """
