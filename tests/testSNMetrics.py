@@ -6,20 +6,61 @@ import sn_plotters.sn_cadencePlotters as sn_cadence_plot
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
 from sn_metrics.sn_nsn_metric import SNNSNMetric
 from sn_tools.sn_utils import GetReference
+from sn_tools.sn_telescope import Telescope
 import matplotlib.pyplot as plt
 import yaml
 import lsst.utils.tests
 import unittest
 import numpy as np
+import os
 from builtins import zip
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 
 m5_ref = dict(
     zip('ugrizy', [23.60, 24.83, 24.38, 23.92, 23.35, 22.44]))
 
+main_repo = 'https://me.lsst.eu/gris'
+ref_dir = 'Reference_Files'
+db_dir = 'Scheduler_DB'
 
-def load(fname, gamma_reference, instrument):
+
+def getRefDir(dirname):
+    fullname = '{}/{}/{}'.format(main_repo, ref_dir, dirname)
+
+    if not os.path.exists(dirname):
+        print('wget path:', fullname)
+        cmd = 'wget --no-verbose --recursive {} --directory-prefix={} --no-clobber --no-parent -nH --cut-dirs=3 -R \'index.html*\''.format(
+            fullname+'/', dirname)
+        os.system(cmd)
+
+
+def getRefFile(refdir, fname):
+    fullname = '{}/{}/{}/{}'.format(main_repo, ref_dir, refdir, fname)
+
+    # check whether the file is available; if not-> get it!
+    if not os.path.isfile(fname):
+        print('wget path:', fullname)
+        cmd = 'wget --no-clobber --no-verbose {}'.format(fullname)
+        os.system(cmd)
+
+
+def getFile(dbDir, dbName, dbExtens, repmain, repofile=''):
+
+    repo_reffiles = '{}/{}'.format(main_repo, repmain)
+    if repofile != '':
+        repo_reffiles = '{}/{}'.format(repo_reffiles, repofile)
+
+    # check whether the file is available; if not-> get it!
+    if not os.path.isfile('{}/{}.{}'.format(dbDir, dbName, dbExtens)):
+        path = '{}/{}.{}'.format(repo_reffiles,
+                                 dbName, dbExtens)
+        print('wget path:', path)
+        cmd = 'wget --no-clobber --no-verbose {} -P {}'.format(path, dbDir)
+        os.system(cmd)
+
+
+def load(fname, gamma_reference, telescope):
     """
      Method to load reference LC files
 
@@ -34,7 +75,7 @@ def load(fname, gamma_reference, instrument):
 
      """
     lc_ref = GetReference(
-        fname, gamma_reference, instrument)
+        fname, gamma_reference, telescope)
 
     return lc_ref
 
@@ -60,6 +101,11 @@ def fakeData(band, season=1):
               59973.25978009, 59976.26383102, 59988.20670139, 59991.18412037,
               60004.1853588, 60032.08975694, 60045.11981481, 60047.98747685,
               60060.02083333, 60071.986875, 60075.96452546]
+
+    cadence = 3.
+    daymin = 59948
+    season_length = 180.
+    dayobs = list(np.arange(daymin, daymin+season_length, cadence))
     day0 = np.min(dayobs)
     npts = len(dayobs)
     data = np.zeros(npts, dtype=list(zip(names, types)))
@@ -284,11 +330,21 @@ class TestNSNmetrics(unittest.TestCase):
     def testNSNMetric(self):
         """Test the NSN metric """
 
-        # reference dir
-        dir_ref = '../../reference_files/'
-        # template dir
-        dir_template = '../../../Templates'
-        #dir_template = '../../../..'
+        x1_colors = [(-2.0, 0.2), (0.0, 0.0)]
+
+        # get template files
+        templateDir = 'Templates'
+
+        for (x1, color) in x1_colors:
+            fName = 'LC_{}_{}_vstack'.format(x1, color)
+            fExtens = 'hdf5'
+
+            getFile(templateDir, fName, fExtens, ref_dir, 'Templates')
+
+        # get reference files
+        refDir = 'reference_files'
+        getRefDir(refDir)
+
         # input parameters for this metric
         name = 'NSN'
         season = 1
@@ -312,26 +368,30 @@ class TestNSNmetrics(unittest.TestCase):
         Instrument['airmass'] = 1.2  # airmass value
         Instrument['atmos'] = True  # atmos
         Instrument['aerosol'] = False  # aerosol
+        telescope = Telescope(name=Instrument['name'],
+                              throughput_dir=Instrument['throughput_dir'],
+                              atmos_dir=Instrument['atmos_dir'],
+                              atmos=Instrument['atmos'],
+                              aerosol=Instrument['aerosol'],
+                              airmass=Instrument['airmass'])
 
         lc_reference = {}
-        gamma_reference = '{}/gamma.hdf5'.format(dir_ref)
-
-        x1_colors = [(-2.0, 0.2), (0.0, 0.0)]
+        gamma_reference = '{}/gamma.hdf5'.format(refDir)
 
         # load ref files here
         for j in range(len(x1_colors)):
             x1 = x1_colors[j][0]
             color = x1_colors[j][1]
             fname = '{}/LC_{}_{}_vstack.hdf5'.format(
-                dir_template, x1, color)
+                templateDir, x1, color)
 
             lc_reference[x1_colors[j]] = load(
-                fname, gamma_reference, Instrument)
+                fname, gamma_reference, telescope)
 
         # LC selection criteria
 
-        n_bef = 2
-        n_aft = 5
+        n_bef = 4
+        n_aft = 10
         snr_min = 5.
         n_phase_min = 1
         n_phase_max = 1
@@ -343,7 +403,7 @@ class TestNSNmetrics(unittest.TestCase):
 
         # load x1_color_dist
 
-        x1_color_dist = np.genfromtxt('{}/Dist_X1_Color_JLA_high_z.txt'.format(dir_ref), dtype=None,
+        x1_color_dist = np.genfromtxt('{}/Dist_X1_Color_JLA_high_z.txt'.format(refDir), dtype=None,
                                       names=('x1', 'color', 'weight_x1', 'weight_x1', 'weight_tot'))
 
         # metric instance
@@ -358,7 +418,7 @@ class TestNSNmetrics(unittest.TestCase):
             outputType='zlims',
             proxy_level=proxy_level,
             x1_color_dist=x1_color_dist,
-            coadd=coadd, lightOutput=False, T0s='all')
+            coadd=coadd, lightOutput=False, T0s='all', zlim_coeff=0.95)
 
         # get some data to run the metric
         bands = 'grizy'
@@ -377,9 +437,16 @@ class TestNSNmetrics(unittest.TestCase):
         res = metric.run(data)
 
         # compare the results to reference: this is the unit test
-        zlim_ref = np.asarray([0.599917, 0.763300])
+        #zlim_ref = np.asarray([0.599917, 0.763300])
+        zlim_ref = np.asarray([0.659348, 0.901733])
         #print(res['zlim'], zlim_ref, np.isclose(res['zlim'], zlim_ref))
         assert(np.isclose(res['zlim'], zlim_ref).all())
+
+        # clean the directory
+        dirnames = [refDir, templateDir]
+        for thedir in dirnames:
+            if os.path.isdir(thedir):
+                os.system('rm -rf {}'.format(thedir))
 
 
 """
