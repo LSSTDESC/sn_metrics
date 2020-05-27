@@ -438,7 +438,7 @@ class TestNSNmetrics(unittest.TestCase):
 
         # compare the results to reference: this is the unit test
         #zlim_ref = np.asarray([0.599917, 0.763300])
-        zlim_ref = np.asarray([0.659348, 0.901733])
+        zlim_ref = np.asarray([0.63650, 0.87525])
         #print(res['zlim'], zlim_ref, np.isclose(res['zlim'], zlim_ref))
         assert(np.isclose(res['zlim'], zlim_ref).all())
 
