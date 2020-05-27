@@ -246,9 +246,11 @@ class SNNSNMetric(BaseMetric):
         plt.show()
         """
 
+        """
         for seas in np.unique(dataSlice['season']):
             idx = dataSlice['season'] == seas
             print(seas, len(dataSlice[idx]))
+        """
         # time 0 for performance estimation purpose
         time_ref = time.time()
 
@@ -758,8 +760,7 @@ class SNNSNMetric(BaseMetric):
         if self.zlim_coeff < 0.:
             # in that case zlim is estimated from efficiencies
             # first step: identify redshift domain with efficiency decrease
-            zlimit = self.zlim_from_effi(effiInterp, zplot)
-            status = self.status['ok']
+            zlimit,status = self.zlim_from_effi(effiInterp, zplot)
 
         else:
             zlimit, status = self.zlim_from_cumul(
@@ -876,8 +877,13 @@ class SNNSNMetric(BaseMetric):
 
         # get efficiencies
         effis = effiInterp(zplot)
+        if len(effis) <1:
+            return 0.0,self.status['low_effi']
         # select data with efficiency decrease
         idx = np.where(np.diff(effis) < -0.005)
+        if len(zplot[idx]) < 1:
+            return 0.0,self.status['low_effi']
+
         z_effi = np.array(zplot[idx], dtype={
             'names': ['z'], 'formats': [np.float]})
         # from this make some "z-periods" to avoid accidental zdecrease at low z
@@ -895,7 +901,7 @@ class SNNSNMetric(BaseMetric):
         idd = z_effi['season'] == np.max(z_effi['season'])
         zlimit = np.min(z_effi[idd]['z'])
 
-        return zlimit
+        return zlimit,self.status['ok']
 
     def nsn_typedf(self, grp, x1, color, effi_tot, duration_z, search=True):
         """
