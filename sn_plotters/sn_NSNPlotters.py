@@ -198,7 +198,7 @@ class NSNAnalysis:
         print('looking for', search_path)
         fileNames = glob.glob(search_path)
         # fileName='{}/{}_CadenceMetric_{}.npy'.format(dirFile,dbName,band)
-        # print(fileNames)
+        print(fileNames)
         if len(fileNames) > 0:
             self.data_summary = self.process(fileNames)
         else:
@@ -379,6 +379,8 @@ class NSNAnalysis:
         cmap = plt.cm.jet
         cmap.set_under('w')
         resleg = op(data[varName])
+        if 'nsn' in varName:
+            resleg = int(resleg)
         title = '{}: {}'.format(leg, resleg)
 
         hp.mollview(hpxmap, min=xmin, max=xmax, cmap=cmap,
