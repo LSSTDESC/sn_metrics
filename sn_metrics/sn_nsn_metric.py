@@ -319,7 +319,8 @@ class SNNSNMetric(BaseMetric):
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
             toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color', 'zlim',
-                      'nsn_med', 'var_nsn_med']
+                      'zlimp', 'zlimm',
+                      'nsn_med', 'err_nsn_med']
             print(varb_totdf[toshow])
 
         # return the output as chosen by the user (outputType)
@@ -389,7 +390,7 @@ class SNNSNMetric(BaseMetric):
         else:
             obs = obs.to_records(index=False)
 
-        #print('after stacker', seasons, len(obs))
+        # print('after stacker', seasons, len(obs))
         obs.sort(order='night')
         # print('data', obs[['night', 'filter',
         #                  'observationStartMJD', 'fieldRA', 'fieldDec']])
@@ -406,7 +407,7 @@ class SNNSNMetric(BaseMetric):
         sn, lc = self.gen_LC_SN(obs, gen_p.to_records(
             index=False), verbose=self.verbose, timer=self.timer)
 
-        #print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
+        # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
         if self.verbose:
             idx = np.abs(sn['x1']+2) < 1.e-5
             idx &= np.abs(sn['z']-0.2) < 1.e-5
@@ -455,7 +456,7 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf.loc[:, 'gap_med'] = gap_med
 
                 # estimate number of medium supernovae
-                zlimsdf['nsn_med'],  zlimsdf['var_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
+                zlimsdf['nsn_med'],  zlimsdf['err_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                     x, 0.0, 0.0, effi_seasondf, dur_z), axis=1, result_type='expand').T.values
             else:
 
@@ -584,8 +585,10 @@ class SNNSNMetric(BaseMetric):
                              'x1': [-1.0],
                              'color': [-1.0],
                              'zlim': [-1.0],
+                             'zlimp': [-1.0],
+                             'zlimm': [-1.0],
                              'nsn_med': [-1.0],
-                             'var_nsn_med': [-1.0],
+                             'err_nsn_med': [-1.0],
                              'nsn': [-1.0],
                              'var_nsn': [-1.0],
                              'status': [int(errortype)],
@@ -662,13 +665,12 @@ class SNNSNMetric(BaseMetric):
         if self.ploteffi:
             import matplotlib.pylab as plt
             fig, ax = plt.subplots()
-            figb, axb = plt.subplots()
+            # figb, axb = plt.subplots()
 
             self.plot(ax, effi, 'effi', 'effi_err',
                       'Observing Efficiencies', ls='-')
-            sndf['sigma_color'] = np.sqrt(sndf['Cov_colorcolor'])
-            self.plot(axb, sndf, 'sigma_color', None, '$\sigma_{color}$')
-            # get efficiencies vs z
+            # sndf['sigma_color'] = np.sqrt(sndf['Cov_colorcolor'])
+            # self.plot(axb, sndf, 'sigma_color', None, '$\sigma_{color}$')
 
             plt.show()
 
@@ -752,10 +754,20 @@ class SNNSNMetric(BaseMetric):
 
         if len(grp['z']) <= 3:
             return pd.DataFrame({'zlim': [zlimit],
+                                 'zlimp': [zlimit],
+                                 'zlimm': [zlimit],
                                  'status': [int(status)]})
         # interpolate efficiencies vs z
         effiInterp = interp1d(
             grp['z'], grp['effi'], kind='linear', bounds_error=False, fill_value=0.)
+        """
+        effiInterp_plus = interp1d(
+            grp['z'], grp['effi']+grp['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
+        effiInterp_minus = interp1d(
+            grp['z'], grp['effi']-grp['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
+        """
+        effiInterp_err = interp1d(
+            grp['z'], grp['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
 
         if self.zlim_coeff < 0.:
             # in that case zlim is estimated from efficiencies
@@ -763,13 +775,15 @@ class SNNSNMetric(BaseMetric):
             zlimit, status = self.zlim_from_effi(effiInterp, zplot)
 
         else:
-            zlimit, status = self.zlim_from_cumul(
-                grp, duration_z, effiInterp, zplot)
+            zlimit, zlimit_plus, zlimit_minus, status = self.zlim_from_cumul(
+                grp, duration_z, effiInterp, effiInterp_err, zplot, rate='SN_rate')
 
         return pd.DataFrame({'zlim': [zlimit],
+                             'zlimp': [zlimit_plus],
+                             'zlimm': [zlimit_minus],
                              'status': [int(status)]})
 
-    def zlim_from_cumul(self, grp, duration_z, effiInterp, zplot, rate='cte'):
+    def zlim_from_cumul(self, grp, duration_z, effiInterp, effiInterp_err, zplot, rate='cte'):
         """
         Method to estimate the redshift limit from the cumulative
         The redshift limit is estimated to be the z value corresponding to:
@@ -816,29 +830,49 @@ class SNNSNMetric(BaseMetric):
             # rate interpolation
             rateInterp = interp1d(zz, nsn, kind='linear',
                                   bounds_error=False, fill_value=0)
+            rateInterp_err = interp1d(zz, err_nsn, kind='linear',
+                                      bounds_error=False, fill_value=0)
+
         else:
             # this is for a rate z-independent
             nsn = np.ones(len(zplot))
             rateInterp = interp1d(zplot, nsn, kind='linear',
                                   bounds_error=False, fill_value=0)
+            rateInterp_err = interp1d(zplot, 0.01*nsn, kind='linear',
+                                      bounds_error=False, fill_value=0)
 
         nsn_cum = np.cumsum(effiInterp(zplot)*rateInterp(zplot))
+        nsn_cum_err = []
+        for i in range(len(zplot)):
+            siga = effiInterp_err(zplot[:i+1])*rateInterp(zplot[:i+1])
+            sigb = effiInterp(zplot[:i+1])*rateInterp_err(zplot[:i+1])
+            nsn_cum_err.append(np.cumsum(
+                np.sqrt(np.sum(siga**2 + sigb**2))).item())
 
         if nsn_cum[-1] >= 1.e-5:
             nsn_cum_norm = nsn_cum/nsn_cum[-1]  # normalize
-            zlim = interp1d(nsn_cum_norm, zplot)
+            nsn_cum_norm_err = nsn_cum_err/nsn_cum[-1]  # normalize
+            zlim = interp1d(nsn_cum_norm, zplot,
+                            bounds_error=False, fill_value=-1.)
+            zlim_plus = interp1d(nsn_cum_norm+nsn_cum_norm_err,
+                                 zplot, bounds_error=False, fill_value=-1.)
+            zlim_minus = interp1d(
+                nsn_cum_norm-nsn_cum_norm_err, zplot, bounds_error=False, fill_value=-1.)
             zlimit = zlim(self.zlim_coeff).item()
+            zlimit_minus = zlim_plus(self.zlim_coeff).item()
+            zlimit_plus = zlim_minus(self.zlim_coeff).item()
+
             status = self.status['ok']
 
             if self.ploteffi:
-                self.plot_NSN_cumul(grp, nsn_cum_norm, zplot)
+                self.plot_NSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot)
         else:
             zlimit = 0.
             status = self.status['low_effi']
 
-        return zlimit, status
+        return zlimit, zlimit_plus, zlimit_minus, status
 
-    def plot_NSN_cumul(self, grp, nsn_cum_norm, zplot):
+    def plot_NSN_cumul(self, grp, nsn_cum_norm, nsn_cum_norm_err, zplot):
         """
         Method to plot the NSN cumulative vs redshift
 
@@ -854,8 +888,9 @@ class SNNSNMetric(BaseMetric):
         color = grp['color'].unique()[0]
 
         ax.plot(zplot, nsn_cum_norm,
-                label='(x1,color)=({},{})'.format(x1, color))
-
+                label='(x1,color)=({},{})'.format(x1, color), color='r')
+        ax.fill_between(zplot, nsn_cum_norm-nsn_cum_norm_err,
+                        nsn_cum_norm+nsn_cum_norm_err, color='y')
         ftsize = 15
         ax.set_ylabel('NSN ($z<$)', fontsize=ftsize)
         ax.set_xlabel('z', fontsize=ftsize)
@@ -863,7 +898,8 @@ class SNNSNMetric(BaseMetric):
         ax.yaxis.set_tick_params(labelsize=ftsize)
         ax.set_xlim((0.0, 0.8))
         ax.set_ylim((0.0, 1.05))
-        ax.plot([0., 1.2], [0.95, 0.95], ls='--', color='k')
+        ax.plot([0., 1.2], [self.zlim_coeff, self.zlim_coeff],
+                ls='--', color='k')
         plt.legend(fontsize=ftsize)
         plt.show()
 
@@ -968,7 +1004,8 @@ class SNNSNMetric(BaseMetric):
         else:
             effisel = effi_tot
 
-        nsn, var_nsn = self.nsn(effisel, grp['zlim'], durinterp_z)
+        nsn, var_nsn = self.nsn(
+            effisel, grp['zlim'], grp['zlimp'], grp['zlimm'], durinterp_z)
 
         return (nsn, var_nsn)
 
@@ -1211,7 +1248,7 @@ class SNNSNMetric(BaseMetric):
                              'effi_var': interp_var(zvals),
                              'z': zvals})
 
-    def nsn(self, effi, zlim, duration_z):
+    def nsn(self, effi, zlim, zlimp, zlimm, duration_z):
         """
         Method to estimate the number of supernovae
 
@@ -1252,8 +1289,8 @@ class SNNSNMetric(BaseMetric):
         effiInterp = interp1d(
             effi['z'], effi['effi'], kind='linear', bounds_error=False, fill_value=0.)
         # interpolate variance efficiency vs z
-        effi_varInterp = interp1d(
-            effi['z'], effi['effi_var'], kind='linear', bounds_error=False, fill_value=0.)
+        effiInterp_err = interp1d(
+            effi['z'], effi['effi_err'], kind='linear', bounds_error=False, fill_value=0.)
 
         # estimate the cumulated number of SN vs z
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
@@ -1262,13 +1299,28 @@ class SNNSNMetric(BaseMetric):
                                                        duration_z=duration_z,
                                                        survey_area=self.pixArea)
 
+        # rate interpolation
+        rateInterp = interp1d(zz, nsn, kind='linear',
+                              bounds_error=False, fill_value=0)
+        rateInterp_err = interp1d(zz, err_nsn, kind='linear',
+                                  bounds_error=False, fill_value=0)
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
 
-        var_cum = np.cumsum(nsn)*effiInterp(zplot) * \
+        err_cum = []
+        """
+        err_cum = np.cumsum(nsn)*effiInterp(zplot) * \
             (1.-effiInterp(zplot))+np.cumsum(err_nsn**2)
+        """
+        for i in range(len(zplot)):
+            erra = effiInterp_err(zplot[:i+1])*rateInterp(zplot[:i+1])
+            errb = effiInterp(zplot[:i+1])*rateInterp_err(zplot[:i+1])
+            err_cum.append(np.cumsum(
+                np.sqrt(np.sum(erra**2 + errb**2))).item())
 
-        nsn_interp = interp1d(zplot, nsn_cum)
-        var_interp = interp1d(zplot, var_cum)
+        nsn_interp = interp1d(
+            zplot, nsn_cum, bounds_error=False, fill_value=0.)
+        err_interp = interp1d(
+            zplot, err_cum, bounds_error=False, fill_value=0.)
         """
         # estimate numbers if we had efficiencies equal to one...
         nsn_all = interp1d(zplot, np.cumsum(nsn))
@@ -1277,9 +1329,16 @@ class SNNSNMetric(BaseMetric):
 
         """
         nsn = nsn_interp(zlim).item()
-        var_nsn = var_interp(zlim).item()
+        err_nsn = err_interp(zlim).item()
+        nsnp = nsn_interp(zlimp).item()
+        nsnm = nsn_interp(zlimm).item()
 
-        return [nsn, var_nsn]
+        err_nsn_zlim = (nsnp-nsnm)/2.
+        if nsnp < 1.e-5:
+            err_nsn_zlim = (nsn-nsnm)
+
+        err_nsn = np.sqrt(err_nsn**2+err_nsn_zlim**2)
+        return [nsn, err_nsn]
 
     def seasonInfo(self, grp):
         """
