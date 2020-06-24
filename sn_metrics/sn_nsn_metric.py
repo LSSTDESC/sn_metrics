@@ -16,6 +16,8 @@ from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
 from scipy.interpolate import RegularGridInterpolator
 from functools import wraps
+from astropy.coordinates import SkyCoord
+from dustmaps.sfd import SFDQuery
 
 # Define decorators
 
@@ -126,7 +128,7 @@ class SNNSNMetric(BaseMetric):
       if <0: zlim is estimated as the redshift corresponding to a decrease of efficiency
     """
 
-    def __init__(self, lc_reference,
+    def __init__(self, lc_reference, dustcorr,
                  metricName='SNNSNMetric',
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
@@ -134,7 +136,7 @@ class SNNSNMetric(BaseMetric):
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1,
-                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, **kwargs):
+                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -152,6 +154,8 @@ class SNNSNMetric(BaseMetric):
         self.x1_color_dist = x1_color_dist
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
+        self.ebvofMW = ebvofMW
+
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
 
@@ -180,7 +184,7 @@ class SNNSNMetric(BaseMetric):
 
         # loading reference LC files
         for key, vals in lc_reference.items():
-            self.lcFast[key] = LCfast(vals, key[0], key[1], telescope,
+            self.lcFast[key] = LCfast(vals, dustcorr, key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol,
@@ -254,6 +258,24 @@ class SNNSNMetric(BaseMetric):
         # time 0 for performance estimation purpose
         time_ref = time.time()
 
+        # Get ebvofMW here
+        ebvofMW = self.ebvofMW
+        if ebvofMW < 0.:
+            RA = np.mean(dataSlice[self.RACol])
+            Dec = np.mean(dataSlice[self.DecCol])
+            # in that case ebvofMW value is taken from a map
+            coords = SkyCoord(RA, Dec, unit='deg')
+            try:
+                sfd = SFDQuery()
+            except Exception as err:
+                from dustmaps.config import config
+                config['data_dir'] = 'dustmaps'
+                import dustmaps.sfd
+                dustmaps.sfd.fetch()
+                # dustmaps('dustmaps')
+            sfd = SFDQuery()
+            ebvofMW = sfd(coords)
+
         # get the seasons
         seasons = self.season
 
@@ -310,7 +332,7 @@ class SNNSNMetric(BaseMetric):
         for seas in seasons:
             # get seasons processing
             vara_df, varb_df = self.run_seasons(
-                dataSlice, [seas], gen_par, dur_z, verbose=self.verbose, timer=self.timer)
+                dataSlice, [seas], gen_par, dur_z, ebvofMW, verbose=self.verbose, timer=self.timer)
 
             vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
             varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
@@ -337,7 +359,7 @@ class SNNSNMetric(BaseMetric):
 
     @verbose_this('Processing season')
     @time_this('Processing season')
-    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, **kwargs):
+    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, **kwargs):
         """
         Method to run on seasons
 
@@ -347,6 +369,12 @@ class SNNSNMetric(BaseMetric):
           data to process (scheduler simulations)
         seasons: list(int)
           list of seasons to process
+        gen_par: numpy array
+           parameters for generation
+        dura_z: array
+          season duration vs z
+        ebvofMW: float
+           ebvofMW for dust effect
 
         Returns
         ---------
@@ -404,7 +432,7 @@ class SNNSNMetric(BaseMetric):
         # simulate supernovae and lc
         if self.verbose:
             print("LC generation")
-        sn, lc = self.gen_LC_SN(obs, gen_p.to_records(
+        sn, lc = self.gen_LC_SN(obs, ebvofMW, gen_p.to_records(
             index=False), verbose=self.verbose, timer=self.timer)
 
         # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
@@ -1491,7 +1519,7 @@ class SNNSNMetric(BaseMetric):
 
     @verbose_this('Simulation SN')
     @time_this('Simulation SN')
-    def gen_LC_SN(self, obs, gen_par, **kwargs):
+    def gen_LC_SN(self, obs, ebvofMW, gen_par, **kwargs):
         """
         Method to simulate LC and supernovae
 
@@ -1499,6 +1527,8 @@ class SNNSNMetric(BaseMetric):
         ---------------
         obs: numpy array
           array of observations (from scheduler)
+        ebvofMW: float
+           e(B-V) of MW for dust effects
         gen_par: numpy array
           array of parameters for simulation
 
@@ -1516,7 +1546,7 @@ class SNNSNMetric(BaseMetric):
             if key == (-2.0, 0.2):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
-            lc = vals(obs, gen_par_cp, bands='grizy')
+            lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
             if self.ploteffi and len(lc) > 0:
