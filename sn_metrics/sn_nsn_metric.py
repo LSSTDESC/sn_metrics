@@ -183,7 +183,7 @@ class SNNSNMetric(BaseMetric):
             self.lcFast[key] = LCfast(vals, key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
-                                      self.m5Col, self.seasonCol,
+                                      self.m5Col, self.seasonCol, self.nexpCol,
                                       self.snr_min, lightOutput=lightOutput)
 
         # loading parameters
