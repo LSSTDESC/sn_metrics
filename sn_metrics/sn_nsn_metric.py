@@ -184,7 +184,7 @@ class SNNSNMetric(BaseMetric):
 
         # loading reference LC files
         for key, vals in lc_reference.items():
-            self.lcFast[key] = LCfast(vals, dustcorr, key[0], key[1], telescope,
+            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol,
