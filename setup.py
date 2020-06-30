@@ -9,7 +9,7 @@ setup(
     author='Philippe Gris',
     author_email='philippe.gris@clermont.in2p3.fr',
     license='BSD',
-    packages=['sn_metrics', 'sn_plotters'],
+    packages=['sn_metrics'],
     python_requires='>=3.5',
     zip_safe=False,
     install_requires=[
