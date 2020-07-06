@@ -331,8 +331,11 @@ class SNNSNMetric(BaseMetric):
         # loop on seasons
         for seas in seasons:
             # get seasons processing
+            idx = season_info['season'] == seas
+            cadence = season_info[idx]['cadence'].item()
+            season_length = season_info[idx]['season_length'].item()
             vara_df, varb_df = self.run_seasons(
-                dataSlice, [seas], gen_par, dur_z, ebvofMW, verbose=self.verbose, timer=self.timer)
+                dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, verbose=self.verbose, timer=self.timer)
 
             vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
             varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
@@ -359,7 +362,7 @@ class SNNSNMetric(BaseMetric):
 
     @verbose_this('Processing season')
     @time_this('Processing season')
-    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, **kwargs):
+    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, cadence, season_length, **kwargs):
         """
         Method to run on seasons
 
@@ -432,21 +435,24 @@ class SNNSNMetric(BaseMetric):
         # simulate supernovae and lc
         if self.verbose:
             print("LC generation")
-        sn, lc = self.gen_LC_SN(obs, ebvofMW, gen_p.to_records(
-            index=False), verbose=self.verbose, timer=self.timer)
 
-        # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
-        if self.verbose:
-            idx = np.abs(sn['x1']+2) < 1.e-5
-            idx &= np.abs(sn['z']-0.2) < 1.e-5
-            sel = sn[idx]
-            sel = sel.sort_values(by=['z', 'daymax'])
+        sn = pd.DataFrame()
+        if ebvofMW < 0.25:
+            sn, lc = self.gen_LC_SN(obs, ebvofMW, gen_p.to_records(
+                index=False), verbose=self.verbose, timer=self.timer)
 
-            print('sn and lc', len(sn),
-                  sel[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor', 'n_bef', 'n_aft']])
+            # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
+            if self.verbose:
+                idx = np.abs(sn['x1']+2) < 1.e-5
+                idx &= np.abs(sn['z']-0.2) < 1.e-5
+                sel = sn[idx]
+                sel = sel.sort_values(by=['z', 'daymax'])
 
-        if self.outputType == 'lc' or self.outputType == 'sn':
-            return sn, lc
+                print('sn and lc', len(sn),
+                      sel[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor', 'n_bef', 'n_aft']])
+
+            if self.outputType == 'lc' or self.outputType == 'sn':
+                return sn, lc
 
         if sn.empty:
             # no LC could be simulated -> fill output with errors
@@ -456,9 +462,10 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf = self.errordf(
                     pixRA, pixDec, healpixID, seas,
                     self.status['nosn'],
-                    m5_med, gap_max, gap_med)
+                    m5_med, gap_max, gap_med, ebvofMW, cadence, season_length)
                 effi_seasondf = self.erroreffi(
                     pixRA, pixDec, healpixID, seas)
+            return effi_seasondf, zlimsdf
         else:
             # LC could be simulated -> estimate efficiencies
             effi_seasondf = self.effidf(
@@ -482,6 +489,9 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf.loc[:, 'm5_med'] = m5_med
                 zlimsdf.loc[:, 'gap_max'] = gap_max
                 zlimsdf.loc[:, 'gap_med'] = gap_med
+                zlimsdf.loc[:, 'ebvofMW'] = ebvofMW
+                zlimsdf.loc[:, 'cadence'] = cadence
+                zlimsdf.loc[:, 'season_length'] = season_length
 
                 # estimate number of medium supernovae
                 zlimsdf['nsn_med'],  zlimsdf['err_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
@@ -492,7 +502,7 @@ class SNNSNMetric(BaseMetric):
                     zlimsdf = self.errordf(
                         pixRA, pixDec, healpixID, seas,
                         self.status['low_effi'],
-                        m5_med, gap_max, gap_med)
+                        m5_med, gap_max, gap_med, ebvofMW, cadence, season_length)
                     effi_seasondf = self.erroreffi(
                         pixRA, pixDec, healpixID, seas)
 
@@ -582,7 +592,7 @@ class SNNSNMetric(BaseMetric):
         return df
 
     def errordf(self, pixRA, pixDec, healpixID, season, errortype,
-                m5_med, gap_max, gap_med):
+                m5_med, gap_max, gap_med, ebvofMW, cadence, season_length):
         """
         Method to return error df related to zlims values
 
@@ -604,6 +614,12 @@ class SNNSNMetric(BaseMetric):
           max internight gap
         gap_med: float
           median internight gap
+        ebvofMW: float
+            E(B-V) of MW
+        cadence: float
+           cadence of observation
+        season_length: float
+          length of the season
         """
 
         return pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
@@ -622,7 +638,10 @@ class SNNSNMetric(BaseMetric):
                              'status': [int(errortype)],
                              'm5_med': [m5_med],
                              'gap_max': [gap_max],
-                             'gap_med': [gap_med]})
+                             'gap_med': [gap_med],
+                             'ebvofMW': [ebvofMW],
+                             'cadence': [cadence],
+                             'season_length': [season_length]})
 
     def erroreffi(self, pixRA, pixDec, healpixID, season):
         """
