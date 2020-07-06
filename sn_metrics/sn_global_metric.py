@@ -116,30 +116,33 @@ class SNGlobalMetric(BaseMetric):
         # estimate the area observed that night (LSST focal plane)
         # in total and per filter
 
-        obs_area = {}
+        #obs_area = {}
         nvisits = {}
-        obs_area['all'] = self.area(dataSlice)
+        #obs_area['all'] = self.area(dataSlice)
         nvisits['all'] = len(dataSlice)
         for band in 'ugrizy':
             idx = dataSlice[self.filterCol] == band
             sel = dataSlice[idx]
-            obs_area[band] = 0.0
+            #obs_area[band] = 0.0
             nvisits[band] = 0
             if len(sel) > 0:
-                obs_area[band] = self.area(sel)
+                #obs_area[band] = self.area(sel)
                 nvisits[band] = len(sel)
 
         r = []
         names = []
-        r = [night, nfc, nfc_noddf, obs_area['all'], nvisits['all'], nddf]
-        names = ['night', 'nfc', 'nfc_noddf', 'obs_area', 'nvisits', 'nddf']
-        r += [obs_area[band] for band in 'ugrizy']
-        names += ['obs_area_{}'.format(band) for band in 'ugrizy']
+        #r = [night, nfc, nfc_noddf, obs_area['all'], nvisits['all'], nddf]
+        #names = ['night', 'nfc', 'nfc_noddf', 'obs_area', 'nvisits', 'nddf']
+        r = [night, nfc, nfc_noddf, nvisits['all'], nddf]
+        names = ['night', 'nfc', 'nfc_noddf', 'nvisits', 'nddf']
+
+        #r += [obs_area[band] for band in 'ugrizy']
+        #names += ['obs_area_{}'.format(band) for band in 'ugrizy']
         r += [nvisits[band] for band in 'ugrizy']
         names += ['nvisits_{}'.format(band) for band in 'ugrizy']
 
         # get Moon vals
-        for val in ['moonRA', 'moonDec', 'moonAlt', 'moonAz', 'moonDistance', 'moonPhase']:
+        for val in ['moonRA', 'moonDec', 'moonAlt', 'moonAz', 'moonDistance', 'moonPhase', 'cloud', 'fiveSigmaDepth']:
             r += [np.median(dataSlice[val])]
             names += ['med_{}'.format(val)]
 
