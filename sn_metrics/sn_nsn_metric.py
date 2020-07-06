@@ -334,8 +334,11 @@ class SNNSNMetric(BaseMetric):
             idx = season_info['season'] == seas
             cadence = season_info[idx]['cadence'].item()
             season_length = season_info[idx]['season_length'].item()
+            Nvisits = {}
+            for b in 'ugrizy':
+                Nvisits[b] = season_info[idx]['Nvisits_{}'.format(b)].item()
             vara_df, varb_df = self.run_seasons(
-                dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, verbose=self.verbose, timer=self.timer)
+                dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
 
             vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
             varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
@@ -362,7 +365,7 @@ class SNNSNMetric(BaseMetric):
 
     @verbose_this('Processing season')
     @time_this('Processing season')
-    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, cadence, season_length, **kwargs):
+    def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, cadence, season_length, Nvisits, **kwargs):
         """
         Method to run on seasons
 
@@ -492,6 +495,8 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf.loc[:, 'ebvofMW'] = ebvofMW
                 zlimsdf.loc[:, 'cadence'] = cadence
                 zlimsdf.loc[:, 'season_length'] = season_length
+                for b, vals in Nvisits.items():
+                    zlimsdf.loc[:, 'Nvisits_{}'.format(b)] = vals
 
                 # estimate number of medium supernovae
                 zlimsdf['nsn_med'],  zlimsdf['err_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
@@ -502,7 +507,7 @@ class SNNSNMetric(BaseMetric):
                     zlimsdf = self.errordf(
                         pixRA, pixDec, healpixID, seas,
                         self.status['low_effi'],
-                        m5_med, gap_max, gap_med, ebvofMW, cadence, season_length)
+                        m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits)
                     effi_seasondf = self.erroreffi(
                         pixRA, pixDec, healpixID, seas)
 
@@ -592,7 +597,7 @@ class SNNSNMetric(BaseMetric):
         return df
 
     def errordf(self, pixRA, pixDec, healpixID, season, errortype,
-                m5_med, gap_max, gap_med, ebvofMW, cadence, season_length):
+                m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits):
         """
         Method to return error df related to zlims values
 
@@ -620,6 +625,8 @@ class SNNSNMetric(BaseMetric):
            cadence of observation
         season_length: float
           length of the season
+        Nvisits: dict
+           total number of visits per band and per season
         """
 
         return pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
@@ -641,7 +648,13 @@ class SNNSNMetric(BaseMetric):
                              'gap_med': [gap_med],
                              'ebvofMW': [ebvofMW],
                              'cadence': [cadence],
-                             'season_length': [season_length]})
+                             'season_length': [season_length],
+                             'Nvisits_u': Nvisits['u'],
+                             'Nvisits_g': Nvisits['g'],
+                             'Nvisits_r': Nvisits['r'],
+                             'Nvisits_y': Nvisits['i'],
+                             'Nvisits_z': Nvisits['z'],
+                             'Nvisits_y': Nvisits['y']})
 
     def erroreffi(self, pixRA, pixDec, healpixID, season):
         """
@@ -1405,6 +1418,13 @@ class SNNSNMetric(BaseMetric):
         df['MJD_max'] = grp[self.mjdCol].max()
         df['season_length'] = df['MJD_max']-df['MJD_min']
         df['cadence'] = 0.
+
+        for band in 'ugrizy':
+            Nvisits = 0
+            idx = grp[self.filterCol] == band
+            if len(grp[idx]) > 0:
+                Nvisits = grp[idx][self.nexpCol].sum()
+            df['Nvisits_{}'.format(band)] = Nvisits
 
         if len(grp) > 5:
             to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
