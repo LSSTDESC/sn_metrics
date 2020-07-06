@@ -332,16 +332,18 @@ class SNNSNMetric(BaseMetric):
         for seas in seasons:
             # get seasons processing
             idx = season_info['season'] == seas
-            cadence = season_info[idx]['cadence'].item()
-            season_length = season_info[idx]['season_length'].item()
-            Nvisits = {}
-            for b in 'ugrizy':
-                Nvisits[b] = season_info[idx]['Nvisits_{}'.format(b)].item()
-            vara_df, varb_df = self.run_seasons(
-                dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
+            if len(season_info[idx]) > 0:
+                cadence = season_info[idx]['cadence'].item()
+                season_length = season_info[idx]['season_length'].item()
+                Nvisits = {}
+                for b in 'ugrizy':
+                    Nvisits[b] = season_info[idx]['Nvisits_{}'.format(
+                        b)].item()
+                vara_df, varb_df = self.run_seasons(
+                    dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
 
-            vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
-            varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
+                vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
+                varb_totdf = pd.concat([varb_totdf, varb_df], sort=False)
 
         # estimate time of processing
         if self.verbose:
@@ -465,7 +467,7 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf = self.errordf(
                     pixRA, pixDec, healpixID, seas,
                     self.status['nosn'],
-                    m5_med, gap_max, gap_med, ebvofMW, cadence, season_length)
+                    m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits,)
                 effi_seasondf = self.erroreffi(
                     pixRA, pixDec, healpixID, seas)
             return effi_seasondf, zlimsdf
