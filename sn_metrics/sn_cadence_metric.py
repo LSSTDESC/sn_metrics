@@ -145,12 +145,11 @@ class SNCadenceMetric(BaseMetric):
                                               np.mean(np.copy(dataSlice[self.DecCol])))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
-                                         healpixID]*len(dataSlice))
+                                         healpixID]*len(dataSlice), usemask=False)
             dataSlice = rf.append_fields(
-                dataSlice, 'pixRA', [pixRA]*len(dataSlice))
+                dataSlice, 'pixRA', [pixRA]*len(dataSlice), usemask=False)
             dataSlice = rf.append_fields(
-                dataSlice, 'pixDec', [pixDec]*len(dataSlice))
-
+                dataSlice, 'pixDec', [pixDec]*len(dataSlice), usemask=False)
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
 
