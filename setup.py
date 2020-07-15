@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='sn_metrics',
-    version='v1.0.0',
+    version=__version__,
     description='Metrics for supernovae',
     url='http://github.com/lsstdesc/sn_metrics',
     author='Philippe Gris',
