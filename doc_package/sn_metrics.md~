@@ -1,9 +1,0 @@
-# sn_metrics 
-
- * __init__.py
- * sn_cadence_metric.py
- * sn_global_metric.py
- * sn_nsn_metric.py
- * sn_obsrate_metric.py
- * sn_sl_metric.py
- * sn_snr_metric.py
