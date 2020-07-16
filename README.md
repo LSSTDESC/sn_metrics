@@ -10,7 +10,9 @@ We welcome requests to access code for non-DESC use; if you wish to use the code
 ```
 ## Release Status
 
-This code is under development and has not yet been released.
+|Release|Date|packages|
+|---|---|---|
+|v1.0.0|2020/07/15|sn_metrics_v1.0.0|
 
 ## Feedback, License etc
 
@@ -19,7 +21,7 @@ If you have comments, suggestions or questions, please [write us an issue](https
 This is open source software, available for re-use under the modified BSD license.
 
 ```
-Copyright (c) 2019, the sn_metrics contributors on GitHub, https://github.com/LSSTDESC/sn_metrics/graphs/contributors.
+Copyright (c) 2020, the sn_metrics contributors on GitHub, https://github.com/LSSTDESC/sn_metrics/graphs/contributors.
 All rights reserved.
 ```
 
