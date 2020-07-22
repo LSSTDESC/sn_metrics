@@ -143,8 +143,17 @@ class SNGlobalMetric(BaseMetric):
 
         # get Moon vals
         for val in ['moonRA', 'moonDec', 'moonAlt', 'moonAz', 'moonDistance', 'moonPhase', 'cloud', 'fiveSigmaDepth']:
-            r += [np.median(dataSlice[val])]
-            names += ['med_{}'.format(val)]
+            if val != 'fiveSigmaDepth':
+                r += [np.median(dataSlice[val])]
+                names += ['med_{}'.format(val)]
+            else:
+                for b in 'ugrizy':
+                    idx = dataSlice['filter'] == b
+                    if len(dataSlice[idx]) > 0:
+                        r += [np.median(dataSlice[idx][val])]
+                    else:
+                        r += [-1.]
+                    names += ['med_{}_{}'.format(val, b)]
 
         res = np.rec.fromrecords([tuple(r)], names=names)
 
