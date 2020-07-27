@@ -368,9 +368,9 @@ class SNNSNMetric(BaseMetric):
         # estimate time of processing
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
-            toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color', 'zlim',
-                      'zlimp', 'zlimm',
-                      'nsn_med', 'err_nsn_med']
+            toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1_faint', 'color_faint', 'zlim_faint',
+                      'zlimp_faint', 'zlimm_faint',
+                      'nsn_med_faint', 'err_nsn_med_faint']
             print(varb_totdf[toshow])
 
         # return the output as chosen by the user (outputType)
@@ -664,17 +664,9 @@ class SNNSNMetric(BaseMetric):
         df = pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
                            'pixDec': [np.round(pixDec, 4)],
                            'healpixID': [healpixID],
-                           'season': [int(season)],
-                           'x1': [-1.0],
-                           'color': [-1.0],
-                           'zlim': [-1.0],
-                           'zlimp': [-1.0],
-                           'zlimm': [-1.0],
-                           'nsn_med': [-1.0],
-                           'err_nsn_med': [-1.0],
                            'nsn': [-1.0],
                            'var_nsn': [-1.0],
-                           'status': [int(errortype)],
+                           'season': [int(season)],
                            'm5_med': [m5_med],
                            'gap_max': [gap_max],
                            'gap_med': [gap_med],
@@ -684,6 +676,13 @@ class SNNSNMetric(BaseMetric):
 
         for key, val in Nvisits.items():
             df['N_{}'.format(key)] = val
+
+        for vv in ['x1','color','zlim','zlimp','zlimm','nsn_med','err_nsn_med']:
+            for ko in ['faint','medium']:
+                df['{}_{}'.format(vv,ko)] = [-1.0]
+
+        for ko in ['faint','medium']:
+            df['status_{}'.format(ko)] = [int(errortype)]
 
         return df
 
