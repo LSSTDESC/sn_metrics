@@ -136,7 +136,7 @@ class SNNSNMetric(BaseMetric):
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1,
-                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., **kwargs):
+                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., obsstat=True, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -219,6 +219,20 @@ class SNNSNMetric(BaseMetric):
         # output type and proxy level
         self.outputType = outputType  # this is to choose the output: lc, sn, effi, zlims
         self.proxy_level = proxy_level  # proxy level chosen by the user: 0, 1, 2
+
+        self.obsstat = obsstat
+        self.bandstat = None
+        if self.obsstat:
+            self.bandstat = []
+            bands = 'grizy'
+            for ba in bands:
+                self.bandstat.append(ba)
+                for bb in bands:
+                    self.bandstat.append(
+                        ''.join(sorted('{}{}'.format(ba, bb))))
+                    for bc in bands:
+                        self.bandstat.append(
+                            ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -336,9 +350,15 @@ class SNNSNMetric(BaseMetric):
                 cadence = season_info[idx]['cadence'].item()
                 season_length = season_info[idx]['season_length'].item()
                 Nvisits = {}
+                """
                 for b in 'ugrizy':
                     Nvisits[b] = season_info[idx]['Nvisits_{}'.format(
                         b)].item()
+                """
+                if self.obsstat:
+                    for b in self.bandstat:
+                        Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
+                Nvisits['total'] = season_info[idx]['Nvisits'].item()
                 vara_df, varb_df = self.run_seasons(
                     dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
 
@@ -467,7 +487,7 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf = self.errordf(
                     pixRA, pixDec, healpixID, seas,
                     self.status['nosn'],
-                    m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits,)
+                    m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits)
                 effi_seasondf = self.erroreffi(
                     pixRA, pixDec, healpixID, seas)
             return effi_seasondf, zlimsdf
@@ -490,19 +510,29 @@ class SNNSNMetric(BaseMetric):
                 zlimsdf = self.zlims(
                     effi_seasondf, dur_z, groupnames, verbose=self.verbose, timer=self.timer)
 
-                # add median m5
-                zlimsdf.loc[:, 'm5_med'] = m5_med
-                zlimsdf.loc[:, 'gap_max'] = gap_max
-                zlimsdf.loc[:, 'gap_med'] = gap_med
-                zlimsdf.loc[:, 'ebvofMW'] = ebvofMW
-                zlimsdf.loc[:, 'cadence'] = cadence
-                zlimsdf.loc[:, 'season_length'] = season_length
-                for b, vals in Nvisits.items():
-                    zlimsdf.loc[:, 'Nvisits_{}'.format(b)] = vals
-
                 # estimate number of medium supernovae
                 zlimsdf['nsn_med'],  zlimsdf['err_nsn_med'] = zlimsdf.apply(lambda x: self.nsn_typedf(
                     x, 0.0, 0.0, effi_seasondf, dur_z), axis=1, result_type='expand').T.values
+
+                dfa = pd.DataFrame([zlimsdf.iloc[0]], columns=zlimsdf.columns)
+                dfb = pd.DataFrame([zlimsdf.iloc[1]], columns=zlimsdf.columns)
+
+                on = ['healpixID', 'pixRA', 'pixDec', 'season']
+                zlimsdf = dfa.merge(
+                    dfb, left_on=on, right_on=on, suffixes=('_faint', '_medium'))
+
+                # add observing stat if requested
+                if self.obsstat:
+                    # add median m5
+                    zlimsdf.loc[:, 'm5_med'] = m5_med
+                    zlimsdf.loc[:, 'gap_max'] = gap_max
+                    zlimsdf.loc[:, 'gap_med'] = gap_med
+                    zlimsdf.loc[:, 'ebvofMW'] = ebvofMW
+                    zlimsdf.loc[:, 'cadence'] = cadence
+                    zlimsdf.loc[:, 'season_length'] = season_length
+                    for b, vals in Nvisits.items():
+                        zlimsdf.loc[:, 'N_{}'.format(b)] = vals
+
             else:
 
                 for seas in seasons:
@@ -628,35 +658,34 @@ class SNNSNMetric(BaseMetric):
         season_length: float
           length of the season
         Nvisits: dict
-           total number of visits per band and per season
+           total number of visits per (combi of) bands and per season
         """
 
-        return pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
-                             'pixDec': [np.round(pixDec, 4)],
-                             'healpixID': [healpixID],
-                             'season': [int(season)],
-                             'x1': [-1.0],
-                             'color': [-1.0],
-                             'zlim': [-1.0],
-                             'zlimp': [-1.0],
-                             'zlimm': [-1.0],
-                             'nsn_med': [-1.0],
-                             'err_nsn_med': [-1.0],
-                             'nsn': [-1.0],
-                             'var_nsn': [-1.0],
-                             'status': [int(errortype)],
-                             'm5_med': [m5_med],
-                             'gap_max': [gap_max],
-                             'gap_med': [gap_med],
-                             'ebvofMW': [ebvofMW],
-                             'cadence': [cadence],
-                             'season_length': [season_length],
-                             'Nvisits_u': Nvisits['u'],
-                             'Nvisits_g': Nvisits['g'],
-                             'Nvisits_r': Nvisits['r'],
-                             'Nvisits_y': Nvisits['i'],
-                             'Nvisits_z': Nvisits['z'],
-                             'Nvisits_y': Nvisits['y']})
+        df = pd.DataFrame({'pixRA': [np.round(pixRA, 4)],
+                           'pixDec': [np.round(pixDec, 4)],
+                           'healpixID': [healpixID],
+                           'season': [int(season)],
+                           'x1': [-1.0],
+                           'color': [-1.0],
+                           'zlim': [-1.0],
+                           'zlimp': [-1.0],
+                           'zlimm': [-1.0],
+                           'nsn_med': [-1.0],
+                           'err_nsn_med': [-1.0],
+                           'nsn': [-1.0],
+                           'var_nsn': [-1.0],
+                           'status': [int(errortype)],
+                           'm5_med': [m5_med],
+                           'gap_max': [gap_max],
+                           'gap_med': [gap_med],
+                           'ebvofMW': [ebvofMW],
+                           'cadence': [cadence],
+                           'season_length': [season_length]})
+
+        for key, val in Nvisits.items():
+            df['N_{}'.format(key)] = val
+
+        return df
 
     def erroreffi(self, pixRA, pixDec, healpixID, season):
         """
@@ -1421,12 +1450,22 @@ class SNNSNMetric(BaseMetric):
         df['season_length'] = df['MJD_max']-df['MJD_min']
         df['cadence'] = 0.
 
+        """
         for band in 'ugrizy':
             Nvisits = 0
             idx = grp[self.filterCol] == band
             if len(grp[idx]) > 0:
                 Nvisits = grp[idx][self.nexpCol].sum()
             df['Nvisits_{}'.format(band)] = Nvisits
+        """
+        if self.obsstat:
+            grpb = grp.groupby(['night']).apply(
+                lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].values))]})).reset_index()
+
+            for val in self.bandstat:
+                # print(val, grpb[self.filterCol].str.count(val).sum())
+                df['N_{}'.format(val)] = grpb[self.filterCol].str.count(
+                    val).sum()
 
         if len(grp) > 5:
             to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
