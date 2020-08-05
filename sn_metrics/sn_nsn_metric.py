@@ -223,7 +223,7 @@ class SNNSNMetric(BaseMetric):
         self.obsstat = obsstat
         self.bandstat = None
         if self.obsstat:
-            self.bandstat = ['u','g','r','i','z','y','gr','gi','gz','iz']
+            self.bandstat = ['u','g','r','i','z','y','gr','gi','gz','iz','uu','gg','rr','ii','zz','yy']
             """
             bands = 'grizy'
             for ba in bands:
@@ -1475,18 +1475,13 @@ class SNNSNMetric(BaseMetric):
             dfcomb = grpb.groupby('filter').apply(lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
 
             dfcomb = dfcomb.sort_values(by=['Nvisits'],ascending=False)
-
-
-            """
-            print('yes',dfcomb)
-            for_stat = ['u','g','r','i','z','y','gr','gi','gz','iz']
-            count= {}
-            """
+            
             for vv in self.bandstat:
                 count = 0
                 for io, row in dfcomb.iterrows():
-                    if vv in row['filter']:
-                        count += row['Nvisits']
+                    for b in vv:
+                        ca = row['filter'].count(b)
+                        count += row['Nvisits']*np.min([1,ca])/len(vv)
                 df['N_{}'.format(vv)] = count
 
             """
