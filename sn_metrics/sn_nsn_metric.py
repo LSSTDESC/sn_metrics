@@ -223,7 +223,8 @@ class SNNSNMetric(BaseMetric):
         self.obsstat = obsstat
         self.bandstat = None
         if self.obsstat:
-            self.bandstat = []
+            self.bandstat = ['u','g','r','i','z','y','gr','gi','gz','iz']
+            """
             bands = 'grizy'
             for ba in bands:
                 self.bandstat.append(ba)
@@ -233,7 +234,7 @@ class SNNSNMetric(BaseMetric):
                     for bc in bands:
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
-
+            """
     def run(self, dataSlice,  slicePoint=None):
         """
         Run method of the metric
@@ -357,9 +358,9 @@ class SNNSNMetric(BaseMetric):
                         b)].item()
                 """
                 if self.obsstat:
-                    Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
-                    #for b in self.bandstat:
-                        #Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
+                    #Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
+                    for b in self.bandstat:
+                        Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
                         
                 Nvisits['total'] = season_info[idx]['Nvisits'].item()
                 vara_df, varb_df = self.run_seasons(
@@ -375,7 +376,9 @@ class SNNSNMetric(BaseMetric):
                       'zlimp_faint', 'zlimm_faint',
                       'nsn_med_faint', 'err_nsn_med_faint']
             if self.obsstat:
-                toshow += ['N_filters_night']
+                #toshow += ['N_filters_night']
+                for b in self.bandstat:
+                    toshow += ['N_{}'.format(b)]
             print(varb_totdf[toshow])
 
         # return the output as chosen by the user (outputType)
@@ -1447,7 +1450,7 @@ class SNNSNMetric(BaseMetric):
         ---------
         pandas df with the following cols:
         - Nvisits: number of visits for this group
-        - filters_night: filters used per night
+        - N_xx:  number of visits in xx where xx is defined in self.bandstat
 
         """
         df = pd.DataFrame([len(grp)], columns=['Nvisits'])
@@ -1472,12 +1475,31 @@ class SNNSNMetric(BaseMetric):
             dfcomb = grpb.groupby('filter').apply(lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
 
             dfcomb = dfcomb.sort_values(by=['Nvisits'],ascending=False)
-        
+
+
+            """
+            print('yes',dfcomb)
+            for_stat = ['u','g','r','i','z','y','gr','gi','gz','iz']
+            count= {}
+            """
+            for vv in self.bandstat:
+                count = 0
+                for io, row in dfcomb.iterrows():
+                    if vv in row['filter']:
+                        count += row['Nvisits']
+                df['N_{}'.format(vv)] = count
+
+            """
+            print(count)
+
+
+            
             filtcombi = ''
             for i, row in dfcomb.iterrows():
                 filtcombi += '{}*{}/'.format(row['Nvisits'],row['filter'])
 
             df['filters_night'] = filtcombi
+            """
             """
             # old code with bandstat
             for val in self.bandstat:
