@@ -1470,7 +1470,7 @@ class SNNSNMetric(BaseMetric):
         
         if self.obsstat:
             grpb = grp.groupby(['night']).apply(
-                lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].values))]})).reset_index()
+                lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].astype(int).values))]})).reset_index()
 
             dfcomb = grpb.groupby('filter').apply(lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
 
