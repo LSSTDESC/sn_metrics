@@ -477,14 +477,68 @@ class TestNSNmetrics(unittest.TestCase):
         # now run the metric
         res = metric.run(data)
 
+        # reference data for comparison
+        """
+        for cc in res.columns:
+                print('dictRef[\'{}\']='.format(cc),res[cc].values)
+        """
+        dictRef = {}
+        dictRef['pixRA']= [0.]
+        dictRef['pixDec']= [0.]
+        dictRef['healpixID']= [1.]
+        dictRef['season']= [1.]
+        dictRef['x1_faint']= [-2.]
+        dictRef['color_faint']= [0.2]
+        dictRef['zlim_faint']= [0.61098572]
+        dictRef['zlimp_faint']= [0.62590566]
+        dictRef['zlimm_faint']= [0.60112715]
+        dictRef['status_faint']= [1.]
+        dictRef['nsn_med_faint']= [97.54051414]
+        dictRef['err_nsn_med_faint']= [5.54863651]
+        dictRef['x1_medium']= [0.]
+        dictRef['color_medium']= [0.]
+        dictRef['zlim_medium']= [0.75089787]
+        dictRef['zlimp_medium']= [0.76848728]
+        dictRef['zlimm_medium']= [0.73865905]
+        dictRef['status_medium']= [1.]
+        dictRef['nsn_med_medium']= [165.75332106]
+        dictRef['err_nsn_med_medium']= [6.13984441]
+        dictRef['m5_med']= [25.54628749]
+        dictRef['gap_max']= [3.]
+        dictRef['gap_med']= [0.]
+        dictRef['ebvofMW']= [0.]
+        dictRef['cadence']= [3.]
+        dictRef['season_length']= [177.]
+        dictRef['N_u']= [0]
+        dictRef['N_g']= [60.]
+        dictRef['N_r']= [60.]
+        dictRef['N_i']= [60.]
+        dictRef['N_z']= [60.]
+        dictRef['N_y']= [60.]
+        dictRef['N_gr']= [60.]
+        dictRef['N_gi']= [60.]
+        dictRef['N_gz']= [60.]
+        dictRef['N_iz']= [60.]
+        dictRef['N_uu']= [0.]
+        dictRef['N_gg']= [60.]
+        dictRef['N_rr']= [60.]
+        dictRef['N_ii']= [60.]
+        dictRef['N_zz']= [60.]
+        dictRef['N_yy']= [60.]
+        dictRef['N_total']= [5760]
+        dictRef['nsn']= [-1]
+        dictRef['var_nsn']= [-1]
+                
         #print(res[['zlim_faint','zlim_medium']])
         # compare the results to reference: this is the unit test
         #zlim_ref = np.asarray([0.599917, 0.763300])
         #zlim_ref = np.asarray([0.63650, 0.87525])
-        zlim_ref = np.asarray([0.610986,0.750898])
+        #zlim_ref = np.asarray([0.610986,0.750898])
         #print(res['zlim'], zlim_ref, np.isclose(res['zlim'], zlim_ref))
-        assert(np.isclose(res[['zlim_faint','zlim_medium']], zlim_ref).all())
-
+        #assert(np.isclose(res[['zlim_faint','zlim_medium']], zlim_ref).all())
+        for key, vv in dictRef.items():
+                assert(np.isclose(vv, res[key].tolist()).all())
+            
         # clean the directory
         """
         dirnames = [refDir, templateDir]
