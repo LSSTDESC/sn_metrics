@@ -223,7 +223,8 @@ class SNNSNMetric(BaseMetric):
         self.obsstat = obsstat
         self.bandstat = None
         if self.obsstat:
-            self.bandstat = []
+            self.bandstat = ['u','g','r','i','z','y','gr','gi','gz','iz','uu','gg','rr','ii','zz','yy']
+            """
             bands = 'grizy'
             for ba in bands:
                 self.bandstat.append(ba)
@@ -233,7 +234,7 @@ class SNNSNMetric(BaseMetric):
                     for bc in bands:
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
-
+            """
     def run(self, dataSlice,  slicePoint=None):
         """
         Run method of the metric
@@ -306,6 +307,7 @@ class SNNSNMetric(BaseMetric):
 
         # season infos
         dfa = pd.DataFrame(np.copy(dataSlice))
+        dfa = dfa[dfa['season'].isin(seasons)]
         season_info = dfa.groupby(['season']).apply(
             lambda x: self.seasonInfo(x)).reset_index()
 
@@ -356,8 +358,10 @@ class SNNSNMetric(BaseMetric):
                         b)].item()
                 """
                 if self.obsstat:
+                    #Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
                     for b in self.bandstat:
                         Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
+                        
                 Nvisits['total'] = season_info[idx]['Nvisits'].item()
                 vara_df, varb_df = self.run_seasons(
                     dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
@@ -371,6 +375,10 @@ class SNNSNMetric(BaseMetric):
             toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1_faint', 'color_faint', 'zlim_faint',
                       'zlimp_faint', 'zlimm_faint',
                       'nsn_med_faint', 'err_nsn_med_faint']
+            if self.obsstat:
+                #toshow += ['N_filters_night']
+                for b in self.bandstat:
+                    toshow += ['N_{}'.format(b)]
             print(varb_totdf[toshow])
 
         # return the output as chosen by the user (outputType)
@@ -1440,7 +1448,9 @@ class SNNSNMetric(BaseMetric):
 
         Returns
         ---------
-        pandas df with the cfollowing cols:
+        pandas df with the following cols:
+        - Nvisits: number of visits for this group
+        - N_xx:  number of visits in xx where xx is defined in self.bandstat
 
         """
         df = pd.DataFrame([len(grp)], columns=['Nvisits'])
@@ -1457,15 +1467,43 @@ class SNNSNMetric(BaseMetric):
                 Nvisits = grp[idx][self.nexpCol].sum()
             df['Nvisits_{}'.format(band)] = Nvisits
         """
+        
         if self.obsstat:
             grpb = grp.groupby(['night']).apply(
-                lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].values))]})).reset_index()
+                lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].astype(int).values))]})).reset_index()
 
+            dfcomb = grpb.groupby('filter').apply(lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
+
+            dfcomb = dfcomb.sort_values(by=['Nvisits'],ascending=False)
+            
+            for vv in self.bandstat:
+                count = 0
+                for io, row in dfcomb.iterrows():
+                    for b in vv:
+                        ca = row['filter'].count(b)
+                        count += row['Nvisits']*np.min([1,ca])/len(vv)
+                df['N_{}'.format(vv)] = count
+
+            """
+            print(count)
+
+
+            
+            filtcombi = ''
+            for i, row in dfcomb.iterrows():
+                filtcombi += '{}*{}/'.format(row['Nvisits'],row['filter'])
+
+            df['filters_night'] = filtcombi
+            """
+            """
+            # old code with bandstat
             for val in self.bandstat:
                 # print(val, grpb[self.filterCol].str.count(val).sum())
-                df['N_{}'.format(val)] = grpb[self.filterCol].str.count(
-                    val).sum()
-
+                idx = grpb[self.filterCol]==val
+                #df['N_{}'.format(val)] = grpb[self.filterCol].str.count(val).sum()
+                df['N_{}'.format(val)] = len(grpb[idx])
+            """
+        
         if len(grp) > 5:
             to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
             df['cadence'] = np.mean(to.diff())

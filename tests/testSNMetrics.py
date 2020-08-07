@@ -1,8 +1,8 @@
 from sn_tools.sn_cadence_tools import ReferenceData
 from sn_metrics.sn_obsrate_metric import SNObsRateMetric
 from sn_metrics.sn_snr_metric import SNSNRMetric
-import sn_plotters.sn_snrPlotters as sn_snr_plot
-import sn_plotters.sn_cadencePlotters as sn_cadence_plot
+#import sn_plotters.sn_snrPlotters as sn_snr_plot
+#import sn_plotters.sn_cadencePlotters as sn_cadence_plot
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
 from sn_metrics.sn_nsn_metric import SNNSNMetric
 from sn_tools.sn_utils import GetReference
@@ -15,6 +15,8 @@ import numpy as np
 import os
 from builtins import zip
 import matplotlib
+import multiprocessing
+from sn_tools.sn_io import check_get_file
 # matplotlib.use("Agg")
 
 m5_ref = dict(
@@ -24,7 +26,16 @@ main_repo = 'https://me.lsst.eu/gris'
 ref_dir = 'Reference_Files'
 db_dir = 'Scheduler_DB'
 
+def loadTemplates(templateDir, fname, gammaDir, gammaName, telescope,web_path, j=-1, output_q=None):
 
+        lc_ref = GetReference(templateDir,
+                              fname, gammaDir, gammaName, web_path, telescope)
+
+        if output_q is not None:
+            output_q.put({j: lc_ref})
+        else:
+            return tab_tot
+        
 def getRefDir(dirname):
     fullname = '{}/{}/{}'.format(main_repo, ref_dir, dirname)
 
@@ -331,33 +342,9 @@ class TestNSNmetrics(unittest.TestCase):
         """Test the NSN metric """
 
         x1_colors = [(-2.0, 0.2), (0.0, 0.0)]
-
-        # get template files
-        templateDir = 'Templates'
-
-        for (x1, color) in x1_colors:
-            fName = 'LC_{}_{}_vstack'.format(x1, color)
-            fExtens = 'hdf5'
-
-            getFile(templateDir, fName, fExtens, ref_dir, 'Templates')
-
-        # get reference files
-        refDir = 'reference_files'
-        getRefDir(refDir)
-
-        # input parameters for this metric
-        name = 'NSN'
-        season = 1
-        coadd = True,
-        fieldType = 'DD',
-        nside = 64
-        ramin = 0.
-        ramax = 360.
-        decmin = -1.0,
-        decmax = -1.0
-        metadata = {}
-        outDir = 'MetricOutput'
-        proxy_level = 1
+        ebvofMW=0.0
+        bluecutoff=380.0
+        redcutoff=800.0
 
         # An instrument is needed
         Instrument = {}
@@ -375,18 +362,67 @@ class TestNSNmetrics(unittest.TestCase):
                               aerosol=Instrument['aerosol'],
                               airmass=Instrument['airmass'])
 
-        lc_reference = {}
-        gamma_reference = '{}/gamma.hdf5'.format(refDir)
+        # input parameters for this metric
+        name = 'NSN'
+        season = 1
+        coadd = True,
+        fieldType = 'DD',
+        nside = 64
+        ramin = 0.
+        ramax = 360.
+        decmin = -1.0,
+        decmax = -1.0
+        metadata = {}
+        outDir = 'MetricOutput'
+        proxy_level = 2
 
-        # load ref files here
+        
+        lc_reference = {}
+
+        templateDir = 'Template_LC'
+        gammaDir = 'reference_files'
+        gammaName = 'gamma.hdf5'
+        web_path = 'https://me.lsst.eu/gris/DESC_SN_pipeline'
+        # loading dust file
+        dustDir = 'Template_Dust'
+        dustcorr = {}
+
+        print('Loading reference files')
+        result_queue = multiprocessing.Queue()
         for j in range(len(x1_colors)):
             x1 = x1_colors[j][0]
             color = x1_colors[j][1]
-            fname = '{}/LC_{}_{}_vstack.hdf5'.format(
-                templateDir, x1, color)
 
-            lc_reference[x1_colors[j]] = load(
-                fname, gamma_reference, telescope)
+            fname = 'LC_{}_{}_{}_{}_ebvofMW_0.0_vstack.hdf5'.format(
+                x1, color, bluecutoff, redcutoff)
+            if np.abs(ebvofMW) > 0.:
+                dustFile = 'Dust_{}_{}_{}_{}.hdf5'.format(
+                    x1, color, bluecutoff, redcutoff)
+                dustcorr[x1_colors[j]] = LoadDust(
+                    dustDir, dustFile, web_path).dustcorr
+            else:
+                dustcorr[x1_colors[j]] = None
+            p = multiprocessing.Process(
+                name='Subprocess_main-'+str(j), target=loadTemplates, args=(templateDir, fname, gammaDir, gammaName, telescope,web_path, j, result_queue))
+            p.start()
+
+        resultdict = {}
+        for j in range(len(x1_colors)):
+            resultdict.update(result_queue.get())
+
+        for p in multiprocessing.active_children():
+            p.join()
+
+        for j in range(len(x1_colors)):
+            if resultdict[j] is not None:
+                lc_reference[x1_colors[j]] = resultdict[j]
+
+        print('Reference data loaded', lc_reference.keys(), fieldType)
+        
+
+        
+
+     
 
         # LC selection criteria
 
@@ -402,13 +438,18 @@ class TestNSNmetrics(unittest.TestCase):
         pixArea = 9.6
 
         # load x1_color_dist
+        # load x1_color_dist
 
-        x1_color_dist = np.genfromtxt('{}/Dist_X1_Color_JLA_high_z.txt'.format(refDir), dtype=None,
-                                      names=('x1', 'color', 'weight_x1', 'weight_x1', 'weight_tot'))
+        fName = 'Dist_X1_Color_JLA_high_z.txt'
+        fDir = 'reference_files'
+        check_get_file(web_path, fDir, fName)
+        x1_color_dist = np.genfromtxt('{}/{}'.format(fDir, fName), dtype=None,
+                                      names=('x1', 'color', 'weight_x1', 'weight_c', 'weight_tot'))
+
 
         # metric instance
         metric = SNNSNMetric(
-            lc_reference, season=season, zmax=zmax, pixArea=pixArea,
+            lc_reference,  dustcorr, season=season, zmax=zmax, pixArea=pixArea,
             verbose=False, timer=False,
             ploteffi=False,
             n_bef=n_bef, n_aft=n_aft,
@@ -418,7 +459,7 @@ class TestNSNmetrics(unittest.TestCase):
             outputType='zlims',
             proxy_level=proxy_level,
             x1_color_dist=x1_color_dist,
-            coadd=coadd, lightOutput=False, T0s='all', zlim_coeff=0.95)
+            coadd=coadd, lightOutput=False, T0s='all', zlim_coeff=0.95, ebvofMW=ebvofMW)
 
         # get some data to run the metric
         bands = 'grizy'
@@ -436,18 +477,75 @@ class TestNSNmetrics(unittest.TestCase):
         # now run the metric
         res = metric.run(data)
 
+        # reference data for comparison
+        """
+        for cc in res.columns:
+                print('dictRef[\'{}\']='.format(cc),res[cc].values)
+        """
+        dictRef = {}
+        dictRef['pixRA']= [0.]
+        dictRef['pixDec']= [0.]
+        dictRef['healpixID']= [1.]
+        dictRef['season']= [1.]
+        dictRef['x1_faint']= [-2.]
+        dictRef['color_faint']= [0.2]
+        dictRef['zlim_faint']= [0.61098572]
+        dictRef['zlimp_faint']= [0.62590566]
+        dictRef['zlimm_faint']= [0.60112715]
+        dictRef['status_faint']= [1.]
+        dictRef['nsn_med_faint']= [97.54051414]
+        dictRef['err_nsn_med_faint']= [5.54863651]
+        dictRef['x1_medium']= [0.]
+        dictRef['color_medium']= [0.]
+        dictRef['zlim_medium']= [0.75089787]
+        dictRef['zlimp_medium']= [0.76848728]
+        dictRef['zlimm_medium']= [0.73865905]
+        dictRef['status_medium']= [1.]
+        dictRef['nsn_med_medium']= [165.75332106]
+        dictRef['err_nsn_med_medium']= [6.13984441]
+        dictRef['m5_med']= [25.54628749]
+        dictRef['gap_max']= [3.]
+        dictRef['gap_med']= [0.]
+        dictRef['ebvofMW']= [0.]
+        dictRef['cadence']= [3.]
+        dictRef['season_length']= [177.]
+        dictRef['N_u']= [0]
+        dictRef['N_g']= [60.]
+        dictRef['N_r']= [60.]
+        dictRef['N_i']= [60.]
+        dictRef['N_z']= [60.]
+        dictRef['N_y']= [60.]
+        dictRef['N_gr']= [60.]
+        dictRef['N_gi']= [60.]
+        dictRef['N_gz']= [60.]
+        dictRef['N_iz']= [60.]
+        dictRef['N_uu']= [0.]
+        dictRef['N_gg']= [60.]
+        dictRef['N_rr']= [60.]
+        dictRef['N_ii']= [60.]
+        dictRef['N_zz']= [60.]
+        dictRef['N_yy']= [60.]
+        dictRef['N_total']= [5760]
+        dictRef['nsn']= [-1]
+        dictRef['var_nsn']= [-1]
+                
+        #print(res[['zlim_faint','zlim_medium']])
         # compare the results to reference: this is the unit test
         #zlim_ref = np.asarray([0.599917, 0.763300])
-        zlim_ref = np.asarray([0.63650, 0.87525])
+        #zlim_ref = np.asarray([0.63650, 0.87525])
+        #zlim_ref = np.asarray([0.610986,0.750898])
         #print(res['zlim'], zlim_ref, np.isclose(res['zlim'], zlim_ref))
-        assert(np.isclose(res['zlim'], zlim_ref).all())
-
+        #assert(np.isclose(res[['zlim_faint','zlim_medium']], zlim_ref).all())
+        for key, vv in dictRef.items():
+                assert(np.isclose(vv, res[key].tolist()).all())
+            
         # clean the directory
+        """
         dirnames = [refDir, templateDir]
         for thedir in dirnames:
             if os.path.isdir(thedir):
                 os.system('rm -rf {}'.format(thedir))
-
+        """
 
 """
 if __name__ == "__main__":
