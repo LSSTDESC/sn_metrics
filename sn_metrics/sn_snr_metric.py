@@ -215,25 +215,29 @@ class SNSNRMetric(BaseMetric):
 
         # get infos on seasons
         self.info_season = self.seasonInfo(dataSlice, seasons)
+    
         if self.info_season is None:
             return None
 
         seasons = self.info_season['season']
 
+
         snr_obs = self.snrSeason(dataSlice, seasons)  # SNR for observations
+        
         snr_fakes = self.snrFakes(dataSlice, seasons)  # SNR for fakes
         detect_frac = self.detectingFraction(
             snr_obs, snr_fakes)  # Detection fraction
 
+        """
         snr_obs = np.asarray(snr_obs)
         snr_fakes = np.asarray(snr_fakes)
         detect_frac = np.asarray(detect_frac)
-
+        """
         # return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
         if self.verbose:
             print('processed', detect_frac)
 
-        return pd.DataFrame(detect_frac)
+        return pd.DataFrame(np.copy(detect_frac))
 
     def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
@@ -357,6 +361,7 @@ class SNSNRMetric(BaseMetric):
         snr = rf.append_fields(
             snr, names, [global_info[name] for name in names])
 
+    
        # Display LC and SNR at the same time
         if self.display:
             self.plot(fluxes_tot, mjd_vals, flag, snr, T0_lc, dates)
@@ -386,7 +391,7 @@ class SNSNRMetric(BaseMetric):
         for season in seasons:
             idx = (dataSlice[self.seasonCol] == season)
             slice_sel = dataSlice[idx]
-            if len(slice_sel) < 5:
+            if len(slice_sel) < 3:
                 continue
             slice_sel.sort(order=self.mjdCol)
             mjds_season = slice_sel[self.mjdCol]
@@ -400,6 +405,7 @@ class SNSNRMetric(BaseMetric):
                        mjd_min, mjd_max, Nvisits))
 
         info_season = None
+        
         if len(rv) > 0:
             info_season = np.rec.fromrecords(
                 rv, names=['season', 'cadence', 'season_length', 'MJD_min', 'MJD_max', 'Nvisits'])
@@ -433,8 +439,10 @@ class SNSNRMetric(BaseMetric):
           season(float): season num.
         """
 
+
         seasons = np.ma.array(season_vals, mask=~flag)
 
+        #print(seasons)
         fluxes_tot = {}
         snr_tab = None
 
@@ -454,6 +462,7 @@ class SNSNRMetric(BaseMetric):
             else:
                 snr_tab = rf.append_fields(
                     snr_tab, 'SNR_'+name, np.copy(snr_season))
+        
         snr_tab = rf.append_fields(snr_tab, 'season', np.mean(seasons, axis=1))
 
         # check if any masked value remaining
@@ -526,7 +535,8 @@ class SNSNRMetric(BaseMetric):
         # estimate SNR vs MJD
 
         snr_fakes = self.snrSeason(
-            fake_obs[fake_obs['filter'] == band], seasons=seasons)
+            np.copy(fake_obs[fake_obs['filter'] == band]), seasons=seasons)
+        
 
         return snr_fakes
 
@@ -755,4 +765,6 @@ class SNSNRMetric(BaseMetric):
                 r += [len(diff_res[idx])/len(diff_res)]
                 names += ['frac_obs_'+sim]
             rtot.append(tuple(r))
+
+        
         return np.rec.fromrecords(rtot, names=names)
