@@ -10,7 +10,8 @@ import yaml
 from scipy import interpolate
 import os
 import pandas as pd
-
+from astropy.coordinates import SkyCoord
+from dustmaps.sfd import SFDQuery
 
 class SNSNRMetric(BaseMetric):
     """
@@ -170,6 +171,39 @@ class SNSNRMetric(BaseMetric):
 
         dataSlice = dataSlice[idx]
 
+        
+        # get pixRA and pixDec if necessary
+        if 'pixRA' not in dataSlice.dtype.names:
+            healpixID, pixRA, pixDec = getPix(dataSlicef.nside,
+                                              np.mean(dataSlice[dataSlicef.RACol]),
+                                              np.mean(dataSlice[dataSlicef.DecCol]))
+
+            dataSlice = rf.append_fields(dataSlice, 'healpixID', [
+                healpixID]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixRA', [pixRA]*len(dataSlice))
+            dataSlice = rf.append_fields(
+                dataSlice, 'pixDec', [pixDec]*len(dataSlice))
+
+        # get ebvofMW for this pixel
+        pixRA = np.unique(dataSlice['pixRA']).item()
+        pixDec = np.unique(dataSlice['pixDec']).item()
+        coords = SkyCoord(pixRA, pixDec, unit='deg')
+        try:
+            sfd = SFDQuery()
+        except Exception as err:
+            from dustmaps.config import config
+            config['data_dir'] = 'dustmaps'
+            import dustmaps.sfd
+            dustmaps.sfd.fetch()
+            # dustmaps('dustmaps')
+        sfd = SFDQuery()
+        ebvofMW = sfd(coords)
+
+        if ebvofMW >= 0.25:
+            return None 
+
+
         # stack the data if requested
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
@@ -254,17 +288,7 @@ class SNSNRMetric(BaseMetric):
         if len(sel) == 0:
             return None
 
-        if 'pixRA' not in sel.dtype.names:
-            healpixID, pixRA, pixDec = getPix(self.nside,
-                                              np.mean(sel[self.RACol]),
-                                              np.mean(sel[self.DecCol]))
-
-            sel = rf.append_fields(sel, 'healpixID', [
-                healpixID]*len(sel))
-            sel = rf.append_fields(
-                sel, 'pixRA', [pixRA]*len(sel))
-            sel = rf.append_fields(
-                sel, 'pixDec', [pixDec]*len(sel))
+  
 
         # Get few infos: RA, Dec, Nvisits, m5, exptime
         fieldRA = np.mean(sel[self.RACol])
