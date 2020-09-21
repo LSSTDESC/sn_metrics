@@ -6,7 +6,8 @@ import time
 import healpy as hp
 from sn_tools.sn_obs import getPix
 import numpy.lib.recfunctions as rf
-
+from astropy.coordinates import SkyCoord
+from dustmaps.sfd import SFDQuery
 
 class SNCadenceMetric(BaseMetric):
     """
@@ -150,6 +151,28 @@ class SNCadenceMetric(BaseMetric):
                 dataSlice, 'pixRA', [pixRA]*len(dataSlice), usemask=False)
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [pixDec]*len(dataSlice), usemask=False)
+
+
+          
+        # get ebvofMW for this pixel
+        pixRA = np.unique(dataSlice['pixRA']).item()
+        pixDec = np.unique(dataSlice['pixDec']).item()
+        coords = SkyCoord(pixRA, pixDec, unit='deg')
+        try:
+            sfd = SFDQuery()
+        except Exception as err:
+            from dustmaps.config import config
+            config['data_dir'] = 'dustmaps'
+            import dustmaps.sfd
+            dustmaps.sfd.fetch()
+            # dustmaps('dustmaps')
+        sfd = SFDQuery()
+        ebvofMW = sfd(coords)
+
+        if ebvofMW >= 0.25:
+            return None 
+        
+
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
 
