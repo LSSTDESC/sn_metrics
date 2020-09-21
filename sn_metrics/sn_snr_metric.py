@@ -185,6 +185,7 @@ class SNSNRMetric(BaseMetric):
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [pixDec]*len(dataSlice))
 
+        """
         # get ebvofMW for this pixel
         pixRA = np.unique(dataSlice['pixRA']).item()
         pixDec = np.unique(dataSlice['pixDec']).item()
@@ -202,7 +203,7 @@ class SNSNRMetric(BaseMetric):
 
         if ebvofMW >= 0.25:
             return None 
-
+        """
 
         # stack the data if requested
         if self.stacker is not None:
@@ -221,6 +222,8 @@ class SNSNRMetric(BaseMetric):
 
         seasons = self.info_season['season']
 
+        if self.verbose:
+            print('info seasons',self.info_season)
 
         snr_obs = self.snrSeason(dataSlice, seasons)  # SNR for observations
         
@@ -234,10 +237,14 @@ class SNSNRMetric(BaseMetric):
         detect_frac = np.asarray(detect_frac)
         """
         # return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
-        if self.verbose:
-            print('processed', detect_frac)
+      
 
-        return pd.DataFrame(np.copy(detect_frac))
+        res = pd.DataFrame(np.copy(detect_frac))
+
+        if self.verbose:
+            print('processed', detect_frac,res[['healpixID','season','band','frac_obs_SNCosmo']])
+
+        return res
 
     def snrSeason(self, dataSlice, seasons, j=-1, output_q=None):
         """
