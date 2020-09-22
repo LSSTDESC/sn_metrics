@@ -146,7 +146,7 @@ class SNObsRateMetric(BaseMetric):
 
           pixDec: Dec of the pixel corresponding to (fieldRA,fieldDec)
 
-          healpixId: Id of the pixel corresponding to (fieldRA,fieldDec)
+          healpixID: ID of the pixel corresponding to (fieldRA,fieldDec)
 
           frac_obs_band: observing fraction in the band.
 
@@ -221,12 +221,12 @@ class SNObsRateMetric(BaseMetric):
 
             return pd.DataFrame(r, columns=[
                 'season', 'fieldRA', 'fieldDec',
-                'pixRA', 'pixDec', 'healpixId',
+                'pixRA', 'pixDec', 'healpixID',
                 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
             """
             return np.rec.fromrecords(r, names=[
                 'season', 'fieldRA', 'fieldDec',
-                'pixRA', 'pixDec', 'healpixId',
+                'pixRA', 'pixDec', 'healpixID',
                 'frac_obs_{}'.format(self.names_ref[0]), 'band'])
             """
         seasons = self.info_season['season']
@@ -270,7 +270,7 @@ class SNObsRateMetric(BaseMetric):
 
         final_resu = np.rec.fromrecords(r, names=[
             'season', 'fieldRA', 'fieldDec',
-            'pixRA', 'pixDec', 'healpixId',
+            'pixRA', 'pixDec', 'healpixID',
             'frac_obs_{}'.format(self.names_ref[0]), 'band'])
 
         if self.verbose:
