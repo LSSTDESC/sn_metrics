@@ -120,7 +120,6 @@ class SNObsRateMetric(BaseMetric):
         self.names_ref = names_ref
         self.snr_ref = snr_ref
         self.nside = nside
-        self.verbose = verbose
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -201,7 +200,7 @@ class SNObsRateMetric(BaseMetric):
                 print('after stacking', dataSlice[[
                       self.filterCol, self.m5Col, self.visitExposureTimeCol]])
         seasons = self.season
-        if self.season == -1:
+        if self.season == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
 
         # print(np.unique(dataSlice[self.filterCol]),
@@ -210,7 +209,9 @@ class SNObsRateMetric(BaseMetric):
 
         self.info_season = self.seasonInfo(dataSlice, seasons)
 
-        # print('info seasons', self.info_season)
+        if self.verbose:
+            print('info seasons', self.info_season)
+
         if self.info_season is None:
             r = []
             for seas in seasons:
@@ -460,7 +461,6 @@ class SNObsRateMetric(BaseMetric):
         for season in seasons:
             idx = np.abs(dataSlice[self.seasonCol]-season) < 1.e-5
             slice_sel = dataSlice[idx]
-
             if len(slice_sel) < 5:
                 continue
             slice_sel.sort(order=self.mjdCol)
