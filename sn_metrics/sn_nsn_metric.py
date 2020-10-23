@@ -631,8 +631,8 @@ class SNNSNMetric(BaseMetric):
         else:
             df = pd.DataFrame([0.], columns=['daymax'])
 
-        df['min_rf_phase'] = self.min_rf_phase_qual
-        df['max_rf_phase'] = self.max_rf_phase_qual
+        df['minRFphase'] = self.min_rf_phase_qual
+        df['maxRFphase'] = self.max_rf_phase_qual
 
         return df
 
