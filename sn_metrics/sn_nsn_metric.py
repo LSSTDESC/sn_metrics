@@ -319,7 +319,7 @@ class SNNSNMetric(BaseMetric):
             return None
 
         if self.verbose:
-            print('season infos', season_info)
+            print('season infos', season_info[['season','season_length']])
 
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
@@ -528,7 +528,10 @@ class SNNSNMetric(BaseMetric):
                 on = ['healpixID', 'pixRA', 'pixDec', 'season']
                 zlimsdf = dfa.merge(
                     dfb, left_on=on, right_on=on, suffixes=('_faint', '_medium'))
-
+                
+                if self.verbose:
+                    print('result here',zlimsdf[['zlim_faint','zlim_medium','nsn_med_faint']])
+                
                 # add observing stat if requested
                 if self.obsstat:
                     # add median m5
