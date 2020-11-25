@@ -640,18 +640,21 @@ class SNSNRMetric(BaseMetric):
         f = open(self.fakeFile, 'r')
         config_fake = yaml.load(f, Loader=yaml.FullLoader)
         f.close()
+        #print('hello',config_fake)
         config_fake['RA'] = fieldRA
         config_fake['Dec'] = fieldDec
         config_fake['bands'] = [band]
-        config_fake['cadence'] = [cadence]
-        config_fake['MJD_min'] = [mjd_min]
-        config_fake['season_length'] = season_length
-        config_fake['Nvisits'] = [Nvisits]
+        config_fake['cadence'][band] = cadence
+        config_fake['MJDmin'] = [mjd_min]
+        config_fake['seasonLength'] = [season_length]
+        config_fake['Nvisits'][band] = Nvisits
         m5_nocoadd = m5-1.25*np.log10(float(Nvisits)*Tvisit/30.)
-        config_fake['m5'] = [m5_nocoadd]
+        config_fake['m5'][band] = m5_nocoadd
         config_fake['seasons'] = [season]
-        config_fake['seeingEff'] = [0.87]
-        config_fake['seeingGeom'] = [0.87]
+        config_fake['seeingEff'][band] = 0.87
+        config_fake['seeingGeom'][band] = 0.87
+        config_fake['shiftDays'] = 0.
+        config_fake['ExposureTime'][band] = 30.
 
         fake_obs_season = GenerateFakeObservations(config_fake).Observations
 
