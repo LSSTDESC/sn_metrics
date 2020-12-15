@@ -930,7 +930,7 @@ class SNNSNMetric(BaseMetric):
                                                            zmax=self.zmax,
                                                            duration_z=durinterp_z,
                                                            survey_area=self.pixArea,
-                                                           account_for_edges=True)
+                                                           account_for_edges=False)
 
             # rate interpolation
             rateInterp = interp1d(zz, nsn, kind='linear',
@@ -1403,7 +1403,7 @@ class SNNSNMetric(BaseMetric):
                                                        dz=dz,
                                                        duration_z=duration_z,
                                                        survey_area=self.pixArea,
-                                                       account_for_edges=True)
+                                                       account_for_edges=False)
 
         # rate interpolation
         rateInterp = interp1d(zz, nsn, kind='linear',
