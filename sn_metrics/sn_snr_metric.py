@@ -172,6 +172,8 @@ class SNSNRMetric(BaseMetric):
 
         dataSlice = dataSlice[idx]
 
+        if len(dataSlice) == 0:
+            return None
         
         # get pixRA and pixDec if necessary
         if 'pixRA' not in dataSlice.dtype.names:

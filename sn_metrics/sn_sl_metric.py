@@ -4,7 +4,8 @@ import healpy as hp
 from sn_stackers.coadd_stacker import CoaddStacker
 import time
 import pandas as pd
-
+from astropy.coordinates import SkyCoord
+from dustmaps.sfd import SFDQuery
 
 class SLSNMetric(BaseMetric):
     def __init__(self, metricName='SLSNMetric',
@@ -154,6 +155,21 @@ class SLSNMetric(BaseMetric):
         healpixId = int(np.unique(dataSlice['healpixID'])[0])
         pixRA = np.unique(dataSlice['pixRA'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
+        # get ebvofMW for this pixel
+        coords = SkyCoord(pixRA, pixDec, unit='deg')
+        try:
+            sfd = SFDQuery()
+        except Exception as err:
+            from dustmaps.config import config
+            config['data_dir'] = 'dustmaps'
+            import dustmaps.sfd
+            dustmaps.sfd.fetch()
+            # dustmaps('dustmaps')
+        sfd = SFDQuery()
+        ebvofMW = sfd(coords)
+
+        if ebvofMW >= 0.25:
+            return None
 
         r = [healpixId, pixRA, pixDec]
         names = ['healpixId', 'pixRA', 'pixDec']
