@@ -223,7 +223,8 @@ class SNNSNMetric(BaseMetric):
         self.obsstat = obsstat
         self.bandstat = None
         if self.obsstat:
-            self.bandstat = ['u','g','r','i','z','y','gr','gi','gz','iz','uu','gg','rr','ii','zz','yy']
+            self.bandstat = ['u', 'g', 'r', 'i', 'z', 'y', 'gr',
+                             'gi', 'gz', 'iz', 'uu', 'gg', 'rr', 'ii', 'zz', 'yy']
             """
             bands = 'grizy'
             for ba in bands:
@@ -235,6 +236,7 @@ class SNNSNMetric(BaseMetric):
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
             """
+
     def run(self, dataSlice,  slicePoint=None):
         """
         Run method of the metric
@@ -319,7 +321,7 @@ class SNNSNMetric(BaseMetric):
             return None
 
         if self.verbose:
-            print('season infos', season_info[['season','season_length']])
+            print('season infos', season_info[['season', 'season_length']])
 
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
@@ -361,7 +363,7 @@ class SNNSNMetric(BaseMetric):
                     #Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
                     for b in self.bandstat:
                         Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
-                        
+
                 Nvisits['total'] = season_info[idx]['Nvisits'].item()
                 vara_df, varb_df = self.run_seasons(
                     dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
@@ -528,10 +530,11 @@ class SNNSNMetric(BaseMetric):
                 on = ['healpixID', 'pixRA', 'pixDec', 'season']
                 zlimsdf = dfa.merge(
                     dfb, left_on=on, right_on=on, suffixes=('_faint', '_medium'))
-                
+
                 if self.verbose:
-                    print('result here',zlimsdf[['zlim_faint','zlim_medium','nsn_med_faint']])
-                
+                    print('result here', zlimsdf[[
+                          'zlim_faint', 'zlim_medium', 'nsn_med_faint']])
+
                 # add observing stat if requested
                 if self.obsstat:
                     # add median m5
@@ -688,11 +691,11 @@ class SNNSNMetric(BaseMetric):
         for key, val in Nvisits.items():
             df['N_{}'.format(key)] = val
 
-        for vv in ['x1','color','zlim','zlimp','zlimm','nsn_med','err_nsn_med']:
-            for ko in ['faint','medium']:
-                df['{}_{}'.format(vv,ko)] = [-1.0]
+        for vv in ['x1', 'color', 'zlim', 'zlimp', 'zlimm', 'nsn_med', 'err_nsn_med']:
+            for ko in ['faint', 'medium']:
+                df['{}_{}'.format(vv, ko)] = [-1.0]
 
-        for ko in ['faint','medium']:
+        for ko in ['faint', 'medium']:
             df['status_{}'.format(ko)] = [int(errortype)]
 
         return df
@@ -926,7 +929,8 @@ class SNNSNMetric(BaseMetric):
             zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
                                                            zmax=self.zmax,
                                                            duration_z=durinterp_z,
-                                                           survey_area=self.pixArea)
+                                                           survey_area=self.pixArea,
+                                                           account_for_edges=True)
 
             # rate interpolation
             rateInterp = interp1d(zz, nsn, kind='linear',
@@ -1398,7 +1402,8 @@ class SNNSNMetric(BaseMetric):
                                                        zmax=self.zmax,
                                                        dz=dz,
                                                        duration_z=duration_z,
-                                                       survey_area=self.pixArea)
+                                                       survey_area=self.pixArea,
+                                                       account_for_edges=True)
 
         # rate interpolation
         rateInterp = interp1d(zz, nsn, kind='linear',
@@ -1470,21 +1475,22 @@ class SNNSNMetric(BaseMetric):
                 Nvisits = grp[idx][self.nexpCol].sum()
             df['Nvisits_{}'.format(band)] = Nvisits
         """
-        
+
         if self.obsstat:
             grpb = grp.groupby(['night']).apply(
                 lambda x: pd.DataFrame({'filter': [''.join(sorted(x[self.filterCol]*x[self.nexpCol].astype(int).values))]})).reset_index()
 
-            dfcomb = grpb.groupby('filter').apply(lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
+            dfcomb = grpb.groupby('filter').apply(
+                lambda x: pd.DataFrame(({'Nvisits': [len(x)]}))).reset_index()
 
-            dfcomb = dfcomb.sort_values(by=['Nvisits'],ascending=False)
-            
+            dfcomb = dfcomb.sort_values(by=['Nvisits'], ascending=False)
+
             for vv in self.bandstat:
                 count = 0
                 for io, row in dfcomb.iterrows():
                     for b in vv:
                         ca = row['filter'].count(b)
-                        count += row['Nvisits']*np.min([1,ca])/len(vv)
+                        count += row['Nvisits']*np.min([1, ca])/len(vv)
                 df['N_{}'.format(vv)] = count
 
             """
@@ -1506,7 +1512,7 @@ class SNNSNMetric(BaseMetric):
                 #df['N_{}'.format(val)] = grpb[self.filterCol].str.count(val).sum()
                 df['N_{}'.format(val)] = len(grpb[idx])
             """
-        
+
         if len(grp) > 5:
             to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
             df['cadence'] = np.mean(to.diff())
