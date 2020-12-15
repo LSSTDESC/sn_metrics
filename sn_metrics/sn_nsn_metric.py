@@ -605,7 +605,7 @@ class SNNSNMetric(BaseMetric):
         dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
-
+        #dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
         return dur_z
 
     def calcDaymax(self, grp):
@@ -921,7 +921,7 @@ class SNNSNMetric(BaseMetric):
             season = np.median(grp['season'])
             idx = duration_z['season'] == season
             seas_duration_z = duration_z[idx]
-
+            
             durinterp_z = interp1d(
                 seas_duration_z['z'], seas_duration_z['season_length'], bounds_error=False, fill_value=0.)
 
@@ -929,6 +929,7 @@ class SNNSNMetric(BaseMetric):
             zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
                                                            zmax=self.zmax,
                                                            duration_z=durinterp_z,
+                                                           #duration = np.mean(seas_duration_z['season_length']),
                                                            survey_area=self.pixArea,
                                                            account_for_edges=False)
 
@@ -1109,9 +1110,13 @@ class SNNSNMetric(BaseMetric):
         else:
             effisel = effi_tot
 
+        
         nsn, var_nsn = self.nsn(
             effisel, grp['zlim'], grp['zlimp'], grp['zlimm'], durinterp_z)
-
+        """
+        nsn, var_nsn = self.nsn(
+            effisel, grp['zlim'], grp['zlimp'], grp['zlimm'], seas_duration_z)
+        """
         return (nsn, var_nsn)
 
     def nsn_typedf_weight(self, effi, duration_z, zlims):
@@ -1402,6 +1407,7 @@ class SNNSNMetric(BaseMetric):
                                                        zmax=self.zmax,
                                                        dz=dz,
                                                        duration_z=duration_z,
+                                                       #duration = np.mean(duration_z['season_length']),
                                                        survey_area=self.pixArea,
                                                        account_for_edges=False)
 
