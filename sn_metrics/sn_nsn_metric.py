@@ -199,7 +199,7 @@ class SNNSNMetric(BaseMetric):
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
         self.min_rf_phase_qual = -15.  # min ref phase for bounds effects
-        self.max_rf_phase_qual = 25.  # max ref phase for bounds effects
+        self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
 
         # snrate
         self.rateSN = SN_Rate(
