@@ -194,7 +194,7 @@ class SNNSNMetric(BaseMetric):
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
         self.zStep = 0.05  # zstep
-        self.daymaxStep = 3.  # daymax step
+        self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
@@ -202,7 +202,7 @@ class SNNSNMetric(BaseMetric):
         self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
 
         # snrate
-        self.rateSN = SN_Rate(
+        self.rateSN = SN_Rate(H0=70., Om0=0.3,
             min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
 
         # verbose mode - useful for debug and code performance estimation
@@ -637,8 +637,8 @@ class SNNSNMetric(BaseMetric):
         else:
             df = pd.DataFrame([0.], columns=['daymax'])
 
-        df['minRFphase'] = self.min_rf_phase_qual
-        df['maxRFphase'] = self.max_rf_phase_qual
+        df['minRFphase'] = self.min_rf_phase
+        df['maxRFphase'] = self.max_rf_phase
 
         return df
 
@@ -1679,6 +1679,7 @@ class SNNSNMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
+            print(lc.columns)
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
             if self.ploteffi and len(lc) > 0:
@@ -1741,12 +1742,12 @@ class SNNSNMetric(BaseMetric):
             sel['x1'].unique(), sel['color'].unique()))
         for band in sel['band'].unique():
             idxb = sel['band'] == band
-            selb = sel[idxb]
+            selb = sel.loc[idxb]
             ix = pos[band.split(':')[-1]][0]
             iy = pos[band.split(':')[-1]][1]
             for daymax in selb['daymax'].unique():
                 selc = selb[selb['daymax'] == daymax]
-                ax[ix][iy].plot(selc['time'], selc['flux_e_sec'])
+                ax[ix][iy].plot(selc['phase'], selc['flux_e_sec'])
 
         plt.show()
 
