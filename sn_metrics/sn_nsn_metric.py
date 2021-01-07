@@ -280,8 +280,10 @@ class SNNSNMetric(BaseMetric):
         if ebvofMW < 0.:
             RA = np.mean(dataSlice[self.RACol])
             Dec = np.mean(dataSlice[self.DecCol])
+            pixRA = np.unique(dataSlice['pixRA'])[0]
+            pixDec = np.unique(dataSlice['pixDec'])[0]
             # in that case ebvofMW value is taken from a map
-            coords = SkyCoord(RA, Dec, unit='deg')
+            coords = SkyCoord(pixRA, pixDec, unit='deg')
             try:
                 sfd = SFDQuery()
             except Exception as err:
@@ -1679,7 +1681,6 @@ class SNNSNMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
-            print(lc.columns)
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
             if self.ploteffi and len(lc) > 0:
