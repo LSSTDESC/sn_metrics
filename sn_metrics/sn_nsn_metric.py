@@ -203,7 +203,7 @@ class SNNSNMetric(BaseMetric):
 
         # snrate
         self.rateSN = SN_Rate(H0=70., Om0=0.3,
-            min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
+                              min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
@@ -923,7 +923,7 @@ class SNNSNMetric(BaseMetric):
             season = np.median(grp['season'])
             idx = duration_z['season'] == season
             seas_duration_z = duration_z[idx]
-            
+
             durinterp_z = interp1d(
                 seas_duration_z['z'], seas_duration_z['season_length'], bounds_error=False, fill_value=0.)
 
@@ -1112,7 +1112,6 @@ class SNNSNMetric(BaseMetric):
         else:
             effisel = effi_tot
 
-        
         nsn, var_nsn = self.nsn(
             effisel, grp['zlim'], grp['zlimp'], grp['zlimm'], durinterp_z)
         """
@@ -1522,8 +1521,11 @@ class SNNSNMetric(BaseMetric):
             """
 
         if len(grp) > 5:
-            to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
-            df['cadence'] = np.mean(to.diff())
+            #to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
+            #df['cadence'] = np.mean(to.diff())
+            nights = np.sort(grp['night'].unique())
+            diff = np.asarray(nights[1:]-nights[:-1])
+            df['cadence'] = np.median(diff).item()
 
         return df
 
