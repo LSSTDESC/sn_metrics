@@ -135,7 +135,7 @@ class SNNSNMetric(BaseMetric):
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
-                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1,
+                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., obsstat=True, **kwargs):
 
         self.mjdCol = mjdCol
@@ -177,6 +177,7 @@ class SNNSNMetric(BaseMetric):
         self.snr_min = snr_min  # SNR cut for points before/after peak
         self.n_phase_min = n_phase_min  # nb of point with phase <=-5
         self.n_phase_max = n_phase_max  # nb of points with phase >=20
+        self.errmodrel = errmodrel  # relative error model for g and r bands
 
         # print('selection', self.n_bef, self.n_aft,
         #      self.n_phase_min, self.n_phase_max)
@@ -362,7 +363,7 @@ class SNNSNMetric(BaseMetric):
                         b)].item()
                 """
                 if self.obsstat:
-                    #Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
+                    # Nvisits['filters_night'] = season_info[idx]['filters_night'].item()
                     for b in self.bandstat:
                         Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
 
@@ -380,7 +381,7 @@ class SNNSNMetric(BaseMetric):
                       'zlimp_faint', 'zlimm_faint',
                       'nsn_med_faint', 'err_nsn_med_faint']
             if self.obsstat:
-                #toshow += ['N_filters_night']
+                # toshow += ['N_filters_night']
                 for b in self.bandstat:
                     toshow += ['N_{}'.format(b)]
             print(varb_totdf[toshow])
@@ -607,7 +608,7 @@ class SNNSNMetric(BaseMetric):
         dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
-        #dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
+        # dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
         return dur_z
 
     def calcDaymax(self, grp):
@@ -931,7 +932,7 @@ class SNNSNMetric(BaseMetric):
             zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
                                                            zmax=self.zmax,
                                                            duration_z=durinterp_z,
-                                                           #duration = np.mean(seas_duration_z['season_length']),
+                                                           # duration = np.mean(seas_duration_z['season_length']),
                                                            survey_area=self.pixArea,
                                                            account_for_edges=False)
 
@@ -1408,7 +1409,7 @@ class SNNSNMetric(BaseMetric):
                                                        zmax=self.zmax,
                                                        dz=dz,
                                                        duration_z=duration_z,
-                                                       #duration = np.mean(duration_z['season_length']),
+                                                       # duration = np.mean(duration_z['season_length']),
                                                        survey_area=self.pixArea,
                                                        account_for_edges=False)
 
@@ -1504,7 +1505,7 @@ class SNNSNMetric(BaseMetric):
             print(count)
 
 
-            
+
             filtcombi = ''
             for i, row in dfcomb.iterrows():
                 filtcombi += '{}*{}/'.format(row['Nvisits'],row['filter'])
@@ -1516,13 +1517,13 @@ class SNNSNMetric(BaseMetric):
             for val in self.bandstat:
                 # print(val, grpb[self.filterCol].str.count(val).sum())
                 idx = grpb[self.filterCol]==val
-                #df['N_{}'.format(val)] = grpb[self.filterCol].str.count(val).sum()
+                # df['N_{}'.format(val)] = grpb[self.filterCol].str.count(val).sum()
                 df['N_{}'.format(val)] = len(grpb[idx])
             """
 
         if len(grp) > 5:
-            #to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
-            #df['cadence'] = np.mean(to.diff())
+            # to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
+            # df['cadence'] = np.mean(to.diff())
             nights = np.sort(grp['night'].unique())
             diff = np.asarray(nights[1:]-nights[:-1])
             df['cadence'] = np.median(diff).item()
@@ -1569,11 +1570,17 @@ class SNNSNMetric(BaseMetric):
         ----------
 
         """
+
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
                          'z': 3, 'x1': 2, 'color': 2})
         groups = tab.groupby(
             ['pixRA', 'pixDec', 'daymax', 'season', 'z', 'healpixID', 'x1', 'color'])
+
+        # remove points with too high errormodel
+        if self.errmodrel > 0.:
+            groups = groups.apply(
+                lambda x: self.select_error_model(x)).reset_index()
 
         tosum = []
         for ia, vala in enumerate(self.params):
@@ -1797,3 +1804,76 @@ class SNNSNMetric(BaseMetric):
             lambda x: self.zlimdf(x, dur_z)).reset_index(level=list(range(len(groupnames))))
 
         return res
+
+    def select_error_model(self, grp):
+        """
+        function to select LCs
+
+        Parameters
+        ---------------
+        grp : pandas df group
+          lc to consider
+
+        Returns
+        ----------
+        lc with filtered values (pandas df)
+
+       """
+
+        z = grp.name[4]
+
+        lc = Table.from_pandas(grp)
+        if self.errmodrel < 0.:
+            return lc.to_pandas()
+
+        # first: select iyz bands
+
+        bands_to_keep = []
+
+        lc_sel = Table()
+        for b in 'izy':
+            bands_to_keep.append('LSST::{}'.format(b))
+            idx = lc['band'] == 'LSST::{}'.format(b)
+            lc_sel = vstack([lc_sel, lc[idx]])
+
+        # now apply selection on g band for z>=0.25
+        sel_g = self.sel_band(lc, 'g', z, 0.25)
+
+        # now apply selection on r band for z>=0.6
+        sel_r = self.sel_band(lc, 'r', z, 0.6)
+
+        lc_sel = vstack([lc_sel, sel_g])
+        lc_sel = vstack([lc_sel, sel_r])
+
+        #print('hello', grp.name, z, len(grp), len(lc_sel))
+        return lc_sel.to_pandas()
+
+    def sel_band(self, tab, b, z, zref):
+        """
+        Method to perform selections depending on the band and z
+
+        Parameters
+        ---------------
+        tab: astropy table
+          lc to process
+        b: str
+          band to consider
+        zref: float
+           redshift below wiwh the cut wwill be applied
+
+        Returns
+        ----------
+        selected lc
+        """
+
+        idx = tab['band'] == 'LSST::{}'.format(b)
+        sel = tab[idx]
+        if len(sel) == 0:
+            return Table()
+
+        if z >= zref:
+            idb = sel['fluxerr_model']/sel['flux'] <= self.errmodrel
+            selb = sel[idb]
+            return selb
+
+        return sel
