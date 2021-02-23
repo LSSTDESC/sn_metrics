@@ -1571,16 +1571,15 @@ class SNNSNMetric(BaseMetric):
 
         """
 
+        # remove points with too high errormodel
+        if self.errmodrel > 0.:
+            tab = self.select_error_model(tab)
+
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
                          'z': 3, 'x1': 2, 'color': 2})
         groups = tab.groupby(
             ['pixRA', 'pixDec', 'daymax', 'season', 'z', 'healpixID', 'x1', 'color'])
-
-        # remove points with too high errormodel
-        if self.errmodrel > 0.:
-            groups = groups.apply(
-                lambda x: self.select_error_model(x)).reset_index()
 
         tosum = []
         for ia, vala in enumerate(self.params):
@@ -1811,7 +1810,7 @@ class SNNSNMetric(BaseMetric):
 
         Parameters
         ---------------
-        grp : pandas df group
+        grp : pandas df 
           lc to consider
 
         Returns
@@ -1819,8 +1818,6 @@ class SNNSNMetric(BaseMetric):
         lc with filtered values (pandas df)
 
        """
-
-        z = grp.name[4]
 
         lc = Table.from_pandas(grp)
         if self.errmodrel < 0.:
@@ -1837,18 +1834,17 @@ class SNNSNMetric(BaseMetric):
             lc_sel = vstack([lc_sel, lc[idx]])
 
         # now apply selection on g band for z>=0.25
-        sel_g = self.sel_band(lc, 'g', z, 0.25)
+        sel_g = self.sel_band(lc, 'g', 0.25)
 
         # now apply selection on r band for z>=0.6
-        sel_r = self.sel_band(lc, 'r', z, 0.6)
+        sel_r = self.sel_band(lc, 'r', 0.6)
 
         lc_sel = vstack([lc_sel, sel_g])
         lc_sel = vstack([lc_sel, sel_r])
 
-        #print('hello', grp.name, z, len(grp), len(lc_sel))
         return lc_sel.to_pandas()
 
-    def sel_band(self, tab, b, z, zref):
+    def sel_band(self, tab, b, zref):
         """
         Method to perform selections depending on the band and z
 
@@ -1871,9 +1867,19 @@ class SNNSNMetric(BaseMetric):
         if len(sel) == 0:
             return Table()
 
+        ida = sel['z'] < zref
+
+        idb = sel['z'] >= zref
+        idb &= sel['fluxerr_model']/sel['flux'] <= self.errmodrel
+
+        tabres = vstack([sel[idb], sel[ida]])
+
+        return tabres
+        """
         if z >= zref:
             idb = sel['fluxerr_model']/sel['flux'] <= self.errmodrel
             selb = sel[idb]
             return selb
 
         return sel
+        """
