@@ -1575,6 +1575,10 @@ class SNNSNMetric(BaseMetric):
         if self.errmodrel > 0.:
             tab = self.select_error_model(tab)
 
+        # define a 'night' column
+        tab['nnight'] = np.sign(tab['phase'])*tab['time']
+        tab['nnight'] = tab['nnight'].astype(int)
+
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
                          'z': 3, 'x1': 2, 'color': 2})
@@ -1586,9 +1590,11 @@ class SNNSNMetric(BaseMetric):
             for jb, valb in enumerate(self.params):
                 if jb >= ia:
                     tosum.append('F_'+vala+valb)
-        tosum += ['n_aft', 'n_bef', 'n_phmin', 'n_phmax']
+        #tosum += ['n_aft', 'n_bef', 'n_phmin', 'n_phmax']
+        tosum += ['n_phmin', 'n_phmax']
         # apply the sum on the group
-        sums = groups[tosum].sum().reset_index()
+        #sums = groups[tosum].sum().reset_index()
+        sums = groups.apply(lambda x: self.sumIt(x, tosum)).reset_index()
 
         # select LC according to the number of points bef/aft peak
         idx = sums['n_aft'] >= self.n_aft
@@ -1612,6 +1618,36 @@ class SNNSNMetric(BaseMetric):
             finalsn = pd.concat([finalsn, badsn], sort=False)
 
         return finalsn
+
+    def sumIt(self, grp, tosum):
+        """
+        Method to estimate the sum of some of the group col
+        and also of the number of epochs before and after peak
+
+        Parameters
+        --------------
+        grp: pandas df
+          pandas group to process
+        tosum: list(str)
+          list of the columns to sum
+
+        Returns
+        ----------
+        pandas df with the summed columns and the estimation of the number of epochs (n_bef and n_aft)
+
+        """
+
+        sums = grp[tosum].sum()
+
+        epochs = grp['nnight'].unique()
+
+        n_bef = len(epochs[epochs <= 0.])
+        n_aft = len(epochs)-n_bef
+
+        sums['n_bef'] = n_bef
+        sums['n_aft'] = n_aft
+
+        return sums
 
     def effiObsdf(self, data, color_cut=0.04):
         """
@@ -1810,7 +1846,7 @@ class SNNSNMetric(BaseMetric):
 
         Parameters
         ---------------
-        grp : pandas df 
+        grp : pandas df
           lc to consider
 
         Returns
