@@ -464,7 +464,15 @@ class SNNSNMetric(BaseMetric):
         # print('data', obs[['night', 'filter',
         #                  'observationStartMJD', 'fieldRA', 'fieldDec']])
         # estimate m5 median and gaps
-        m5_med = np.median(obs[self.m5Col])
+        m5_med = {}
+        for b in 'ugrizy':
+            m5_med[b] = 0.
+
+        for b in np.unique(obs[self.filterCol]):
+            io = obs[self.filterCol] == b
+            sel = obs[io]
+            m5_med[b] = np.median(sel[self.m5Col])
+
         obs.sort(order=self.mjdCol)
         diffs = np.diff(obs[self.mjdCol])
         gap_max = np.max(diffs)
@@ -541,7 +549,8 @@ class SNNSNMetric(BaseMetric):
                 # add observing stat if requested
                 if self.obsstat:
                     # add median m5
-                    zlimsdf.loc[:, 'm5_med'] = m5_med
+                    for key, vals in m5_med.items():
+                        zlimsdf.loc[:, 'm5_med_{}'.format(key)] = vals
                     zlimsdf.loc[:, 'gap_max'] = gap_max
                     zlimsdf.loc[:, 'gap_med'] = gap_med
                     zlimsdf.loc[:, 'ebvofMW'] = ebvofMW
@@ -662,8 +671,8 @@ class SNNSNMetric(BaseMetric):
           season
         errortype: str
           type of error
-        m5_med: float
-          median m5 value
+        m5_med: dict
+          median m5 values per band
         gap_max: float
           max internight gap
         gap_med: float
@@ -684,12 +693,15 @@ class SNNSNMetric(BaseMetric):
                            'nsn': [-1.0],
                            'var_nsn': [-1.0],
                            'season': [int(season)],
-                           'm5_med': [m5_med],
+                           # 'm5_med': [m5_med],
                            'gap_max': [gap_max],
                            'gap_med': [gap_med],
                            'ebvofMW': [ebvofMW],
                            'cadence': [cadence],
                            'season_length': [season_length]})
+
+        for key, val in m5_med.items():
+            df['m5_med_{}'.format(key)] = val
 
         for key, val in Nvisits.items():
             df['N_{}'.format(key)] = val
