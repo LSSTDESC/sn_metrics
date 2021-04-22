@@ -451,9 +451,14 @@ class SNNSNMetric(BaseMetric):
 
         # coaddition per night and per band (if requested by the user)
         if self.stacker is not None:
+            if self.verbose:
+                print('before stacking', seasons,
+                      obs[[self.m5Col, 'visitExposureTime']])
+
             obs = self.stacker._run(obs.to_records(index=False))
             if self.verbose:
-                print('after stacking', seasons)
+                print('after stacking', seasons,
+                      obs[[self.m5Col, 'visitExposureTime']])
             if self.timer:
                 print('timing:', time.time()-time_refb)
         else:
@@ -490,7 +495,7 @@ class SNNSNMetric(BaseMetric):
             # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
             if self.verbose:
                 idx = np.abs(sn['x1']+2) < 1.e-5
-                idx &= np.abs(sn['z']-0.2) < 1.e-5
+                idx &= np.abs(sn['z']-0.5) < 1.e-5
                 sel = sn[idx]
                 sel = sel.sort_values(by=['z', 'daymax'])
 
@@ -1587,10 +1592,17 @@ class SNNSNMetric(BaseMetric):
         if self.errmodrel > 0.:
             tab = self.select_error_model(tab)
 
+        if self.verbose:
+            print('after sel errmodel', len(tab))
+
         # define a 'night' column
         tab['nnight'] = np.sign(tab['phase'])*tab['time']
         tab['nnight'] = tab['nnight'].astype(int)
 
+        if self.verbose:
+            print(tab.columns)
+            print('iii', tab[['band', 'nnight', 'snr_m5',
+                              'fluxerr', 'fluxerr_photo', 'fluxerr_model']])
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
                          'z': 3, 'x1': 2, 'color': 2})
@@ -1614,6 +1626,8 @@ class SNNSNMetric(BaseMetric):
         idx &= sums['n_phmin'] >= self.n_phase_min
         idx &= sums['n_phmax'] >= self.n_phase_max
 
+        if self.verbose:
+            print('goodsn', len(sums.loc[idx]))
         finalsn = pd.DataFrame()
         goodsn = pd.DataFrame(sums.loc[idx])
 
@@ -1773,7 +1787,7 @@ class SNNSNMetric(BaseMetric):
 
         return sn_tot, lc_tot
 
-    def plotLC(self, lc, zref=0.01):
+    def plotLC(self, lc, zref=0.5):
         """
         Method to plot LC
 
@@ -1786,6 +1800,8 @@ class SNNSNMetric(BaseMetric):
 
         import matplotlib.pyplot as plt
 
+        if self.verbose:
+            print('lc', lc.columns)
         lc = lc.round({'daymax': 6})
         sel = lc[np.abs(lc['z']-zref) < 1.e-5]
         # sel = sel[sel['band']=='LSST::g']
@@ -1795,16 +1811,18 @@ class SNNSNMetric(BaseMetric):
         pos = dict(
             zip('ugrizy', [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]))
 
-        fig.suptitle('(x1,color)=({},{})'.format(
-            sel['x1'].unique(), sel['color'].unique()))
+        fig.suptitle('(x1,color)=({},{}) - z={}'.format(
+            sel['x1'].unique().item(), sel['color'].unique().item(), np.round(zref, 2)))
         for band in sel['band'].unique():
             idxb = sel['band'] == band
-            selb = sel.loc[idxb]
+            selb = sel[idxb].to_records(index=False)
             ix = pos[band.split(':')[-1]][0]
             iy = pos[band.split(':')[-1]][1]
-            for daymax in selb['daymax'].unique():
+            for daymax in np.unique(selb['daymax']):
                 selc = selb[selb['daymax'] == daymax]
-                ax[ix][iy].plot(selc['phase'], selc['flux_e_sec'])
+                #ax[ix][iy].plot(selc['phase'], selc['flux_e_sec'])
+                ax[ix][iy].errorbar(selc['phase'], selc['flux_e_sec'],
+                                    yerr=selc['flux_e_sec']/selc['snr_m5'])
 
         plt.show()
 
