@@ -126,6 +126,9 @@ class SNSaturationMetric(BaseMetric):
       rules estimation of the redshift limit (default: 0.95)
       if >0: zlim correspond to the zlim_coeff fraction of SN with z<zlim
       if <0: zlim is estimated as the redshift corresponding to a decrease of efficiency
+    fracpixel: numpyarray, opt
+      array of max frac pixel signal vs seeing (default: None)
+
     """
 
     def __init__(self, lc_reference, dustcorr,
@@ -133,10 +136,11 @@ class SNSaturationMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=0.05,
+                 vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=0.05,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
-                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., obsstat=True, **kwargs):
+                 lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., fracpixel=None,
+                 obsstat=True, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -149,15 +153,15 @@ class SNSaturationMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.seeingCol = seeingCol
         self.pixArea = pixArea
         self.ploteffi = ploteffi
-        self.x1_color_dist = x1_color_dist
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
+                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingCol]
 
         self.stacker = None
         if coadd:
@@ -194,7 +198,7 @@ class SNSaturationMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.001 # zstep
+        self.zStep = 0.001  # zstep
         self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
@@ -237,6 +241,10 @@ class SNSaturationMetric(BaseMetric):
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
             """
+
+        if fracpixel is not None:
+            self.pixel_max = interp1d(
+                fracpixel['seeing'], fracpixel['pixel_frac_med'], fill_value=0.0, bounds_error=False)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -339,7 +347,7 @@ class SNSaturationMetric(BaseMetric):
 
         if dur_z.empty:
             return None
-        
+
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
             lambda x: self.calcDaymax(x)).reset_index()
@@ -348,7 +356,6 @@ class SNSaturationMetric(BaseMetric):
             print('getting simulation parameters')
             print(gen_par)
 
-        
         # prepare pandas DataFrames for output
         vara_totdf = pd.DataFrame()
         varb_totdf = pd.DataFrame()
@@ -376,8 +383,8 @@ class SNSaturationMetric(BaseMetric):
                     dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
 
                 vara_totdf = pd.concat([vara_totdf, vara_df], sort=False)
-                
-                print(vara_df['z'])
+
+                print(vara_df[['z', 'x1', 'color']])
                 print(test)
         # estimate time of processing
         if self.verbose:
@@ -400,7 +407,7 @@ class SNSaturationMetric(BaseMetric):
 
         if self.outputType == 'effi':
             return vara_totdf
-       
+
         return varb_totdf
 
     @verbose_this('Processing season')
@@ -497,6 +504,13 @@ class SNSaturationMetric(BaseMetric):
             lc = self.gen_LC(obs, ebvofMW, gen_p.to_records(
                 index=False), verbose=self.verbose, timer=self.timer)
 
+            print(lc[['flux_e_sec', self.exptimeCol,
+                      self.nexpCol, self.seeingCol]])
+            # estimate the total flux here
+            lc['flux_e'] = lc['flux_e_sec'] * \
+                self.pixel_max(grp[self.seeingCol]) * \
+                lc['visitExposureTime']/lc['numExposures']
+            print(test)
             return lc
         return None
 
@@ -1144,29 +1158,6 @@ class SNSaturationMetric(BaseMetric):
 
         # print('hello', self.x1_color_dist)
 
-        if self.proxy_level == 1:
-            grpdf = pd.DataFrame(effi_grp)
-            effidf = pd.DataFrame(self.x1_color_dist)
-
-            totdf = grpdf.merge(
-                effidf, left_on=['x1', 'color'], right_on=['x1', 'color'])
-
-            totdf = totdf.rename(columns={'weight_tot': 'weight'})
-            # print(totdf[['x1', 'color', 'weight_tot']])
-            # print(totdf.columns)
-            season = np.median(zlim['season'])
-            idxb = duration_z['season'] == season
-            duration = duration_z[idxb]
-
-            # get the weighted number of supernovae
-            dfsn = totdf.groupby(['x1', 'color']).apply(lambda x: self.nsn_typedf_weight(
-                x, duration_z[idxb], zlim))
-
-            nsn_tot = dfsn['nsn']
-            var_tot = dfsn['var_nsn']
-
-            return nsn_tot.sum(axis=0), var_tot.sum(axis=0)
-
         # Now construct the griddata
 
         # get x1, color and z values
@@ -1656,9 +1647,9 @@ class SNSaturationMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
-          
+
             lc_tot = pd.concat([lc_tot, lc], sort=False)
-        
+
         return lc_tot
 
     def plotLC(self, lc, zref=0.5):
