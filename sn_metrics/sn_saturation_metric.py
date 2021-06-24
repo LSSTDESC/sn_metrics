@@ -128,6 +128,10 @@ class SNSaturationMetric(BaseMetric):
       if <0: zlim is estimated as the redshift corresponding to a decrease of efficiency
     fracpixel: numpyarray, opt
       array of max frac pixel signal vs seeing (default: None)
+    fullwell: float, opt
+       ccd full well limit for saturation
+    saturationLevel: float, opt
+      fraction of saturated LC point in a night (epoch) to consider this night as saturated. (default: 0.99)
 
     """
 
@@ -139,7 +143,7 @@ class SNSaturationMetric(BaseMetric):
                  vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=0.05,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
-                 lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., fracpixel=None,
+                 lightOutput=False, T0s='all', zlim_coeff=0.95, ebvofMW=-1., fracpixel=None, fullwell=90000., saturationLevel=0.99,
                  obsstat=True, **kwargs):
 
         self.mjdCol = mjdCol
@@ -159,7 +163,8 @@ class SNSaturationMetric(BaseMetric):
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
-
+        self.fullwell = fullwell
+        self.saturationLevel = saturationLevel
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingCol]
 
@@ -167,7 +172,7 @@ class SNSaturationMetric(BaseMetric):
         if coadd:
             cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
-                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
+                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, seeingaCol=self.seeingCol, visitExposureTimeCol='visitExposureTime')
         super(SNSaturationMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -188,11 +193,13 @@ class SNSaturationMetric(BaseMetric):
         self.lcFast = {}
 
         # loading reference LC files
+        print('hello lightoutput', lightOutput)
         for key, vals in lc_reference.items():
             self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol,
+                                      self.seeingCol,
                                       self.snr_min, lightOutput=lightOutput)
 
         # loading parameters
@@ -379,6 +386,7 @@ class SNSaturationMetric(BaseMetric):
                         Nvisits[b] = season_info[idx]['N_{}'.format(b)].item()
 
                 Nvisits['total'] = season_info[idx]['Nvisits'].item()
+
                 vara_df = self.run_seasons(
                     dataSlice, [seas], gen_par, dur_z, ebvofMW, cadence, season_length, Nvisits, verbose=self.verbose, timer=self.timer)
 
@@ -503,16 +511,100 @@ class SNSaturationMetric(BaseMetric):
         if ebvofMW < 0.25:
             lc = self.gen_LC(obs, ebvofMW, gen_p.to_records(
                 index=False), verbose=self.verbose, timer=self.timer)
+            print(lc.columns)
 
-            print(lc[['flux_e_sec', self.exptimeCol,
-                      self.nexpCol, self.seeingCol]])
             # estimate the total flux here
             lc['flux_e'] = lc['flux_e_sec'] * \
-                self.pixel_max(grp[self.seeingCol]) * \
+                self.pixel_max(lc[self.seeingCol]) * \
                 lc['visitExposureTime']/lc['numExposures']
+            print(lc[['flux_e_sec', self.exptimeCol,
+                      self.nexpCol, self.seeingCol, 'flux_e']])
+            res = lc.groupby(['healpixID', 'x1', 'color', 'daymax', 'z']).apply(
+                lambda x: self.calcLC(x)).reset_index()
+
+            resb = res.groupby(['healpixID', 'x1', 'color', 'z']).apply(
+                lambda x: pd.DataFrame({'probasat': [np.sum(x['sat'])/len(x)],
+                                        'deltaT_sat': [np.median(x[x['deltaT_sat'] < 900.]['deltaT_sat'])],
+                                        'deltaT_befsat': [np.median(x[x['deltaT_befsat'] < 900.]['deltaT_befsat'])],
+                                        'nbef_sat': [np.median(x[x['nbef_sat'] < 900]['nbef_sat'])]})).reset_index()
+            print(res)
+            print(resb)
+            self.plotSat(resb)
             print(test)
             return lc
         return None
+
+    def calcLC(self, grp):
+        """
+        Method to estimate saturation parameters from LC
+
+        Parameters
+        ---------------
+        grp: pandas grp
+
+        Returns
+        ----------
+        pandas df with the following columns:
+         'sat': 0 (if sat) or 1 (if sat)
+        'nbef_sat': number of epochs before saturation
+        'deltaT_sat': time of saturation (wrt begin LC)
+        'deltaT_befsat': time before saturation (wrt begin LC)
+
+        """
+
+        # select LC points with SNR>=SNRmin
+
+        idx = grp['snr_m5'] >= self.snr_min
+        sel = grp[idx]
+
+        # sort by mjd
+        sel = sel.sort_values(by=['time'])
+
+        # get mjdmin
+        mjd_min = np.min(sel['time'])
+
+        # get saturated points (if any)
+        sel['sat'] = 0
+        idx = sel['flux_e'] >= self.fullwell
+        sel.loc[idx, 'sat'] = 1
+
+        selsat = sel.groupby(['night']).apply(lambda x: pd.DataFrame({'sat': [np.sum(x['sat'])/len(x)],
+                                                                      'time': [np.median(x['time'])]})).reset_index()
+
+        isat = 0
+        nbef_sat = 999
+        deltaT_sat = 999.
+        deltaT_befsat = 999.
+
+        idx = selsat['sat'] >= self.saturationLevel
+        selsatb = selsat[idx]
+        if len(selsatb) > 0:
+            isat = 1
+            time_sat = np.min(selsatb['time'])
+            deltaT_sat = time_sat-mjd_min
+            ido = sel['time'] < time_sat
+            selnosat = sel[ido]
+            nbef_sat = len(np.unique(selnosat['night']))
+            deltaT_befsat = np.max(selnosat['time'])-mjd_min
+
+        return pd.DataFrame({'sat': [isat],
+                             'nbef_sat': [nbef_sat],
+                             'deltaT_sat': [deltaT_sat],
+                             'deltaT_befsat': [deltaT_befsat]})
+
+    def plotSat(self, tab):
+        """
+        Method to plot some metric results
+
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(nrows=3)
+
+        ax[0].plot(tab['z'], tab['probasat'])
+        ax[1].plot(tab['z'], tab['nbef_sat'])
+        ax[2].plot(tab['z'], tab['deltaT_befsat'])
+
+        plt.show()
 
     def duration_z(self, grp):
         """
