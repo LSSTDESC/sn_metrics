@@ -19,6 +19,8 @@ from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 
+filtercolors = dict(zip('ugrizy', ['b', 'c', 'g', 'y', 'r', 'm']))
+
 # Define decorators
 
 # estimate processing time
@@ -391,6 +393,11 @@ class SNSaturationMetric(BaseMetric):
         goodfilters = np.in1d(
             dataSlice[self.filterCol], np.array(['g', 'r', 'i']))
         dataSlice = dataSlice[goodfilters]
+
+        goodseasons = np.in1d(
+            dataSlice['season'], np.array(seasons))
+        dataSlice = dataSlice[goodseasons]
+
         if self.verbose:
             print('#### Processing season', seasons,
                   np.unique(dataSlice['healpixID']))
@@ -404,7 +411,7 @@ class SNSaturationMetric(BaseMetric):
             return None, None
         dur_z = dura_z[dura_z['season'].isin(seasons)]
         obs = pd.DataFrame(np.copy(dataSlice))
-        obs = obs[obs['season'].isin(seasons)]
+        # obs = obs[obs['season'].isin(seasons)]
 
         if self.timer:
             time_refb = time.time()
@@ -454,11 +461,13 @@ class SNSaturationMetric(BaseMetric):
             # generate light curve
             lc = self.gen_LC(obs, ebvofMW, gen_p.to_records(
                 index=False), verbose=self.verbose, timer=self.timer)
+            print('lc', np.unique(lc[self.exptimeCol]), gen_p)
             # estimate the total flux here
             lc['flux_e'] = lc['flux_e_sec'] * \
                 self.pixel_max(lc[self.seeingCol]) * \
                 lc['visitExposureTime']/lc['numExposures']
-
+            if self.plotmetric:
+                self.plotLC(obs, lc.to_records(index=False))
             res = lc.groupby(['healpixID', 'pixRA', 'pixDec', 'x1', 'color', 'daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
             resb = res.groupby(['healpixID', 'pixRA', 'pixDec', 'x1', 'color', 'z']).apply(
@@ -478,6 +487,100 @@ class SNSaturationMetric(BaseMetric):
                 print('processed', time.time()-time_ref)
             return resb
         return None
+
+    def plotExptime(self, data):
+        """
+        Method to plot visit exposure time vs MJD
+
+        Parameters
+        ---------------
+        data: pandas df
+          data to plot
+
+        """
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        ax.plot(data[self.mjdCol], data[self.exptimeCol], 'ko')
+        ax.set_xlabel('MJD [day]')
+        ax.set_ylabel('Visit Exposure Time [sec]')
+
+        plt.show()
+
+    def plotLC(self, obs, lc):
+
+        import matplotlib.pyplot as plt
+
+        zref = 0.02
+        idx = np.abs(lc['z']-zref) < 1.e-5
+        lc = lc[idx]
+        lc.sort(order='daymax')
+        daymaxs = np.unique(lc['daymax'])
+        ndaymax = 0
+        npeak = 0
+        r = []
+        for daymax in daymaxs:
+            fig, ax = plt.subplots(nrows=3, figsize=(8, 12))
+            self.plotObs(ax[0], obs, daymax)
+            ndaymax += 1
+            idx = np.abs(lc['daymax']-daymax) < 1.e-5
+            idx &= lc['snr_m5'] >= self.snr_min
+            sel = lc[idx]
+            ax[1].set_title(
+                '$z$={} - T$_0$={}'.format(zref, np.round(daymax, 1)))
+            print('here', len(sel), daymax)
+            if len(sel) > 0:
+                self.plotLC_T0(ax[1], sel, daymax)
+                npeak += self.statShape(sel, daymax)
+            r.append((npeak/ndaymax, daymax))
+            res = np.rec.fromrecords(r, names=['effipeak', 'daymax'])
+            ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
+
+            plt.show()
+
+    def plotObs(self, ax, obs, daymax):
+
+        for b in np.unique(obs[self.filterCol]):
+            idx = obs[self.filterCol] == b
+            sel = obs[idx]
+            ax.plot(sel[self.mjdCol], sel[self.m5Col],
+                    color=filtercolors[b[-1]], marker='o', label='{} band'.format(b[-1]), ls='None')
+
+        ax.plot([daymax]*2, [np.min(obs[self.m5Col]),
+                             np.max(obs[self.m5Col])], ls='dashed', color='k')
+
+        ax.legend()
+
+    def plotLC_T0(self, ax, sel, daymax):
+
+        for band in np.unique(sel['band']):
+            ib = sel['band'] == band
+            selb = sel[ib]
+            ax.plot(selb['time'], selb['flux_e'],
+                    '{}o'.format(filtercolors[band[-1]]), label='{} band'.format(band[-1]))
+        ax.legend()
+        tmin, tmax = np.min(sel['time']), np.max(sel['time'])
+        fluxmin, fluxmax = np.min(sel['flux_e']), np.max(sel['flux_e'])
+        ax.plot([tmin, tmax], [self.fullwell]*2, color='k')
+        ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
+        ax.plot([daymax-5.]*2,
+                [fluxmin, fluxmax], color='k', ls='dashed')
+        ax.plot([daymax+5.]*2,
+                [fluxmin, fluxmax], color='k', ls='dashed')
+
+    def statShape(self, sel, daymax):
+        # get non sat points
+        idnosat = sel['flux_e'] <= self.fullwell
+        sel_nosat = sel[idnosat]
+
+        npeak = 0
+        # get peak measurement
+        idpeak = np.abs(sel_nosat['time']-daymax) <= 5
+        n_aroundpeak = len(sel_nosat[idpeak])
+        if n_aroundpeak >= 3:
+            npeak = 1
+
+        return npeak
 
     def calcLC(self, grp):
         """
