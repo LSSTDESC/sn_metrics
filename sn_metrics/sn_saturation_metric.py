@@ -405,6 +405,9 @@ class SNSaturationMetric(BaseMetric):
         groupnames = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color']
 
         gen_p = gen_par[gen_par['season'].isin(seasons)]
+        T0_min = np.min(gen_p['daymax'])
+        T0_max = np.max(gen_p['daymax'])
+
         if gen_p.empty:
             if self.verbose:
                 print('No generator parameter found')
@@ -461,23 +464,23 @@ class SNSaturationMetric(BaseMetric):
             # generate light curve
             lc = self.gen_LC(obs, ebvofMW, gen_p.to_records(
                 index=False), verbose=self.verbose, timer=self.timer)
-            print('lc', np.unique(lc[self.exptimeCol]), gen_p)
+            # print('lc', np.unique(lc[self.exptimeCol]), gen_p)
             # estimate the total flux here
             lc['flux_e'] = lc['flux_e_sec'] * \
                 self.pixel_max(lc[self.seeingCol]) * \
                 lc['visitExposureTime']/lc['numExposures']
+            """
             if self.plotmetric:
-                self.plotLC(obs, lc.to_records(index=False))
-            res = lc.groupby(['healpixID', 'pixRA', 'pixDec', 'x1', 'color', 'daymax', 'z']).apply(
+                self.plotLC(obs, lc.to_records(index=False), T0_min, T0_max)
+            """
+            res = lc.groupby(['daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
-            resb = res.groupby(['healpixID', 'pixRA', 'pixDec', 'x1', 'color', 'z']).apply(
-                lambda x: pd.DataFrame({'probasat': [np.sum(x['sat'])/len(x)],
-                                        'probasat_err': [np.sum(x['sat'])*(1.-np.sum(x['sat'])/len(x))],
-                                        'deltaT_sat': [np.median(x[x['deltaT_sat'] < 900.]['deltaT_sat'])],
-                                        'deltaT_befsat': [np.median(x[x['deltaT_befsat'] < 900.]['deltaT_befsat'])],
-                                        'nbef_sat': [np.median(x[x['nbef_sat'] < 900]['nbef_sat'])],
-                                        'effipeak': [np.sum(x['ipeak'])/len(x)],
-                                        'effipeak_err': [np.sum(x['ipeak'])*(1.-np.sum(x['ipeak'])/len(x))]})).reset_index()
+            print(res[['z', 'sat', 'ipeak', 'daymax']])
+            resb = res.groupby(['z']).apply(
+                lambda x: self.proba(x)).reset_index()
+
+            print(
+                resb[['z', 'probasat', 'probasat_err', 'effipeak', 'effipeak_err']])
 
             resb['season'] = seasons[0]
             if self.plotmetric:
@@ -487,6 +490,25 @@ class SNSaturationMetric(BaseMetric):
                 print('processed', time.time()-time_ref)
             return resb
         return None
+
+    def proba(self, grp):
+
+        nevts = len(grp)
+        nsat = np.sum(grp['sat'])
+        npeak = np.sum(grp['ipeak'])
+
+        dictout = {}
+
+        dictout['probasat'] = [nsat/nevts]
+        dictout['probasat_err'] = [np.sqrt(nsat*(1.-nsat/nevts)/nevts)]
+        dictout['effipeak'] = [npeak/nevts]
+        dictout['effipeak_err'] = [np.sqrt(npeak*(1.-npeak/nevts)/nevts)]
+
+        for vv in ['deltaT_sat', 'deltaT_befsat', 'nbef_sat']:
+            io = grp[vv] < 500.
+            dictout[vv] = [np.median(grp[io][vv])]
+
+        return pd.DataFrame.from_dict(dictout)
 
     def plotExptime(self, data):
         """
@@ -507,9 +529,10 @@ class SNSaturationMetric(BaseMetric):
 
         plt.show()
 
-    def plotLC(self, obs, lc):
+    def plotLC(self, obs, lc, T0_min, T0_max):
 
         import matplotlib.pyplot as plt
+        from astropy.table import Table
 
         zref = 0.02
         idx = np.abs(lc['z']-zref) < 1.e-5
@@ -527,15 +550,23 @@ class SNSaturationMetric(BaseMetric):
             idx = np.abs(lc['daymax']-daymax) < 1.e-5
             idx &= lc['snr_m5'] >= self.snr_min
             sel = lc[idx]
+            print('hhh', type(sel))
 
-            fig, ax = plt.subplots(nrows=6, figsize=(8, 12))
-            fig.suptitle('healpixID: {}'.format(self.pixInfo['healpixID']))
-            self.plotObs(ax[0], obs, daymax, whatx=self.mjdCol, whaty=self.m5Col,
+            lctab = Table(sel)
+            lctab.meta['z'] = zref
+            lctab.meta['daymax'] = daymax
+
+            fig, ax = plt.subplots(nrows=5, figsize=(
+                8, 12), constrained_layout=True)
+            fig.suptitle('healpixID: {}'.format(
+                self.pixInfo['healpixID']), fontsize='medium')
+            self.plotObs(ax[0], obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
                          xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
             ndaymax += 1
 
             print('here', len(sel), daymax)
             if len(sel) > 0:
+                self.plotLC_sncosmo(lctab, 20)
                 axtitle = '$z$={} - T$_0$={}'.format(zref, np.round(daymax, 1))
                 self.plotLC_T0(ax[1], sel, daymax, axtitle=axtitle)
                 npeakobs, isatobs, nbef_sat, deltaT_befsat, deltaT_sat = self.statShape(
@@ -552,27 +583,31 @@ class SNSaturationMetric(BaseMetric):
                       np.median(r_deltaT_befsat), daymax))
             res = np.rec.fromrecords(
                 r, names=['effipeak', 'probasat', 'nbef_sat', 'deltaT_befsat', 'daymax'])
-            #ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
+            # ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
             self.plotSingle(ax[2], res, 'daymax', 'effipeak',
                             '', 'T$_0$ [day]', '$\epsilon_{peak}$')
-            self.plotSingle(ax[3], res, 'daymax', 'probasat',
-                            '', 'T$_0$ [day]', 'Saturation proba.')
-            self.plotSingle(ax[4], res, 'daymax', 'nbef_sat',
+            self.plotSingle(ax[2].twinx(), res, 'daymax', 'probasat',
+                            '', 'T$_0$ [day]', 'Saturation proba.', color='r')
+            self.plotSingle(ax[3], res, 'daymax', 'nbef_sat',
                             '', 'T$_0$ [day]', 'N$_{LC}$ bef. sat.')
-            self.plotSingle(ax[5], res, 'daymax', 'deltaT_befsat',
+            self.plotSingle(ax[4], res, 'daymax', 'deltaT_befsat',
                             '', 'T$_0$ [day]', '$\Delta$t  bef. sat. [day]')
 
-            figname = 'figures/{}_{}.png'.format(
-                self.pixInfo['healpixID'], iday)
+            plt.close()
+            """
+            figname = 'figures/{}_{}.jpg'.format(
+            self.pixInfo['healpixID'], iday)
             plt.savefig(figname)
             plt.close()
+            """
             """
             plt.draw()
             plt.pause(2)
             plt.close()
             """
+            # plt.show()
 
-    def plotObs(self, ax, obs, daymax, whatx, whaty, xlabel, ylabel):
+    def plotObs(self, ax, obs, daymax, T0_min, T0_max, whatx, whaty, xlabel, ylabel):
         """
         Method to plot observations
 
@@ -582,8 +617,12 @@ class SNSaturationMetric(BaseMetric):
           axis for the plot
         obs: numpy array
             observations to plot
-        daymax: float, opt
+        daymax: float
            T0 LC
+        T0_min: float
+          min T0 value
+        T0_max: float
+          max T0 value
         whatx: str
            x-axis variable
         whaty: str
@@ -603,6 +642,12 @@ class SNSaturationMetric(BaseMetric):
         ax.plot([daymax]*2, [np.min(obs[whaty]),
                              np.max(obs[whaty])], ls='dashed', color='k')
 
+        ax.plot([T0_min]*2, [np.min(obs[whaty]),
+                             np.max(obs[whaty])], ls='solid', color='r')
+
+        ax.plot([T0_max]*2, [np.min(obs[whaty]),
+                             np.max(obs[whaty])], ls='solid', color='r')
+
         ax.legend()
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -620,15 +665,15 @@ class SNSaturationMetric(BaseMetric):
         daymax: float
            T0 LC
         whatx: str, opt
-          x-variable to plot (default: time)
+          x-variable to plot(default: time)
         whaty: str, opt
-          y-variable to plot (default: flux_e)
+          y-variable to plot(default: flux_e)
         legx: str, opt
-          x-axis label (default: 'MJD [day]')
+          x-axis label(default: 'MJD [day]')
         legy: str, opt
-          y-axis label (default: 'max flux pixel [e/s])
+          y-axis label(default: 'max flux pixel[e/s])
         axtitle: str, opt
-          axis title (default: '')
+          axis title(default: '')
         """
         idx = sel['snr_m5'] >= self.snr_min
         sel = sel[idx]
@@ -734,14 +779,14 @@ class SNSaturationMetric(BaseMetric):
         pandas df with the following columns:
          'sat': 0 (if sat) or 1 (if sat)
         'nbef_sat': number of epochs before saturation
-        'deltaT_sat': time of saturation (wrt begin LC)
-        'deltaT_befsat': time before saturation (wrt begin LC)
+        'deltaT_sat': time of saturation(wrt begin LC)
+        'deltaT_befsat': time before saturation(wrt begin LC)
 
         """
 
         # select LC points with SNR>=SNRmin
 
-        T0 = grp.name[3]
+        T0 = grp.name[0]
         idx = grp['snr_m5'] >= self.snr_min
         sel = grp[idx]
 
@@ -814,7 +859,7 @@ class SNSaturationMetric(BaseMetric):
 
         plt.show()
 
-    def plotSingle(self, ax, tab, varx, vary, erry='', legx='', legy='', ls='solid'):
+    def plotSingle(self, ax, tab, varx, vary, erry='', legx='', legy='', ls='solid', color='k', label=None):
         """
         Method to plot
 
@@ -828,23 +873,95 @@ class SNSaturationMetric(BaseMetric):
         vary: str
           y-axis var
         erry: str, opt
-          y-axis var error (default: '')
+          y-axis var error(default: '')
         legx: str, opt
-          x-axis label (default: '')
+          x-axis label(default: '')
         legy: str, opt
-          y-axis label (default: '')
+          y-axis label(default: '')
         ls: str, opt
-          linestyle (default: solid)
+          linestyle(default: solid)
+        color: str, opt
+          line color (default: k)
+        label: str, opt
+          label for plot (default: None)
         """
 
         if erry is not '':
             ax.errorbar(tab[varx], tab[vary],
-                        yerr=tab[erry], color='k', marker='o')
+                        yerr=tab[erry], color=color, marker='o', label=label)
         else:
-            ax.plot(tab[varx], tab[vary], color='k', marker='o', ls=ls)
+            ax.plot(tab[varx], tab[vary], color=color,
+                    marker='o', ls=ls, label=label)
 
         ax.set_xlabel(legx)
-        ax.set_ylabel(legy)
+        ax.set_ylabel(legy, color=color)
+        if label:
+            ax.legend()
+
+    def plotLC_sncosmo(self, table, time_display):
+        """ Light curve plot using sncosmo methods
+
+        Parameters
+        ---------------
+        table: astropy table
+         table with LS informations (flux, ...)
+       time_display: float
+         duration of the window display
+        """
+
+        import pylab as plt
+        import sncosmo
+        from sn_tools.sn_telescope import Telescope
+        from astropy import units as u
+
+        telescope = Telescope(airmass=1.2)
+        prefix = 'LSST::'
+
+        for band in 'grizy':
+            name_filter = prefix+band
+            if telescope.airmass > 0:
+                bandpass = sncosmo.Bandpass(
+                    telescope.atmosphere[band].wavelen,
+                    telescope.atmosphere[band].sb,
+                    name=name_filter,
+                    wave_unit=u.nm)
+            else:
+                bandpass = sncosmo.Bandpass(
+                    telescope.system[band].wavelen,
+                    telescope.system[band].sb,
+                    name=name_filter,
+                    wave_unit=u.nm)
+            # print('registering',name_filter)
+            sncosmo.registry.register(bandpass, force=True)
+
+        z = table.meta['z']
+        if 'x1' in table.meta.keys():
+            x1 = table.meta['x1']
+            color = table.meta['color']
+            x0 = table.meta['x0']
+        else:
+            x1 = 0.
+            color = 0.
+            x0 = 0.
+        daymax = table.meta['daymax']
+
+        model = sncosmo.Model('salt2')
+        model.set(z=z,
+                  c=color,
+                  t0=daymax,
+                  # x0=x0,
+                  x1=x1)
+
+        # display only 1 sigma LC points
+        table = table[table['flux']/table['fluxerr'] >= 1.]
+
+        sncosmo.plot_lc(data=table)
+
+        """
+        plt.draw()
+        plt.pause(time_display)
+        plt.close()
+        """
 
     def duration_z(self, grp):
         """
@@ -853,8 +970,8 @@ class SNSaturationMetric(BaseMetric):
         when estimating the number of SN that can be detected
 
         daymin, daymax = min and max MJD of a season
-        T0_min(z) =  daymin-(1+z)*min_rf_phase_qual
-        T0_max(z) =  daymax-(1+z)*max_rf_phase_qual
+        T0_min(z) = daymin-(1+z)*min_rf_phase_qual
+        T0_max(z) = daymax-(1+z)*max_rf_phase_qual
         season_length(z) = T0_max(z)-T0_min(z)
 
         Parameters
@@ -879,14 +996,14 @@ class SNSaturationMetric(BaseMetric):
 
     def calcDaymax(self, grp):
         """
-        Method to estimate T0 (daymax) values for simulation.
+        Method to estimate T0(daymax) values for simulation.
 
         Parameters
         --------------
-        grp: group (pandas df sense)
+        grp: group(pandas df sense)
          group of data to process with the following cols:
-           T0_min: T0 min value (per season)
-           T0_max: T0 max value (per season)
+           T0_min: T0 min value(per season)
+           T0_max: T0 max value(per season)
 
         Returns
         ----------
@@ -910,7 +1027,7 @@ class SNSaturationMetric(BaseMetric):
 
     def seasonInfo(self, grp):
         """
-        Method to estimate seasonal info (cadence, season length, ...)
+        Method to estimate seasonal info(cadence, season length, ...)
 
         Parameters
         --------------
@@ -958,11 +1075,9 @@ class SNSaturationMetric(BaseMetric):
             """
             print(count)
 
-
-
             filtcombi = ''
             for i, row in dfcomb.iterrows():
-                filtcombi += '{}*{}/'.format(row['Nvisits'],row['filter'])
+                filtcombi += '{}*{}/'.format(row['Nvisits'], row['filter'])
 
             df['filters_night'] = filtcombi
             """
@@ -970,7 +1085,7 @@ class SNSaturationMetric(BaseMetric):
             # old code with bandstat
             for val in self.bandstat:
                 # print(val, grpb[self.filterCol].str.count(val).sum())
-                idx = grpb[self.filterCol]==val
+                idx = grpb[self.filterCol] == val
                 # df['N_{}'.format(val)] = grpb[self.filterCol].str.count(val).sum()
                 df['N_{}'.format(val)] = len(grpb[idx])
             """
@@ -993,7 +1108,7 @@ class SNSaturationMetric(BaseMetric):
         Parameters
         ---------------
         obs: numpy array
-          array of observations (from scheduler)
+          array of observations(from scheduler)
         ebvofMW: float
            e(B-V) of MW for dust effects
         gen_par: numpy array
