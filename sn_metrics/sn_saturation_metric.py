@@ -518,57 +518,165 @@ class SNSaturationMetric(BaseMetric):
         daymaxs = np.unique(lc['daymax'])
         ndaymax = 0
         npeak = 0
+        isat = 0
+        r_nbef = []
+        r_deltaT_befsat = []
+
         r = []
-        for daymax in daymaxs:
-            fig, ax = plt.subplots(nrows=3, figsize=(8, 12))
-            self.plotObs(ax[0], obs, daymax)
-            ndaymax += 1
+        for iday, daymax in enumerate(daymaxs):
             idx = np.abs(lc['daymax']-daymax) < 1.e-5
             idx &= lc['snr_m5'] >= self.snr_min
             sel = lc[idx]
-            ax[1].set_title(
-                '$z$={} - T$_0$={}'.format(zref, np.round(daymax, 1)))
+
+            fig, ax = plt.subplots(nrows=6, figsize=(8, 12))
+            fig.suptitle('healpixID: {}'.format(self.pixInfo['healpixID']))
+            self.plotObs(ax[0], obs, daymax, whatx=self.mjdCol, whaty=self.m5Col,
+                         xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
+            ndaymax += 1
+
             print('here', len(sel), daymax)
             if len(sel) > 0:
-                self.plotLC_T0(ax[1], sel, daymax)
-                npeak += self.statShape(sel, daymax)
-            r.append((npeak/ndaymax, daymax))
-            res = np.rec.fromrecords(r, names=['effipeak', 'daymax'])
-            ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
+                axtitle = '$z$={} - T$_0$={}'.format(zref, np.round(daymax, 1))
+                self.plotLC_T0(ax[1], sel, daymax, axtitle=axtitle)
+                npeakobs, isatobs, nbef_sat, deltaT_befsat, deltaT_sat = self.statShape(
+                    sel, daymax)
+                npeak += npeakobs
+                isat += isatobs
+                if nbef_sat < 100.:
+                    r_nbef.append(nbef_sat)
+                if deltaT_befsat < 100.:
+                    r_deltaT_befsat.append(deltaT_befsat)
 
-            plt.show()
+            print('nbef', r_nbef, r_deltaT_befsat)
+            r.append((npeak/ndaymax, isat/ndaymax, np.median(r_nbef),
+                      np.median(r_deltaT_befsat), daymax))
+            res = np.rec.fromrecords(
+                r, names=['effipeak', 'probasat', 'nbef_sat', 'deltaT_befsat', 'daymax'])
+            #ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
+            self.plotSingle(ax[2], res, 'daymax', 'effipeak',
+                            '', 'T$_0$ [day]', '$\epsilon_{peak}$')
+            self.plotSingle(ax[3], res, 'daymax', 'probasat',
+                            '', 'T$_0$ [day]', 'Saturation proba.')
+            self.plotSingle(ax[4], res, 'daymax', 'nbef_sat',
+                            '', 'T$_0$ [day]', 'N$_{LC}$ bef. sat.')
+            self.plotSingle(ax[5], res, 'daymax', 'deltaT_befsat',
+                            '', 'T$_0$ [day]', '$\Delta$t  bef. sat. [day]')
 
-    def plotObs(self, ax, obs, daymax):
+            figname = 'figures/{}_{}.png'.format(
+                self.pixInfo['healpixID'], iday)
+            plt.savefig(figname)
+            plt.close()
+            """
+            plt.draw()
+            plt.pause(2)
+            plt.close()
+            """
+
+    def plotObs(self, ax, obs, daymax, whatx, whaty, xlabel, ylabel):
+        """
+        Method to plot observations
+
+        Parameters
+        ---------------
+        ax: matplotlib axis
+          axis for the plot
+        obs: numpy array
+            observations to plot
+        daymax: float, opt
+           T0 LC
+        whatx: str
+           x-axis variable
+        whaty: str
+           y-axis variable
+        xlabel: str
+          x-axis label
+        ylabel: str
+          y-axis label
+        """
 
         for b in np.unique(obs[self.filterCol]):
             idx = obs[self.filterCol] == b
             sel = obs[idx]
-            ax.plot(sel[self.mjdCol], sel[self.m5Col],
+            ax.plot(sel[whatx], sel[whaty],
                     color=filtercolors[b[-1]], marker='o', label='{} band'.format(b[-1]), ls='None')
 
-        ax.plot([daymax]*2, [np.min(obs[self.m5Col]),
-                             np.max(obs[self.m5Col])], ls='dashed', color='k')
+        ax.plot([daymax]*2, [np.min(obs[whaty]),
+                             np.max(obs[whaty])], ls='dashed', color='k')
 
         ax.legend()
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
 
-    def plotLC_T0(self, ax, sel, daymax):
+    def plotLC_T0(self, ax, sel, daymax, whatx='time', whaty='flux_e', xlabel='MJD [day]', ylabel='max flux pixel [e/s]', axtitle=''):
+        """
+        Method to plot a light curve corresponding to T0
 
+        Parameters
+        ---------------
+        ax: matplotlib axis
+          axis for the plot
+        sel: array
+          LC to plot
+        daymax: float
+           T0 LC
+        whatx: str, opt
+          x-variable to plot (default: time)
+        whaty: str, opt
+          y-variable to plot (default: flux_e)
+        legx: str, opt
+          x-axis label (default: 'MJD [day]')
+        legy: str, opt
+          y-axis label (default: 'max flux pixel [e/s])
+        axtitle: str, opt
+          axis title (default: '')
+        """
+        idx = sel['snr_m5'] >= self.snr_min
+        sel = sel[idx]
         for band in np.unique(sel['band']):
             ib = sel['band'] == band
             selb = sel[ib]
-            ax.plot(selb['time'], selb['flux_e'],
+            ax.plot(selb[whatx], selb[whaty],
                     '{}o'.format(filtercolors[band[-1]]), label='{} band'.format(band[-1]))
-        ax.legend()
-        tmin, tmax = np.min(sel['time']), np.max(sel['time'])
-        fluxmin, fluxmax = np.min(sel['flux_e']), np.max(sel['flux_e'])
+        # ax.legend()
+        tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
+        fluxmin, fluxmax = np.min(sel[whaty]), np.max(sel[whaty])
         ax.plot([tmin, tmax], [self.fullwell]*2, color='k')
         ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
         ax.plot([daymax-5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
         ax.plot([daymax+5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(axtitle, loc='right', color='b')
 
     def statShape(self, sel, daymax):
+        """
+        Method to estimate a set of features related to the shape of LC
+
+        Parameters
+        ---------------
+        sel: array
+          lc to process
+        daymay: float
+          T0 LC
+
+        Returns
+        -----------
+        npeak: int
+          1 if number of LC points in a 5 days window around peak is larger that 3, 0 otherwise
+        nlc_bef_sat: int
+          number of LC points before sat
+
+        """
+        print('hello', type(sel))
+        sel.sort(order='time')
+        idx = sel['snr_m5'] >= self.snr_min
+        sel = sel[idx]
+
+        # get mjdmin
+        mjd_min = np.min(sel['time'])
+
         # get non sat points
         idnosat = sel['flux_e'] <= self.fullwell
         sel_nosat = sel[idnosat]
@@ -580,7 +688,38 @@ class SNSaturationMetric(BaseMetric):
         if n_aroundpeak >= 3:
             npeak = 1
 
-        return npeak
+        seldf = pd.DataFrame(np.copy(sel))
+        seldf['sat'] = 0
+        idsat = seldf['flux_e'] > self.fullwell
+        seldf.loc[idsat, 'sat'] = 1
+
+        print(seldf[['night', 'flux_e', 'sat', 'time']])
+        selsat = seldf.groupby(['night']).apply(lambda x: pd.DataFrame({'sat': [np.sum(x['sat'])/len(x)],
+                                                                        'time': [np.median(x['time'])]})).reset_index()
+        print(selsat)
+
+        isat = 0
+        nbef_sat = 999
+        deltaT_sat = 999.
+        deltaT_befsat = 999.
+
+        idx = selsat['sat'] >= self.saturationLevel
+        selsatb = selsat[idx]
+        if len(selsatb) > 0:
+            isat = 1
+            time_sat = np.min(selsatb['time'])
+            deltaT_sat = time_sat-mjd_min
+            ido = sel['time'] < time_sat
+            selnosat = sel[ido]
+            if len(selnosat) > 0:
+                nbef_sat = len(np.unique(selnosat['night']))
+                deltaT_befsat = np.max(selnosat['time'])-mjd_min
+            else:
+                nbef_sat = 0
+                deltaT_befsat = 0
+
+        print(isat, nbef_sat, deltaT_befsat, deltaT_sat)
+        return npeak, isat, nbef_sat, np.round(deltaT_befsat, 2), np.round(deltaT_sat, 2)
 
     def calcLC(self, grp):
         """
@@ -647,7 +786,7 @@ class SNSaturationMetric(BaseMetric):
                              'nbef_sat': [nbef_sat],
                              'deltaT_sat': [deltaT_sat],
                              'deltaT_befsat': [deltaT_befsat],
-                             'ipeak': [ipeak/len(selsat)]})
+                             'ipeak': [ipeak]})
 
     def plotSat(self, tab):
         """
@@ -675,7 +814,7 @@ class SNSaturationMetric(BaseMetric):
 
         plt.show()
 
-    def plotSingle(self, ax, tab, varx, vary, erry='', legx='', legy=''):
+    def plotSingle(self, ax, tab, varx, vary, erry='', legx='', legy='', ls='solid'):
         """
         Method to plot
 
@@ -694,13 +833,15 @@ class SNSaturationMetric(BaseMetric):
           x-axis label (default: '')
         legy: str, opt
           y-axis label (default: '')
+        ls: str, opt
+          linestyle (default: solid)
         """
 
         if erry is not '':
             ax.errorbar(tab[varx], tab[vary],
                         yerr=tab[erry], color='k', marker='o')
         else:
-            ax.plot(tab[varx], tab[vary], 'ko')
+            ax.plot(tab[varx], tab[vary], color='k', marker='o', ls=ls)
 
         ax.set_xlabel(legx)
         ax.set_ylabel(legy)
