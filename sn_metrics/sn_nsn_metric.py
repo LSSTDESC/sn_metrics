@@ -18,6 +18,7 @@ from scipy.interpolate import RegularGridInterpolator
 from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
+from sn_metrics.sn_plot_live import Plot_NSN_metric
 
 # Define decorators
 
@@ -136,7 +137,8 @@ class SNNSNMetric(BaseMetric):
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
-                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95, ebvofMW=-1., obsstat=True, **kwargs):
+                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
+                 ebvofMW=-1., obsstat=True, bands='grizy', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -155,6 +157,7 @@ class SNNSNMetric(BaseMetric):
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
+        self.bands = bands
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -237,6 +240,11 @@ class SNNSNMetric(BaseMetric):
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
             """
+        # this is to plot live estimation of the metric
+        if self.ploteffi:
+            self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
+                                           self.n_phase_min, self.n_phase_max, self.errmodrel,
+                                           self.mjdCol, self.m5Col, self.filterCol)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -275,6 +283,8 @@ class SNNSNMetric(BaseMetric):
         """
         # time 0 for performance estimation purpose
         time_ref = time.time()
+        goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
+        dataSlice = dataSlice[goodFilters]
 
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
@@ -1589,19 +1599,25 @@ class SNNSNMetric(BaseMetric):
         """
 
         # remove points with too high errormodel
+        tab['snr_model'] = tab['fluxerr_model']/tab['flux']
         if self.errmodrel > 0.:
             tab = self.select_error_model(tab)
 
         if self.verbose:
             print('after sel errmodel', len(tab))
 
+        # select LC points with min snr
+        idx = tab['snr_m5'] >= self.snr_min
+        tab = tab[idx]
+
         # define a 'night' column
-        tab['nnight'] = np.sign(tab['phase'])*tab['time']
-        tab['nnight'] = tab['nnight'].astype(int)
+        if 'night' not in tab.columns:
+            tab['night'] = np.sign(tab['phase'])*tab['time']
+            tab['night'] = tab['night'].astype(int)
 
         if self.verbose:
             print(tab.columns)
-            print('iii', tab[['band', 'nnight', 'snr_m5',
+            print('iii', tab[['band', 'night', 'snr_m5',
                               'fluxerr', 'fluxerr_photo', 'fluxerr_model']])
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 3,
@@ -1620,6 +1636,7 @@ class SNNSNMetric(BaseMetric):
         #sums = groups[tosum].sum().reset_index()
         sums = groups.apply(lambda x: self.sumIt(x, tosum)).reset_index()
 
+        print(sums[['daymax', 'z', 'n_bef', 'n_aft', 'n_phmin', 'n_phmax']])
         # select LC according to the number of points bef/aft peak
         idx = sums['n_aft'] >= self.n_aft
         idx &= sums['n_bef'] >= self.n_bef
@@ -1662,17 +1679,21 @@ class SNNSNMetric(BaseMetric):
         pandas df with the summed columns and the estimation of the number of epochs (n_bef and n_aft)
 
         """
-
         sums = grp[tosum].sum()
 
-        epochs = grp['nnight'].unique()
+        grp = grp.sort_values(by=['night'])
+        idx = grp['phase'] <= 0
+        sel = grp[idx]
 
-        n_bef = len(epochs[epochs <= 0.])
-        n_aft = len(epochs)-n_bef
+        n_bef = len(grp[idx]['night'].unique())
+
+        idx = grp['phase'] >= 0
+        n_aft = len(grp[idx]['night'].unique())
 
         sums['n_bef'] = n_bef
         sums['n_aft'] = n_aft
 
+        #print('result', n_bef, n_aft, sums['n_phmin'], sums['n_phmax'])
         return sums
 
     def effiObsdf(self, data, color_cut=0.04):
@@ -1751,10 +1772,17 @@ class SNNSNMetric(BaseMetric):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
+
+            if self.ploteffi and len(lc) > 0:
+                self.plotter.plotLoop(
+                    obs, lc, gen_par_cp)
+
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
+            """
             if self.ploteffi and len(lc) > 0:
                 self.plotLC(lc)
+            """
             if self.outputType == 'lc':
                 lc_tot = pd.concat([lc_tot, lc], sort=False)
             if self.verbose:
@@ -1771,7 +1799,7 @@ class SNNSNMetric(BaseMetric):
 
             if self.verbose:
                 print('End of supernova', time.time()-time_refs)
-
+            break
             """
             if sn is not None:
                 if sn_tot is None:
