@@ -5,6 +5,15 @@ import pandas as pd
 from astropy.table import Table, vstack
 
 filtercolors = dict(zip('ugrizy', ['b', 'c', 'g', 'y', 'r', 'm']))
+plt.rcParams['xtick.labelsize'] = 20
+plt.rcParams['ytick.labelsize'] = 20
+plt.rcParams['axes.labelsize'] = 22
+plt.rcParams['figure.titlesize'] = 22
+plt.rcParams['legend.fontsize'] = 22
+plt.rcParams['font.size'] = 22
+#plt.rcParams['font.weight'] = 'bold'
+plt.rcParams['font.family'] = 'Arial'
+#plt.rcParams['font.sans-serif'] = ['Helvetica']
 
 
 class Plot_NSN_metric:
@@ -356,3 +365,124 @@ class Plot_NSN_metric:
         tabres = vstack([sel[idb], sel[ida]])
 
         return tabres
+
+
+def plotNSN_effi(effi, vary, erry=None, legy='', ls='None'):
+    """
+    Simple method to plot vs z
+
+    Parameters
+    --------------
+    effi: pandas df
+          data to plot
+    vary: str
+      variable (column of effi) to plot
+    erry: str, opt
+      error on y-axis (default: None)
+     legy: str, opt
+       y-axis legend (default: '')
+
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    grb = effi.groupby(['x1', 'color'])
+    yerr = None
+    for key, grp in grb:
+        x1 = grp['x1'].unique()[0]
+        color = grp['color'].unique()[0]
+        if erry is not None:
+            yerr = grp[erry]
+        ax.errorbar(grp['z'], grp[vary], yerr=yerr,
+                    marker='o', label='(x1,color)=({},{})'.format(x1, color), lineStyle=ls)
+
+    ax.set_xlabel('z')
+    ax.set_ylabel(legy)
+    ax.legend()
+    ax.grid()
+    plt.show()
+
+
+def plotNSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot, zlim_coeff, zlim, zmean, zpeak):
+    """
+    Method to plot the NSN cumulative vs redshift
+
+    Parameters
+    --------------
+    grp: pandas group
+    data to process
+
+    """
+
+    # First plot: cumulative vs z
+    fig, ax = plt.subplots(figsize=(8, 6))
+    x1 = grp['x1'].unique()[0]
+    color = grp['color'].unique()[0]
+
+    ax.plot(zplot, nsn_cum_norm,
+            label='(x1,color)=({},{})'.format(x1, color), color='r')
+    ax.fill_between(zplot, nsn_cum_norm-nsn_cum_norm_err,
+                    nsn_cum_norm+nsn_cum_norm_err, color='y')
+
+    plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, 0., zlim_coeff)
+    """
+    ax.plot([zlim]*2, [0, zlim_coeff], ls='solid', color='b')
+
+    zlimstr = '$z_{'+str(zlim_coeff)+'}$'
+    ax.text(0.3, 0.6, '{} = {}'.format(zlimstr, np.round(zlim, 2)), color='b')
+    """
+
+    ax.set_ylabel('NSN ($z<$)')
+    ax.set_xlabel('z')
+    ax.set_xlim((0.0, 0.6))
+    ax.set_ylim((0.0, 1.05))
+    ax.plot([0., 1.2], [zlim_coeff, zlim_coeff],
+            ls='--', color='k')
+    ax.grid()
+    ax.legend(loc='upper left')
+
+
+def plotNSN_z(grp, zplot, nsn_z, zlim_coeff, zlim, zmean, zpeak):
+    """
+    Method to plot the NSN cumulative vs z
+
+    Parameters
+    --------------
+    grp: pandas group
+    data to process
+
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x1 = grp['x1'].unique()[0]
+    color = grp['color'].unique()[0]
+
+    ax.plot(zplot, nsn_z, ls='solid', color='r',
+            label='(x1,color)=({},{})'.format(x1, color))
+    ax.set_ylim(0., None)
+    y_min, y_max = ax.get_ylim()
+    plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
+
+    ax.grid()
+    ax.set_xlabel('$z$')
+    ax.set_ylabel('N$_{SN}$')
+    ax.legend(loc='upper right')
+    plt.show()
+
+
+def plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max):
+
+    ymed = np.mean([y_min, y_max])
+    # plot zmean bar
+    ax.plot([zmean]*2, [y_min, y_max], ls='solid', color='m')
+    zmeanstr = '$z_{mean}$'
+    ax.text(0.4, ymed, '{} = {}'.format(zmeanstr, zmean), color='m')
+
+    # plot zpeak bar
+    ax.plot([zpeak]*2, [y_min, y_max], ls='solid', color='k')
+    zpeakstr = '$z_{peak}$'
+    ax.text(0.4, 0.8*ymed, '{} = {}'.format(zpeakstr, zpeak), color='k')
+
+    # plot zlimit bar
+    ax.plot([zlim]*2, [y_min, y_max], ls='solid', color='b')
+    zlimstr = '$z_{'+str(zlim_coeff)+'}$'
+    ax.text(0.4, 0.6*ymed, '{} = {}'.format(zlimstr, np.round(zlim, 2)), color='b')
