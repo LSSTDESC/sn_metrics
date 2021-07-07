@@ -296,6 +296,7 @@ class SNNSNMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
+        print('processing pixel', np.unique(dataSlice['healpixID']))
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
         if ebvofMW < 0.:
@@ -351,7 +352,7 @@ class SNNSNMetric(BaseMetric):
             lambda x: self.duration_z(x)).reset_index()
 
         # remove dur_z with negative season lengths
-        idx = dur_z['season_length'] >= 10.
+        idx = dur_z['season_length'] >= 60.
         dur_z = dur_z[idx]
 
         if self.verbose:
