@@ -358,7 +358,7 @@ class SNNSNMetric(BaseMetric):
         if self.verbose:
             print('duration vs z', dur_z)
 
-        if dur_z.empty:
+        if dur_z.empty or len(dur_z)<2:
             return None
         # get simulation parameters
         if self.verbose:
@@ -650,6 +650,11 @@ class SNNSNMetric(BaseMetric):
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
         # dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
+
+        idx = dur_z['season_length'] > 60.
+        sel = dur_z[idx]
+        if len(sel)<2:
+            return pd.DataFrame()
         return dur_z
 
     def calcDaymax(self, grp):
