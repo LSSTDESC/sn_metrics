@@ -351,14 +351,11 @@ class SNNSNMetric(BaseMetric):
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
 
-        # remove dur_z with negative season lengths
-        idx = dur_z['season_length'] >= 60.
-        dur_z = dur_z[idx]
 
         if self.verbose:
             print('duration vs z', dur_z)
 
-        if dur_z.empty or len(dur_z)<2:
+        if dur_z.empty:
             return None
         # get simulation parameters
         if self.verbose:
