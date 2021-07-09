@@ -355,9 +355,6 @@ class SNNSNMetric(BaseMetric):
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
 
-        # remove dur_z with negative season lengths
-        idx = dur_z['season_length'] >= 60.
-        dur_z = dur_z[idx]
 
         if self.verbose:
             print('duration vs z', dur_z)
@@ -694,6 +691,11 @@ class SNNSNMetric(BaseMetric):
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
         # dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
+
+        idx = dur_z['season_length'] > 60.
+        sel = dur_z[idx]
+        if len(sel)<2:
+            return pd.DataFrame()
         return dur_z
 
     def calcDaymax(self, grp):
