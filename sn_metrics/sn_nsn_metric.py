@@ -299,11 +299,13 @@ class SNNSNMetric(BaseMetric):
         print('processing pixel', np.unique(dataSlice['healpixID']))
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
+        pixRA = np.unique(dataSlice['pixRA'])[0]
+        pixDec = np.unique(dataSlice['pixDec'])[0]
+        healpixID = np.unique(dataSlice['healpixID'])[0]
+
         if ebvofMW < 0.:
             RA = np.mean(dataSlice[self.RACol])
             Dec = np.mean(dataSlice[self.DecCol])
-            pixRA = np.unique(dataSlice['pixRA'])[0]
-            pixDec = np.unique(dataSlice['pixDec'])[0]
             # in that case ebvofMW value is taken from a map
             coords = SkyCoord(pixRA, pixDec, unit='deg')
             try:
@@ -341,11 +343,13 @@ class SNNSNMetric(BaseMetric):
         idx = season_info['season_length'] >= 60
         season_info = season_info[idx]
 
-        if season_info.empty:
-            return None
-
         if self.verbose:
             print('season infos', season_info[['season', 'season_length']])
+
+        if season_info.empty:
+            zlimsdf = self.nooutput(pixRA, pixDec, healpixID)
+            # print(zlimsdf.columns, len(zlimsdf.columns))
+            return zlimsdf
 
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
@@ -359,7 +363,10 @@ class SNNSNMetric(BaseMetric):
             print('duration vs z', dur_z)
 
         if dur_z.empty:
-            return None
+            zlimsdf = self.nooutput(pixRA, pixDec, healpixID)
+            # print(zlimsdf.columns, len(zlimsdf.columns))
+            return zlimsdf
+
         # get simulation parameters
         if self.verbose:
             print('getting simulation parameters')
@@ -420,6 +427,42 @@ class SNNSNMetric(BaseMetric):
 
         return varb_totdf
 
+    def nooutput(self, pixRA, pixDec, healpixID, val='season_length'):
+        """
+        Method to return a dataframe when no data could be processed
+
+        Parameters
+        ---------------
+        pixRA: float
+          pixel RA
+        pixDec: float
+          pixel Dec
+        healpixID: int
+           healpix number
+        val: str, opt
+          reason of the missing data (default: season_length)
+        Returns
+        ----------
+        dummy df
+
+        """
+        m5_med = {}
+        Nvisits = {}
+        for b in 'ugrizy':
+            m5_med[b] = 0.
+            Nvisits[b] = 0
+            Nvisits['{}{}'.format(b, b)] = 0
+        Nvisits['gr'] = 0
+        Nvisits['gi'] = 0
+        Nvisits['gz'] = 0
+        Nvisits['iz'] = 0
+        zlimsdf = self.errordf(
+            pixRA, pixDec, healpixID, 1,
+            self.status[val],
+            m5_med, -1., -1., -1., -1., -1., Nvisits)
+
+        return zlimsdf
+
     @verbose_this('Processing season')
     @time_this('Processing season')
     def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, cadence, season_length, Nvisits, **kwargs):
@@ -464,6 +507,7 @@ class SNNSNMetric(BaseMetric):
             if self.verbose:
                 print('No generator parameter found')
             return None, None
+
         dur_z = dura_z[dura_z['season'].isin(seasons)]
         obs = pd.DataFrame(np.copy(dataSlice))
         obs = obs[obs['season'].isin(seasons)]
@@ -739,13 +783,14 @@ class SNNSNMetric(BaseMetric):
             df['N_{}'.format(key)] = val
 
         # for vv in ['x1', 'color', 'zlim', 'zlimp', 'zlimm', 'nsn_med', 'err_nsn_med']:
-        for vv in ['x1', 'color', 'zlim', 'zmean', 'zpeak']:
+        for vv in ['x1', 'color', 'zlim', 'zmean', 'zpeak', 'nsn_zlim', 'nsn_zmean', 'nsn_zpeak']:
             for ko in ['faint', 'medium']:
                 df['{}_{}'.format(vv, ko)] = [-1.0]
 
         for ko in ['faint', 'medium']:
             df['status_{}'.format(ko)] = [int(errortype)]
 
+        df['N_total'] = 0.
         return df
 
     def erroreffi(self, pixRA, pixDec, healpixID, season):
