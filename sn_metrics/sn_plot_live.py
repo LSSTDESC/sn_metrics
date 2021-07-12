@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from sn_tools.sn_calcFast import CovColor
 import pandas as pd
 from astropy.table import Table, vstack
+import os
 
 filtercolors = dict(zip('ugrizy', ['b', 'c', 'g', 'y', 'r', 'm']))
 plt.rcParams['xtick.labelsize'] = 20
@@ -22,7 +23,7 @@ class Plot_NSN_metric:
 
     """
 
-    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol):
+    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,figdir='figures_nsn'):
         print("metric instance")
 
         self.snrmin = snrmin
@@ -35,6 +36,11 @@ class Plot_NSN_metric:
         self.filterCol = filterCol
         self.errmodrel = errmodrel
 
+        if not os.path.exists(figdir):
+            os.mkdir(figdir)
+
+        self.figdir = figdir
+        
     def plotLoop(self, obs, lc, gen_par, x1=-2.0, color=0.2):
         """
         Method to loop on LC and plot results
@@ -106,7 +112,7 @@ class Plot_NSN_metric:
                     gs[3, 1]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
                 # plt.show()
 
-                figname = 'figures_nsn/healpix1_{}.jpg'.format(ifig)
+                figname = '{}/healpix1_{}.jpg'.format(self.figdir,ifig)
                 plt.savefig(figname)
                 plt.close()
 
@@ -505,12 +511,9 @@ class Plot_Saturation_Metric:
     zref: redshift value
     """
 
-    def __init__(self, healpixID, season, T0_min, T0_max, zref, snr_min, mjdCol, m5Col, filterCol, fullwell, saturationLevel):
+    def __init__(self, healpixID, zref, snr_min, mjdCol, m5Col, filterCol, fullwell, saturationLevel,figdir='figures_saturation'):
 
         self.healpixID = healpixID
-        self.season = season
-        self.T0_min = T0_min
-        self.T0_max = T0_max
         self.zref = zref
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -519,7 +522,12 @@ class Plot_Saturation_Metric:
         self.fullwell = fullwell
         self.saturationLevel = saturationLevel
 
-    def __call__(self, obs, lc):
+        if not os.path.exists(figdir):
+            os.mkdir(figdir)
+        self.figdir = figdir
+        self.nfig = -1
+        
+    def __call__(self, obs, lc, season, T0_min, T0_max):
 
         idx = np.abs(lc['z']-self.zref) < 1.e-5
         lc = lc[idx]
@@ -533,6 +541,7 @@ class Plot_Saturation_Metric:
 
         r = []
         for iday, daymax in enumerate(daymaxs):
+            self.nfig += 1
             idx = np.abs(lc['daymax']-daymax) < 1.e-5
             idx &= lc['snr_m5'] >= self.snr_min
             sel = lc[idx]
@@ -547,10 +556,10 @@ class Plot_Saturation_Metric:
             fig = plt.figure(figsize=(15, 10), constrained_layout=True)
             gs = fig.add_gridspec(4, 2)
             fig.suptitle('healpixID: {} - season {}'.format(
-                self.healpixID, self.season), fontsize='medium')
+                self.healpixID, season), fontsize='medium')
 
             # plot observation
-            self.plotObs(fig.add_subplot(gs[:2, 0]), obs, daymax, self.T0_min, self.T0_max, whatx=self.mjdCol, whaty=self.m5Col,
+            self.plotObs(fig.add_subplot(gs[:2, 0]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
                          xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
             ndaymax += 1
 
@@ -589,8 +598,9 @@ class Plot_Saturation_Metric:
 
             # plt.close()
 
-            figname = 'figures/healpix{}_season{}_{}.jpg'.format(
-                self.healpixID, self.season, iday)
+            
+            figname = '{}/healpix{}_{}.jpg'.format(self.figdir,
+                                                   self.healpixID, self.nfig)
             plt.savefig(figname)
             plt.close()
 
