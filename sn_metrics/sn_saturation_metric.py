@@ -9,6 +9,7 @@ from scipy import interpolate
 import os
 from sn_tools.sn_calcFast import LCfast, CovColor
 from sn_tools.sn_telescope import Telescope
+from sn_metrics.sn_plot_live import Plot_Saturation_Metric
 from astropy.table import Table, vstack, Column
 import time
 import pandas as pd
@@ -469,10 +470,15 @@ class SNSaturationMetric(BaseMetric):
             lc['flux_e'] = lc['flux_e_sec'] * \
                 self.pixel_max(lc[self.seeingCol]) * \
                 lc['visitExposureTime']/lc['numExposures']
-            """
+
             if self.plotmetric:
-                self.plotLC(obs, lc.to_records(index=False), T0_min, T0_max)
-            """
+                #self.plotLC(obs, lc.to_records(index=False), T0_min, T0_max)
+                myplot = Plot_Saturation_Metric(
+                    self.pixInfo['healpixID'], seasons[0],
+                    T0_min, T0_max, 0.02, self.snr_min,
+                    self.mjdCol, self.m5Col, self.filterCol, self.fullwell, self.saturationLevel)
+                myplot(obs, lc.to_records(index=False))
+
             res = lc.groupby(['daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
             print(res[['z', 'sat', 'ipeak', 'daymax']])
@@ -529,7 +535,7 @@ class SNSaturationMetric(BaseMetric):
 
         plt.show()
 
-    def plotLC(self, obs, lc, T0_min, T0_max):
+    def plotLC_old(self, obs, lc, T0_min, T0_max):
 
         import matplotlib.pyplot as plt
         from astropy.table import Table
@@ -556,19 +562,22 @@ class SNSaturationMetric(BaseMetric):
             lctab.meta['z'] = zref
             lctab.meta['daymax'] = daymax
 
-            fig, ax = plt.subplots(nrows=5, figsize=(
-                8, 12), constrained_layout=True)
+            # fig, ax = plt.subplots(nrows=5, figsize=(
+            #    8, 12), constrained_layout=False)
+            fig = plt.figure(figsize=(15, 10), constrained_layout=True)
+            gs = fig.add_gridspec(4, 2)
             fig.suptitle('healpixID: {}'.format(
                 self.pixInfo['healpixID']), fontsize='medium')
-            self.plotObs(ax[0], obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
+            self.plotObs(fig.add_subplot(gs[:2, 0]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
                          xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
             ndaymax += 1
 
             print('here', len(sel), daymax)
             if len(sel) > 0:
-                self.plotLC_sncosmo(lctab, 20)
+                #self.plotLC_sncosmo(lctab, 20)
                 axtitle = '$z$={} - T$_0$={}'.format(zref, np.round(daymax, 1))
-                self.plotLC_T0(ax[1], sel, daymax, axtitle=axtitle)
+                self.plotLC_T0(fig.add_subplot(
+                    gs[2:, 0]), sel, daymax, np.min(obs[self.mjdCol]), np.max(obs[self.mjdCol]), axtitle=axtitle)
                 npeakobs, isatobs, nbef_sat, deltaT_befsat, deltaT_sat = self.statShape(
                     sel, daymax)
                 npeak += npeakobs
@@ -584,22 +593,22 @@ class SNSaturationMetric(BaseMetric):
             res = np.rec.fromrecords(
                 r, names=['effipeak', 'probasat', 'nbef_sat', 'deltaT_befsat', 'daymax'])
             # ax[2].plot(res['daymax'], res['effipeak'], color='k', marker='o')
-            self.plotSingle(ax[2], res, 'daymax', 'effipeak',
-                            '', 'T$_0$ [day]', '$\epsilon_{peak}$')
-            self.plotSingle(ax[2].twinx(), res, 'daymax', 'probasat',
+            self.plotSingle(fig.add_subplot(gs[0, 1]), res, 'daymax', 'effipeak',
+                            '', 'T$_0$ [day]', '$\epsilon_{peak}$', color='b')
+            self.plotSingle(fig.add_subplot(gs[1, 1]), res, 'daymax', 'probasat',
                             '', 'T$_0$ [day]', 'Saturation proba.', color='r')
-            self.plotSingle(ax[3], res, 'daymax', 'nbef_sat',
+            self.plotSingle(fig.add_subplot(gs[2, 1]), res, 'daymax', 'nbef_sat',
                             '', 'T$_0$ [day]', 'N$_{LC}$ bef. sat.')
-            self.plotSingle(ax[4], res, 'daymax', 'deltaT_befsat',
+            self.plotSingle(fig.add_subplot(gs[3, 1]), res, 'daymax', 'deltaT_befsat',
                             '', 'T$_0$ [day]', '$\Delta$t  bef. sat. [day]')
 
-            plt.close()
-            """
-            figname = 'figures/{}_{}.jpg'.format(
-            self.pixInfo['healpixID'], iday)
+            # plt.close()
+
+            figname = 'figures/healpix{}_{}.jpg'.format(
+                self.pixInfo['healpixID'], iday)
             plt.savefig(figname)
             plt.close()
-            """
+
             """
             plt.draw()
             plt.pause(2)
@@ -607,7 +616,7 @@ class SNSaturationMetric(BaseMetric):
             """
             # plt.show()
 
-    def plotObs(self, ax, obs, daymax, T0_min, T0_max, whatx, whaty, xlabel, ylabel):
+    def plotObs_old(self, ax, obs, daymax, T0_min, T0_max, whatx, whaty, xlabel, ylabel):
         """
         Method to plot observations
 
@@ -648,11 +657,12 @@ class SNSaturationMetric(BaseMetric):
         ax.plot([T0_max]*2, [np.min(obs[whaty]),
                              np.max(obs[whaty])], ls='solid', color='r')
 
-        ax.legend()
+        ax.legend(loc='upper left', bbox_to_anchor=(
+            0., 1.10), ncol=3, fontsize=15, frameon=False)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
 
-    def plotLC_T0(self, ax, sel, daymax, whatx='time', whaty='flux_e', xlabel='MJD [day]', ylabel='max flux pixel [e/s]', axtitle=''):
+    def plotLC_T0_old(self, ax, sel, daymax, tmin, tmax, whatx='time', whaty='flux_e', xlabel='MJD [day]', ylabel='max flux pixel [e/s]', axtitle=''):
         """
         Method to plot a light curve corresponding to T0
 
@@ -683,7 +693,7 @@ class SNSaturationMetric(BaseMetric):
             ax.plot(selb[whatx], selb[whaty],
                     '{}o'.format(filtercolors[band[-1]]), label='{} band'.format(band[-1]))
         # ax.legend()
-        tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
+        #tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
         fluxmin, fluxmax = np.min(sel[whaty]), np.max(sel[whaty])
         ax.plot([tmin, tmax], [self.fullwell]*2, color='k')
         ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
@@ -695,7 +705,7 @@ class SNSaturationMetric(BaseMetric):
         ax.set_ylabel(ylabel)
         ax.set_title(axtitle, loc='right', color='b')
 
-    def statShape(self, sel, daymax):
+    def statShape_old(self, sel, daymax):
         """
         Method to estimate a set of features related to the shape of LC
 
