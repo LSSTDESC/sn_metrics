@@ -356,7 +356,7 @@ class SNSaturationMetric(BaseMetric):
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
             toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'probasat', 'probasat_err',
-                      'deltaT_sat', 'deltaT_befsat', 'nbef_sat', 'effipeak', 'effipeak_err']
+                      'deltaT_sat', 'deltaT_befsat', 'nbef_sat', 'effipeak', 'effipeak_err','effipeak_sat', 'effipeak_sat_err','fractwi','twiphase']
             """
             if self.obsstat:
                 # toshow += ['N_filters_night']
@@ -482,16 +482,22 @@ class SNSaturationMetric(BaseMetric):
 
             res = lc.groupby(['daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
+            """
             print(res[['z', 'sat', 'ipeak', 'daymax','fractwi','twiphase']],seasons)
             for ii, row in res.iterrows():
                 print(row[['z', 'sat', 'ipeak', 'daymax','fractwi','twiphase']])
+            """
             resb = res.groupby(['z']).apply(
                 lambda x: self.proba(x)).reset_index()
-
+            """
             print(
-                resb[['z', 'probasat', 'probasat_err', 'effipeak', 'effipeak_err','twiphase','fractwi']])
-
+                resb[['z', 'probasat', 'probasat_err', 'effipeak', 'effipeak_err','effipeak_sat', 'effipeak_sat_err','twiphase','fractwi']])
+            """
             resb['season'] = seasons[0]
+            for vv in ['healpixID','pixRA','pixDec']:
+                resb[vv] = self.pixInfo[vv]
+
+                
             if self.plotmetric:
                 self.plotSat(resb.to_records(index=False))
 
@@ -505,14 +511,17 @@ class SNSaturationMetric(BaseMetric):
         nevts = len(grp)
         nsat = np.sum(grp['sat'])
         npeak = np.sum(grp['ipeak'])
+        npeak_sat = np.sum(grp['ipeak_sat'])
 
         dictout = {}
 
         dictout['probasat'] = [nsat/nevts]
         dictout['probasat_err'] = [np.sqrt(nsat*(1.-nsat/nevts)/nevts)]
         dictout['effipeak'] = [npeak/nevts]
+        dictout['effipeak_sat'] = [npeak_sat/nsat]
         dictout['effipeak_err'] = [np.sqrt(npeak*(1.-npeak/nevts)/nevts)]
-
+        dictout['effipeak_sat_err'] = [np.sqrt(npeak_sat*(1.-npeak_sat/nsat)/nsat)]
+        
         for vv in ['deltaT_sat', 'deltaT_befsat', 'nbef_sat','fractwi','twiphase']:
             io = grp[vv] < 500.
             dictout[vv] = [np.nanmedian(grp[io][vv])]
@@ -591,6 +600,7 @@ class SNSaturationMetric(BaseMetric):
             frac_twi = len(selsat[idt])/len(selsat)
                                                    
         isat = 0
+        ipeak_sat = 0
         nbef_sat = 999
         deltaT_sat = 999.
         deltaT_befsat = 999.
@@ -605,12 +615,14 @@ class SNSaturationMetric(BaseMetric):
             selnosat = sel[ido]
             nbef_sat = len(np.unique(selnosat['night']))
             deltaT_befsat = np.max(selnosat['time'])-mjd_min
+            ipeak_sat = ipeak
 
         return pd.DataFrame({'sat': [isat],
                              'nbef_sat': [nbef_sat],
                              'deltaT_sat': [deltaT_sat],
                              'deltaT_befsat': [deltaT_befsat],
                              'ipeak': [ipeak],
+                             'ipeak_sat': [ipeak_sat],
                              'fractwi': [frac_twi],
                              'twiphase': [twiphase]})
 
