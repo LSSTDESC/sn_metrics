@@ -254,6 +254,7 @@ class SNSaturationMetric(BaseMetric):
         self.pixInfo['pixRA'] = pixRA
         self.pixInfo['pixDec'] = pixDec
 
+        print('processing',healpixID)
         if self.figs_for_movie:
             self.plot_live = Plot_Saturation_Metric(
                 self.pixInfo['healpixID'], 0.02, self.snr_min,
