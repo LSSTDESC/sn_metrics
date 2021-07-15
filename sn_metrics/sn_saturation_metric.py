@@ -254,26 +254,20 @@ class SNSaturationMetric(BaseMetric):
         self.pixInfo['pixRA'] = pixRA
         self.pixInfo['pixDec'] = pixDec
 
+        self.healpixID = healpixID
+        self.pixRA = pixRA
+        self.pixDec = pixDec
+
+
         print('processing',healpixID)
         if self.figs_for_movie:
             self.plot_live = Plot_Saturation_Metric(
                 self.pixInfo['healpixID'], 0.02, self.snr_min,
                 self.mjdCol, self.m5Col, self.filterCol, self.fullwell, self.saturationLevel)
+
         if ebvofMW < 0.:
-            RA = np.mean(dataSlice[self.RACol])
-            Dec = np.mean(dataSlice[self.DecCol])
             # in that case ebvofMW value is taken from a map
-            coords = SkyCoord(pixRA, pixDec, unit='deg')
-            try:
-                sfd = SFDQuery()
-            except Exception as err:
-                from dustmaps.config import config
-                config['data_dir'] = 'dustmaps'
-                import dustmaps.sfd
-                dustmaps.sfd.fetch()
-                # dustmaps('dustmaps')
-            sfd = SFDQuery()
-            ebvofMW = sfd(coords)
+           ebvofMW = get_ebv()
 
         # get the seasons
         seasons = self.season
@@ -298,7 +292,7 @@ class SNSaturationMetric(BaseMetric):
         season_info = season_info[idx]
 
         if season_info.empty:
-            return None
+            return pd.DataFrame()
 
         if self.verbose:
             print('season infos', season_info[['season', 'season_length']])
@@ -315,7 +309,7 @@ class SNSaturationMetric(BaseMetric):
             print('duration vs z', dur_z)
 
         if dur_z.empty:
-            return None
+            return pd.DataFrame()
 
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
@@ -368,6 +362,30 @@ class SNSaturationMetric(BaseMetric):
 
         return vara_totdf
 
+    def get_ebv(self):
+        """
+        Method to estimate E(b-V)
+
+        Returns
+        -------
+        E(B-V)
+
+        """
+
+        coords = SkyCoord(self.pixRA, self.pixDec, unit='deg')
+        try:
+            sfd = SFDQuery()
+        except Exception as err:
+            from dustmaps.config import config
+            config['data_dir'] = 'dustmaps'
+            import dustmaps.sfd
+            dustmaps.sfd.fetch()
+                # dustmaps('dustmaps')
+        sfd = SFDQuery()
+        ebvofMW = sfd(coords)
+
+        return ebvofMW
+
     @verbose_this('Processing season')
     @time_this('Processing season')
     def run_seasons(self, dataSlice, seasons, gen_par, dura_z, ebvofMW, cadence, season_length, Nvisits, **kwargs):
@@ -397,13 +415,18 @@ class SNSaturationMetric(BaseMetric):
 
         time_ref = time.time()
 
+        goodseasons = np.in1d(
+            dataSlice['season'], np.array(seasons))
+        dataSlice = dataSlice[goodseasons]
+
         goodfilters = np.in1d(
             dataSlice[self.filterCol], np.array(['g', 'r', 'i']))
         dataSlice = dataSlice[goodfilters]
 
-        goodseasons = np.in1d(
-            dataSlice['season'], np.array(seasons))
-        dataSlice = dataSlice[goodseasons]
+        if len(dataSlice)<=5:
+            if self.verbose:
+                print('Obs sample too small')
+            return pd.DataFrame()
 
         if self.verbose:
             print('#### Processing season', seasons,
@@ -418,7 +441,7 @@ class SNSaturationMetric(BaseMetric):
         if gen_p.empty:
             if self.verbose:
                 print('No generator parameter found')
-            return None, None
+            return pd.DataFrame()
         dur_z = dura_z[dura_z['season'].isin(seasons)]
         obs = pd.DataFrame(np.copy(dataSlice))
         # obs = obs[obs['season'].isin(seasons)]
@@ -457,6 +480,7 @@ class SNSaturationMetric(BaseMetric):
 
         obs.sort(order=self.mjdCol)
         diffs = np.diff(obs[self.mjdCol])
+
         gap_max = np.max(diffs)
         gap_med = np.median(diffs)
 
@@ -505,7 +529,7 @@ class SNSaturationMetric(BaseMetric):
             if self.verbose:
                 print('processed', time.time()-time_ref)
             return resb
-        return None
+        return pd.DataFrame()
 
     def proba(self, grp):
 
@@ -834,6 +858,7 @@ class SNSaturationMetric(BaseMetric):
         - N_xx:  number of visits in xx where xx is defined in self.bandstat
 
         """
+        
         df = pd.DataFrame([len(grp)], columns=['Nvisits'])
         df['MJD_min'] = grp[self.mjdCol].min()
         df['MJD_max'] = grp[self.mjdCol].max()
