@@ -6,12 +6,20 @@ from astropy.table import Table, vstack
 import os
 
 filtercolors = dict(zip('ugrizy', ['b', 'c', 'g', 'y', 'r', 'm']))
+"""
 plt.rcParams['xtick.labelsize'] = 20
 plt.rcParams['ytick.labelsize'] = 20
 plt.rcParams['axes.labelsize'] = 22
 plt.rcParams['figure.titlesize'] = 22
 plt.rcParams['legend.fontsize'] = 22
 plt.rcParams['font.size'] = 22
+"""
+plt.rcParams['xtick.labelsize'] = 15
+plt.rcParams['ytick.labelsize'] = 15
+plt.rcParams['axes.labelsize'] = 15
+plt.rcParams['figure.titlesize'] = 15
+plt.rcParams['legend.fontsize'] = 15
+plt.rcParams['font.size'] = 15
 #plt.rcParams['font.weight'] = 'bold'
 plt.rcParams['font.family'] = 'Arial'
 #plt.rcParams['font.sans-serif'] = ['Helvetica']
@@ -23,8 +31,7 @@ class Plot_NSN_metric:
 
     """
 
-    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,figdir='figures_nsn'):
-        print("metric instance")
+    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,figdir='figures_nsn', templateLC={},dbName=''):
 
         self.snrmin = snrmin
         self.n_bef = n_bef
@@ -36,17 +43,25 @@ class Plot_NSN_metric:
         self.filterCol = filterCol
         self.errmodrel = errmodrel
 
-        if not os.path.exists(figdir):
-            os.mkdir(figdir)
+        self.figdir = '{}/{}'.format(figdir, dbName)
+        if not os.path.exists(self.figdir):
+            os.makedirs(self.figdir)
 
-        self.figdir = figdir
+        self.nfig = -1
+
+        self.template_LC = {}
+        if templateLC:
+            self.templateLC = templateLC
+            
         
-    def plotLoop(self, obs, lc, gen_par, x1=-2.0, color=0.2):
+    def plotLoop(self, healpixID, season, obs, lc, gen_par, x1=-2.0, color=0.2):
         """
         Method to loop on LC and plot results
 
         Parameters
         --------------
+        season: int
+          season of observation
         obs: array
           observations
         lc: array
@@ -64,29 +79,40 @@ class Plot_NSN_metric:
         idm &= lc['snr_m5'] >= self.snrmin
         lc = lc[idm]
         lc['flux_e_sec_err'] = lc['flux_e_sec']/lc['snr_m5']
-        filt_layout = dict(zip('griz', [(1, 0), (1, 1), (2, 0), (2, 1)]))
+        #filt_layout = dict(zip('griz', [(1, 0), (1, 1), (2, 0), (2, 1)]))
+        filt_layout = dict(zip('griz', [(0, 1), (0, 2), (1, 1), (1, 2)]))
         print(gen_par.dtype)
-        rb = []
+    
         ifig = -1
+        effi_z = None
         for zref in np.unique(lc['z']):
             idxa = np.abs(lc['z']-zref) < 1.e-5
             lca = lc[idxa]
             idg = np.abs(gen_par['z']-zref) < 1.e-5
             gen = gen_par[idg]
+            #select template LC here
+            lcref = None
+            if self.templateLC:
+                idtemp = np.abs(self.templateLC[(x1,color)]['z']-zref)<1.e-5
+                lcref = self.templateLC[(x1,color)][idtemp]
             T0_min = np.min(gen['daymax'])
             T0_max = np.max(gen['daymax'])
             nlc = 0
             nsel = 0
             ra = []
-            for daymax in np.unique(lca['daymax']):
+            daymaxs = np.unique(lca['daymax'])
+            for iday, daymax in enumerate(daymaxs):
+                rb = []
                 ifig += 1
+                self.nfig += 1
                 nlc += 1
                 idxb = np.abs(lca['daymax']-daymax) < 1.e-5
                 lcb = lca[idxb]
-                fig = plt.figure(figsize=(12, 8), constrained_layout=True)
-                gs = fig.add_gridspec(4, 2)
+                fig = plt.figure(figsize=(15, 8),constrained_layout=True)
+                fig.suptitle('healpixID: {} - season {}'.format(healpixID, season), fontsize='medium')
+                gs = fig.add_gridspec(3,3)
                 # plot observations
-                self.plotObs(fig.add_subplot(gs[0, :]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
+                self.plotObs(fig.add_subplot(gs[0,0]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
                              xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
                 # plot lc
                 for b in 'griz':
@@ -94,28 +120,40 @@ class Plot_NSN_metric:
                     selb = lcb[idx]
                     ia = filt_layout[b][0]
                     ib = filt_layout[b][1]
-                    self.plotLC_T0(fig.add_subplot(gs[ia, ib]), selb, b, daymax, whatx='time',
+                    lcrefb = None
+                    if lcref:
+                        idp = lcref['band'] ==  b
+                        idp &= lcref['flux_e_sec'] > 0.001
+                        lcrefb = lcref[idp]
+                    self.plotLC_T0(fig.add_subplot(gs[ia, ib]), selb, b, daymax, lcrefb,whatx='time',
                                    whaty='flux_e_sec', yerr='flux_e_sec_err', xlabel='MJD [day]', ylabel='flux [e/s]', axtitle='')
                 # get infos for selection
                 selected = self.getSelection(lcb, daymax, zref)
                 nsel += selected
                 effi = nsel/nlc
-                effi_err = nsel*(1.-effi)/nlc
+                effi_err = np.sqrt(nsel*(1.-effi))/nlc
                 ra.append((selected, daymax))
                 resa = np.rec.fromrecords(ra, names=['sel', 'daymax'])
-                rb.append((effi, np.sqrt(effi_err), np.round(zref, 2)))
+                rb.append((effi, effi_err, np.round(zref, 2)))
                 resb = np.rec.fromrecords(rb, names=['effi', 'effi_err', 'z'])
-                print(selected)
-                self.plotSingle(fig.add_subplot(
-                    gs[3, 0]), resa, varx='daymax', vary='sel', legx='T$_0$ [day]', legy='sel')
-                self.plotSingle(fig.add_subplot(
-                    gs[3, 1]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
-                # plt.show()
+                if effi_z is not None:
+                    resb = np.concatenate((resb,effi_z))
 
-                figname = '{}/healpix1_{}.jpg'.format(self.figdir,ifig)
-                plt.savefig(figname)
+                if iday == len(daymaxs)-1:
+                    effi_z = np.array(resb)
+                    
+                #print(selected)
+                self.plotSingle(fig.add_subplot(
+                    gs[1, 0]), resa, varx='daymax', vary='sel', legx='T$_0$ [day]', legy='sel')
+                self.plotSingle(fig.add_subplot(
+                    gs[2, 0]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
+                #plt.show()
+
+                
+                figname = '{}/healpix{}_{}.png'.format(self.figdir,healpixID, self.nfig)
+                fig.savefig(figname)
                 plt.close()
-
+                
     def plotObs(self, ax, obs, daymax, T0_min, T0_max, whatx, whaty, xlabel, ylabel):
         """
         Method to plot observations
@@ -146,7 +184,7 @@ class Plot_NSN_metric:
             idx = obs[self.filterCol] == b
             sel = obs[idx]
             ax.plot(sel[whatx], sel[whaty],
-                    color=filtercolors[b[-1]], marker='o', label='{} band'.format(b[-1]), ls='None')
+                    color=filtercolors[b[-1]], marker='o', label='{}'.format(b[-1]), ls='None')
 
         ax.plot([daymax]*2, [np.min(obs[whaty]),
                              np.max(obs[whaty])], ls='dashed', color='k')
@@ -157,11 +195,11 @@ class Plot_NSN_metric:
         ax.plot([T0_max]*2, [np.min(obs[whaty]),
                              np.max(obs[whaty])], ls='solid', color='r')
 
-        ax.legend()
+        ax.legend(loc='upper left', bbox_to_anchor=(0., 1.20), ncol=4, fontsize=12, frameon=False)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
 
-    def plotLC_T0(self, ax, sel, band, daymax, whatx='time', whaty='flux_e', yerr=None, xlabel='MJD [day]', ylabel='max flux pixel [e/s]', axtitle=''):
+    def plotLC_T0(self, ax, sel, band, daymax, lcref=None, whatx='time', whaty='flux_e', yerr=None, xlabel='MJD [day]', ylabel='max flux pixel [e/s]', axtitle=''):
         """
         Method to plot a light curve corresponding to T0
 
@@ -196,15 +234,21 @@ class Plot_NSN_metric:
         if yerr is not None:
             yerr = sel[yerr]
         ax.errorbar(sel[whatx], sel[whaty], yerr=yerr, color=filtercolors[band[-1]],
-                    marker='o', label='{} band'.format(band[-1]))
+                    marker='o', label='{} band'.format(band[-1]),ls='None')
+
+        if lcref:
+            ax.plot(lcref[whatx]+daymax,lcref[whaty], color=filtercolors[band[-1]])
+        
         # ax.legend()
         tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
-        fluxmin, fluxmax = np.min(sel[whaty]), np.max(sel[whaty])
+        fluxmin, fluxmax = np.min(lcref[whaty]), np.max(lcref[whaty])
         ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
+        """
         ax.plot([daymax-5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
         ax.plot([daymax+5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
+        """
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(axtitle, loc='right', color='b')
@@ -372,7 +416,39 @@ class Plot_NSN_metric:
 
         return tabres
 
+    def loadTemplate(self, x1, color,templateDir = 'Template_LC'):
+        """
+        Method to load template LC
+        
+        Parameters
+        ---------------
+        x1: float
+          x1 SN
+        color: float
+          SN color
 
+        Returns
+        ----------
+        pandas df of template LC
+
+
+        """
+
+        wave_cutoff = 'error_model'
+
+        if not self.error_model:
+            wave_cutoff = '{}_{}'.format(self.bluecutoff, self.redcutoff)
+        lcname = 'LC_{}_{}_{}_ebvofMW_0.0_vstack.hdf5'.format(
+            x1, color, wave_cutoff)
+         # Load the file - lc reference
+        lcFullName = '{}/{}'.format(templateDir, lcName)
+        f = h5py.File(lcFullName, 'r')
+        keys = list(f.keys())
+        # lc_ref_tot = Table.read(filename, path=keys[0])
+        lc_ref_tot = Table.from_pandas(pd.read_hdf(lcFullName))
+
+        return lc_ref_tot
+        
 def plotNSN_effi(effi, vary, erry=None, legy='', ls='None'):
     """
     Simple method to plot vs z
@@ -809,3 +885,5 @@ class Plot_Saturation_Metric:
         ax.set_ylabel(legy, color=color)
         if label:
             ax.legend()
+
+    
