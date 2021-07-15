@@ -107,7 +107,7 @@ class SNNSNYMetric(BaseMetric):
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=True, templateLC={}, dbName='',**kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -127,7 +127,7 @@ class SNNSNYMetric(BaseMetric):
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
         self.bands = bands
-        self.fig_for_movie = False
+        self.fig_for_movie = fig_for_movie
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -167,7 +167,7 @@ class SNNSNYMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.05  # zstep
+        self.zStep = 0.01  # zstep
         # get redshift range for processing
         zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
         if zRange[0] < 1.e-6:
@@ -217,11 +217,12 @@ class SNNSNYMetric(BaseMetric):
                         self.bandstat.append(
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
             """
-        # this is to plot live estimation of the metric
+        self.plotter = None
         if self.ploteffi and self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol)
+                                           self.mjdCol, self.m5Col, self.filterCol,
+                                           templateLC=templateLC,dbName=dbName)
 
 
 
@@ -296,8 +297,18 @@ class SNNSNYMetric(BaseMetric):
             
         # generate LC here
         if ebvofMW < 0.25:
-          obs.groupby(['season']).apply(lambda x : self.genLC(x,gen_par))
+          lc = obs.groupby(['season']).apply(lambda x : self.genLC(x,gen_par))
+
+          print('LC',lc,self.ploteffi,self.fig_for_movie)
+          if self.ploteffi and self.fig_for_movie and len(lc) > 0:
             
+              for season in obs['season'].unique():
+                  idxa = obs['season'] == season
+                  idxb = lc['season'] == season
+                  idxc = gen_par['season'] == season
+                  self.plotter.plotLoop(self.healpixID,season,
+                      obs[idxa].to_records(index=False), lc[idxb], gen_par[idxc].to_records(index=False))
+                
     def ebvofMW_calc(self):
         """
         Method to estimate E(B-V) 
@@ -430,17 +441,35 @@ class SNNSNYMetric(BaseMetric):
         return df
 
     def genLC(self, grp, gen_par_orig):
+        """
+        Method to generate light curves from observations
 
+        Parameters
+        ---------------
+        grp: pandas group
+          observations to process
+        gen_par_orig: pandas df
+          simulation parameters
+
+        Returns
+        ----------
+        light curves as pandas df
+
+        """
         season = grp.name
         print('there',season)
         idx = gen_par_orig['season'] == season
         gen_par = gen_par_orig[idx].to_records(index=False)
-        
+
+        res = pd.DataFrame()
         for key, vals in self.lcFast.items():
             gen_par_cp = gen_par.copy()
             if key == (-2.0, 0.2):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(grp.to_records(index=False), 0.0, gen_par_cp, bands='grizy')
-            print(lc)
+            print(type(lc))
+            res = pd.concat((res,lc))
             break
+
+        return res
