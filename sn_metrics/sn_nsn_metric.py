@@ -1955,11 +1955,9 @@ class SNNSNMetric(BaseMetric):
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
 
             if key == (-2.0, 0.2):
+                print('hello',len(lc))
                 tt = lc.groupby(['z','daymax']).apply(lambda x : self.sn_cad_gap(x)).reset_index()
-                sn_info = tt.groupby(['z']).apply(lambda x : pd.DataFrame({'cad_sn_mean': [x['cad_sn'].mean()],
-                                                                           'cad_sn_std': [x['cad_sn'].std()],
-                                                                           'gap_sn_mean': [x['gap_sn'].mean()],
-                                                                           'gap_sn_std': [x['gap_sn'].std()]}))
+                sn_info = tt.groupby(['z']).apply(lambda x : self.sn_cad_gap_sum(x)).reset_index()
             
             if self.ploteffi and self.fig_for_movie and len(lc)>0 and key==(-2.0, 0.2):
                 for season in np.unique(obs['season']):
@@ -2008,6 +2006,17 @@ class SNNSNMetric(BaseMetric):
 
         return sn_tot, lc_tot, sn_info
 
+    def sn_cad_gap_sum(self, grp):
+
+        if len(grp) > 0:
+            res = pd.DataFrame({'cad_sn_mean': [grp['cad_sn'].mean()],
+                                'cad_sn_std': [grp['cad_sn'].std()],
+                                'gap_sn_mean': [grp['gap_sn'].mean()],
+                                'gap_sn_std': [grp['gap_sn'].std()]})
+        else:
+            return pd.DataFrame()
+
+        
     def sn_cad_gap(self, grp):
         """
         Method to estimate cadence and gap for a set od grp points
@@ -2022,8 +2031,10 @@ class SNNSNMetric(BaseMetric):
         nights = np.unique(grp[self.nightCol])
         nights.sort()
         diff = np.diff(nights)
-        return pd.DataFrame({'cad_sn': [np.median(diff)], 'gap_sn': [np.max(diff)]})
-
+        if len(diff)>=2:
+            return pd.DataFrame({'cad_sn': [np.median(diff)], 'gap_sn': [np.max(diff)]})
+        else:
+            return pd.DataFrame()
         
     def plotLC(self, lc, zref=0.5):
         """
