@@ -147,7 +147,7 @@ class SNNSNMetric(BaseMetric):
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='',**kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -167,7 +167,7 @@ class SNNSNMetric(BaseMetric):
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
         self.bands = bands
-        self.fig_for_movie = False
+        self.fig_for_movie = fig_for_movie
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -207,7 +207,13 @@ class SNNSNMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.05  # zstep
+        self.zStep = 0.03  # zstep
+        # get redshift range for processing
+        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
+        if zRange[0] < 1.e-6:
+            zRange[0] = 0.01
+
+        self.zRange = np.unique(zRange)
         self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
@@ -254,7 +260,8 @@ class SNNSNMetric(BaseMetric):
         if self.ploteffi and self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol)
+                                           self.mjdCol, self.m5Col, self.filterCol,self.nightCol,
+                                           templateLC=templateLC,dbName=dbName)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -299,25 +306,12 @@ class SNNSNMetric(BaseMetric):
         print('processing pixel', np.unique(dataSlice['healpixID']))
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
-        pixRA = np.unique(dataSlice['pixRA'])[0]
-        pixDec = np.unique(dataSlice['pixDec'])[0]
-        healpixID = np.unique(dataSlice['healpixID'])[0]
+        self.pixRA = np.unique(dataSlice['pixRA'])[0]
+        self.pixDec = np.unique(dataSlice['pixDec'])[0]
+        self.healpixID = np.unique(dataSlice['healpixID'])[0]
 
-        if ebvofMW < 0.:
-            RA = np.mean(dataSlice[self.RACol])
-            Dec = np.mean(dataSlice[self.DecCol])
-            # in that case ebvofMW value is taken from a map
-            coords = SkyCoord(pixRA, pixDec, unit='deg')
-            try:
-                sfd = SFDQuery()
-            except Exception as err:
-                from dustmaps.config import config
-                config['data_dir'] = 'dustmaps'
-                import dustmaps.sfd
-                dustmaps.sfd.fetch()
-                # dustmaps('dustmaps')
-            sfd = SFDQuery()
-            ebvofMW = sfd(coords)
+        if ebvofMW < 0:
+            ebvofMW = self.ebvofMW_calc()
 
         # get the seasons
         seasons = self.season
@@ -326,20 +320,13 @@ class SNNSNMetric(BaseMetric):
         if self.season == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
 
-        # get redshift range for processing
-        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
-        if zRange[0] < 1.e-6:
-            zRange[0] = 0.01
-
-        self.zRange = np.unique(zRange)
-
         # season infos
         dfa = pd.DataFrame(np.copy(dataSlice))
         dfa = dfa[dfa['season'].isin(seasons)]
         season_info = dfa.groupby(['season']).apply(
             lambda x: self.seasonInfo(x)).reset_index()
 
-        # select seasons of at least 30 days
+        # select seasons of at least 60 days
         idx = season_info['season_length'] >= 60
         season_info = season_info[idx]
 
@@ -347,7 +334,7 @@ class SNNSNMetric(BaseMetric):
             print('season infos', season_info[['season', 'season_length']])
 
         if season_info.empty:
-            zlimsdf = self.nooutput(pixRA, pixDec, healpixID)
+            zlimsdf = self.nooutput(self.pixRA, self.pixDec, self.healpixID)
             # print(zlimsdf.columns, len(zlimsdf.columns))
             return zlimsdf
 
@@ -360,7 +347,7 @@ class SNNSNMetric(BaseMetric):
             print('duration vs z', dur_z)
 
         if dur_z.empty:
-            zlimsdf = self.nooutput(pixRA, pixDec, healpixID)
+            zlimsdf = self.nooutput(self.pixRA, self.pixDec, self.healpixID)
             # print(zlimsdf.columns, len(zlimsdf.columns))
             return zlimsdf
 
@@ -424,6 +411,30 @@ class SNNSNMetric(BaseMetric):
 
         return varb_totdf
 
+    def ebvofMW_calc(self):
+        """
+        Method to estimate E(B-V) 
+
+        Returns
+        ----------
+        E(B-V)
+
+        """
+        # in that case ebvofMW value is taken from a map
+        coords = SkyCoord(self.pixRA, self.pixDec, unit='deg')
+        try:
+            sfd = SFDQuery()
+        except Exception as err:
+            from dustmaps.config import config
+            config['data_dir'] = 'dustmaps'
+            import dustmaps.sfd
+            dustmaps.sfd.fetch()
+            # dustmaps('dustmaps')
+        sfd = SFDQuery()
+        ebvofMW = sfd(coords)
+
+        return ebvofMW
+    
     def nooutput(self, pixRA, pixDec, healpixID, val='season_length'):
         """
         Method to return a dataframe when no data could be processed
@@ -489,13 +500,8 @@ class SNNSNMetric(BaseMetric):
 
         time_ref = time.time()
 
-        # get pixel id
-        pixRA = np.unique(dataSlice['pixRA'])[0]
-        pixDec = np.unique(dataSlice['pixDec'])[0]
-        healpixID = int(np.unique(dataSlice['healpixID'])[0])
-
         if self.verbose:
-            print('#### Processing season', seasons, healpixID)
+            print('#### Processing season', seasons, self.healpixID)
 
         groupnames = ['pixRA', 'pixDec', 'healpixID', 'season', 'x1', 'color']
 
@@ -532,27 +538,16 @@ class SNNSNMetric(BaseMetric):
         # print('data', obs[['night', 'filter',
         #                  'observationStartMJD', 'fieldRA', 'fieldDec']])
         # estimate m5 median and gaps
-        m5_med = {}
-        for b in 'ugrizy':
-            m5_med[b] = 0.
-
-        for b in np.unique(obs[self.filterCol]):
-            io = obs[self.filterCol] == b
-            sel = obs[io]
-            m5_med[b] = np.median(sel[self.m5Col])
-
-        obs.sort(order=self.mjdCol)
-        diffs = np.diff(obs[self.mjdCol])
-        gap_max = np.max(diffs)
-        gap_med = np.median(diffs)
+        m5_med,gap_max,gap_med = self.getInfos_obs(obs)
 
         # simulate supernovae and lc
         if self.verbose:
             print("LC generation")
 
         sn = pd.DataFrame()
+        sn_infos = pd.DataFrame()
         if ebvofMW < 0.25:
-            sn, lc = self.gen_LC_SN(obs, ebvofMW, gen_p.to_records(
+            sn, lc, sn_infos = self.gen_LC_SN(obs, 0.0, gen_p.to_records(
                 index=False), verbose=self.verbose, timer=self.timer)
 
             # print('sn here', sn[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor']])
@@ -574,11 +569,11 @@ class SNNSNMetric(BaseMetric):
                 print('no simulation possible!!')
             for seas in seasons:
                 zlimsdf = self.errordf(
-                    pixRA, pixDec, healpixID, seas,
+                    self.pixRA, self.pixDec, self.healpixID, seas,
                     self.status['nosn'],
                     m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits)
                 effi_seasondf = self.erroreffi(
-                    pixRA, pixDec, healpixID, seas)
+                    self.pixRA, self.pixDec, self.healpixID, seas)
             return effi_seasondf, zlimsdf
         else:
             # LC could be simulated -> estimate efficiencies
@@ -631,16 +626,20 @@ class SNNSNMetric(BaseMetric):
                     zlimsdf.loc[:, 'season_length'] = season_length
                     for b, vals in Nvisits.items():
                         zlimsdf.loc[:, 'N_{}'.format(b)] = vals
-
+                    zlimsdf.loc[:, 'cad_sn_mean'] = sn_infos['cad_sn_mean'].mean()
+                    zlimsdf.loc[:, 'cad_sn_std'] = np.sqrt(np.sum(sn_infos['cad_sn_std']**2))
+                    zlimsdf.loc[:, 'gap_sn_mean'] = sn_infos['gap_sn_mean'].mean()
+                    zlimsdf.loc[:, 'gap_sn_std'] = np.sqrt(np.sum(sn_infos['gap_sn_std']**2))
+                    
             else:
 
                 for seas in seasons:
                     zlimsdf = self.errordf(
-                        pixRA, pixDec, healpixID, seas,
+                        self.pixRA, self.pixDec, self.healpixID, seas,
                         self.status['low_effi'],
                         m5_med, gap_max, gap_med, ebvofMW, cadence, season_length, Nvisits)
                     effi_seasondf = self.erroreffi(
-                        pixRA, pixDec, healpixID, seas)
+                        self.pixRA, self.pixDec, self.healpixID, seas)
 
             if self.proxy_level == 2:
                 zlimsdf['nsn'] = -1
@@ -662,6 +661,41 @@ class SNNSNMetric(BaseMetric):
 
         return effi_seasondf, zlimsdf
 
+    def getInfos_obs(self, obs):
+        """
+        Method to get infos from observations
+
+        Parameters
+        --------------
+        obs: array
+           observations
+        
+        Returns
+        ----------
+        m5_med: dict
+          median m5 per band
+        gap_max: float
+          max gap
+        gap_med: float
+          med gap
+
+        """
+        m5_med = {}
+        for b in 'ugrizy':
+            m5_med[b] = 0.
+
+        for b in np.unique(obs[self.filterCol]):
+            io = obs[self.filterCol] == b
+            sel = obs[io]
+            m5_med[b] = np.median(sel[self.m5Col])
+
+        obs.sort(order=self.mjdCol)
+        diffs = np.diff(obs[self.mjdCol])
+        gap_max = np.max(diffs)
+        gap_med = np.median(diffs)
+
+        return m5_med,gap_max,gap_med
+        
     def duration_z(self, grp):
         """
         Method to estimate the season length vs redshift
@@ -788,7 +822,10 @@ class SNNSNMetric(BaseMetric):
         for vv in ['x1', 'color', 'zlim', 'zmean', 'zpeak', 'nsn_zlim', 'nsn_zmean', 'nsn_zpeak']:
             for ko in ['faint', 'medium']:
                 df['{}_{}'.format(vv, ko)] = [-1.0]
-
+                
+        for vv in ['cad_sn_mean','cad_sn_std','gap_sn_mean','gap_sn_std']:
+            df[vv] = [-1]
+            
         for ko in ['faint', 'medium']:
             df['status_{}'.format(ko)] = [int(errortype)]
 
@@ -1908,6 +1945,7 @@ class SNNSNMetric(BaseMetric):
 
         sn_tot = pd.DataFrame()
         lc_tot = pd.DataFrame()
+        sn_info = pd.DataFrame()
         for key, vals in self.lcFast.items():
             time_refs = time.time()
             gen_par_cp = np.copy(gen_par)
@@ -1916,9 +1954,21 @@ class SNNSNMetric(BaseMetric):
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
 
-            if self.ploteffi and self.fig_for_movie and len(lc) > 0:
-                self.plotter.plotLoop(
-                    obs, lc, gen_par_cp)
+            if key == (-2.0, 0.2):
+                tt = lc.groupby(['z','daymax']).apply(lambda x : self.sn_cad_gap(x)).reset_index()
+                sn_info = tt.groupby(['z']).apply(lambda x : pd.DataFrame({'cad_sn_mean': [x['cad_sn'].mean()],
+                                                                           'cad_sn_std': [x['cad_sn'].std()],
+                                                                           'gap_sn_mean': [x['gap_sn'].mean()],
+                                                                           'gap_sn_std': [x['gap_sn'].std()]}))
+            
+            if self.ploteffi and self.fig_for_movie and len(lc)>0 and key==(-2.0, 0.2):
+                for season in np.unique(obs['season']):
+                  idxa = obs['season'] == season
+                  idxb = lc['season'] == season
+                  idxc = gen_par['season'] == season
+                  self.plotter.plotLoop(self.healpixID,season,
+                      obs[idxa], lc[idxb], gen_par[idxc])
+                
 
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
@@ -1956,8 +2006,25 @@ class SNNSNMetric(BaseMetric):
         if self.verbose:
             print('End of supernova - all', time.time()-time_ref)
 
-        return sn_tot, lc_tot
+        return sn_tot, lc_tot, sn_info
 
+    def sn_cad_gap(self, grp):
+        """
+        Method to estimate cadence and gap for a set od grp points
+
+        Parameters
+        --------------
+        grp: pandas group
+          data to process
+        
+
+        """
+        nights = np.unique(grp[self.nightCol])
+        nights.sort()
+        diff = np.diff(nights)
+        return pd.DataFrame({'cad_sn': [np.median(diff)], 'gap_sn': [np.max(diff)]})
+
+        
     def plotLC(self, lc, zref=0.5):
         """
         Method to plot LC

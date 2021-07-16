@@ -167,7 +167,7 @@ class SNNSNYMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.01  # zstep
+        self.zStep = 0.03 # zstep
         # get redshift range for processing
         zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
         if zRange[0] < 1.e-6:
@@ -221,7 +221,7 @@ class SNNSNYMetric(BaseMetric):
         if self.ploteffi and self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol,
+                                           self.mjdCol, self.m5Col, self.filterCol,self.nightCol,
                                            templateLC=templateLC,dbName=dbName)
 
 

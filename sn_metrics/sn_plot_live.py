@@ -31,7 +31,7 @@ class Plot_NSN_metric:
 
     """
 
-    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,figdir='figures_nsn', templateLC={},dbName=''):
+    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,nightCol, figdir='figures_nsn', templateLC={},dbName=''):
 
         self.snrmin = snrmin
         self.n_bef = n_bef
@@ -41,6 +41,7 @@ class Plot_NSN_metric:
         self.mjdCol = mjdCol
         self.m5Col = m5Col
         self.filterCol = filterCol
+        self.nightCol = nightCol
         self.errmodrel = errmodrel
 
         self.figdir = '{}/{}'.format(figdir, dbName)
@@ -124,7 +125,8 @@ class Plot_NSN_metric:
                     if lcref:
                         idp = lcref['band'] ==  b
                         idp &= lcref['flux_e_sec'] > 0.001
-                        lcrefb = lcref[idp]
+                        if len(lcref[idp])> 0:
+                            lcrefb = lcref[idp]
                     self.plotLC_T0(fig.add_subplot(gs[ia, ib]), selb, b, daymax, lcrefb,whatx='time',
                                    whaty='flux_e_sec', yerr='flux_e_sec_err', xlabel='MJD [day]', ylabel='flux [e/s]', axtitle='')
                 # get infos for selection
@@ -132,8 +134,11 @@ class Plot_NSN_metric:
                 nsel += selected
                 effi = nsel/nlc
                 effi_err = np.sqrt(nsel*(1.-effi))/nlc
-                ra.append((selected, daymax))
-                resa = np.rec.fromrecords(ra, names=['sel', 'daymax'])
+                nights = np.unique(lcb['phase'])
+                nights.sort()
+                diff = np.diff(nights)
+                ra.append((selected, daymax,np.median(diff),np.max(diff)))
+                resa = np.rec.fromrecords(ra, names=['sel', 'daymax','cadence','gap_max'])
                 rb.append((effi, effi_err, np.round(zref, 2)))
                 resb = np.rec.fromrecords(rb, names=['effi', 'effi_err', 'z'])
                 if effi_z is not None:
@@ -143,10 +148,13 @@ class Plot_NSN_metric:
                     effi_z = np.array(resb)
                     
                 #print(selected)
+                axa= fig.add_subplot(gs[1, 0])
+                self.plotSingle(axa, resa, varx='daymax', vary='cadence', legx='T$_0$ [day]', legy='SN sampling [day]')
+                self.plotSingle(axa.twinx(), resa, varx='daymax', vary='gap_max', legx='T$_0$ [day]', legy='SN max gap [day]',color='b')
                 self.plotSingle(fig.add_subplot(
-                    gs[1, 0]), resa, varx='daymax', vary='sel', legx='T$_0$ [day]', legy='sel')
+                    gs[2, 0]), resa, varx='daymax', vary='sel', legx='T$_0$ [day]', legy='SN selection')
                 self.plotSingle(fig.add_subplot(
-                    gs[2, 0]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
+                    gs[2, 1]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
                 #plt.show()
 
                 
@@ -236,13 +244,14 @@ class Plot_NSN_metric:
         ax.errorbar(sel[whatx], sel[whaty], yerr=yerr, color=filtercolors[band[-1]],
                     marker='o', label='{} band'.format(band[-1]),ls='None')
 
-        if lcref:
+        if lcref is not None:
             ax.plot(lcref[whatx]+daymax,lcref[whaty], color=filtercolors[band[-1]])
-        
+            fluxmin, fluxmax = np.min(lcref[whaty]), np.max(lcref[whaty])
+            ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
+
         # ax.legend()
         tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
-        fluxmin, fluxmax = np.min(lcref[whaty]), np.max(lcref[whaty])
-        ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
+      
         """
         ax.plot([daymax-5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
@@ -466,7 +475,9 @@ def plotNSN_effi(effi, vary, erry=None, legy='', ls='None'):
 
     """
     fig, ax = plt.subplots(figsize=(10, 6))
-
+    tt = 'HealpixID {} - Season {}'.format(effi['healpixID'].unique().item(),
+                                           effi['season'].unique().item())
+    fig.suptitle(tt)
     grb = effi.groupby(['x1', 'color'])
     yerr = None
     for key, grp in grb:
@@ -497,6 +508,10 @@ def plotNSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot, zlim_coeff, zlim, 
 
     # First plot: cumulative vs z
     fig, ax = plt.subplots(figsize=(8, 6))
+    tt = 'HealpixID {} - Season {}'.format(grp['healpixID'].unique().item(),
+                                           grp['season'].unique().item())
+    fig.suptitle(tt)
+    
     x1 = grp['x1'].unique()[0]
     color = grp['color'].unique()[0]
 
@@ -505,7 +520,8 @@ def plotNSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot, zlim_coeff, zlim, 
     ax.fill_between(zplot, nsn_cum_norm-nsn_cum_norm_err,
                     nsn_cum_norm+nsn_cum_norm_err, color='y')
 
-    plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, 0., zlim_coeff)
+    #plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, 0., zlim_coeff)
+    plotzbar(ax, zlim, zlim_coeff, -1.0, -1.0, 0., zlim_coeff)
     """
     ax.plot([zlim]*2, [0, zlim_coeff], ls='solid', color='b')
 
@@ -535,6 +551,9 @@ def plotNSN_z(grp, zplot, nsn_z, zlim_coeff, zlim, zmean, zpeak):
     """
 
     fig, ax = plt.subplots(figsize=(10, 6))
+    tt = 'HealpixID {} - Season {}'.format(grp['healpixID'].unique().item(),
+                                           grp['season'].unique().item())
+    fig.suptitle(tt)
     x1 = grp['x1'].unique()[0]
     color = grp['color'].unique()[0]
 
@@ -542,8 +561,9 @@ def plotNSN_z(grp, zplot, nsn_z, zlim_coeff, zlim, zmean, zpeak):
             label='(x1,color)=({},{})'.format(x1, color))
     ax.set_ylim(0., None)
     y_min, y_max = ax.get_ylim()
-    plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
-
+    #plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
+    plotzbar(ax, -1., -1., zmean, zpeak, y_min, y_max)
+    
     ax.grid()
     ax.set_xlabel('$z$')
     ax.set_ylabel('N$_{SN}$')
@@ -555,19 +575,22 @@ def plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max):
 
     ymed = np.mean([y_min, y_max])
     # plot zmean bar
-    ax.plot([zmean]*2, [y_min, y_max], ls='solid', color='m')
-    zmeanstr = '$z_{mean}$'
-    ax.text(0.4, ymed, '{} = {}'.format(zmeanstr, zmean), color='m')
+    if zmean > 0:
+        ax.plot([zmean]*2, [y_min, y_max], ls='solid', color='m')
+        zmeanstr = '$z_{mean}$'
+        ax.text(0.4, ymed, '{} = {}'.format(zmeanstr, zmean), color='m')
 
     # plot zpeak bar
-    ax.plot([zpeak]*2, [y_min, y_max], ls='solid', color='k')
-    zpeakstr = '$z_{peak}$'
-    ax.text(0.4, 0.8*ymed, '{} = {}'.format(zpeakstr, zpeak), color='k')
+    if zpeak > 0:
+        ax.plot([zpeak]*2, [y_min, y_max], ls='solid', color='k')
+        zpeakstr = '$z_{peak}$'
+        ax.text(0.4, 0.8*ymed, '{} = {}'.format(zpeakstr, zpeak), color='k')
 
     # plot zlimit bar
-    ax.plot([zlim]*2, [y_min, y_max], ls='solid', color='b')
-    zlimstr = '$z_{'+str(zlim_coeff)+'}$'
-    ax.text(0.4, 0.6*ymed, '{} = {}'.format(zlimstr, np.round(zlim, 2)), color='b')
+    if zlim > 0:
+        ax.plot([zlim]*2, [y_min, y_max], ls='solid', color='b')
+        zlimstr = '$z_{'+str(zlim_coeff)+'}$'
+        ax.text(0.4, 0.6*ymed, '{} = {}'.format(zlimstr, np.round(zlim, 2)), color='b')
 
 
 class Plot_Saturation_Metric:
