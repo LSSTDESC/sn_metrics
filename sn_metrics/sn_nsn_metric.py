@@ -1955,10 +1955,9 @@ class SNNSNMetric(BaseMetric):
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
 
             if key == (-2.0, 0.2):
-                print('hello',len(lc))
                 tt = lc.groupby(['z','daymax']).apply(lambda x : self.sn_cad_gap(x)).reset_index()
                 sn_info = tt.groupby(['z']).apply(lambda x : self.sn_cad_gap_sum(x)).reset_index()
-            
+                
             if self.ploteffi and self.fig_for_movie and len(lc)>0 and key==(-2.0, 0.2):
                 for season in np.unique(obs['season']):
                   idxa = obs['season'] == season
@@ -2007,14 +2006,15 @@ class SNNSNMetric(BaseMetric):
         return sn_tot, lc_tot, sn_info
 
     def sn_cad_gap_sum(self, grp):
-
+        
+        res = pd.DataFrame()
         if len(grp) > 0:
             res = pd.DataFrame({'cad_sn_mean': [grp['cad_sn'].mean()],
                                 'cad_sn_std': [grp['cad_sn'].std()],
                                 'gap_sn_mean': [grp['gap_sn'].mean()],
                                 'gap_sn_std': [grp['gap_sn'].std()]})
-        else:
-            return pd.DataFrame()
+            
+        return res
 
         
     def sn_cad_gap(self, grp):
@@ -2029,6 +2029,7 @@ class SNNSNMetric(BaseMetric):
 
         """
         nights = np.unique(grp[self.nightCol])
+        
         nights.sort()
         diff = np.diff(nights)
         if len(diff)>=2:
