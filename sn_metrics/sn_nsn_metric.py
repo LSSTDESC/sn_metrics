@@ -303,7 +303,7 @@ class SNNSNMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
-        healpixID = np.unique(dataSlice['healpixID']))
+        healpixID = np.unique(dataSlice['healpixID'])
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
