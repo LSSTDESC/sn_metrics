@@ -303,7 +303,13 @@ class SNNSNMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
-        print('processing pixel', np.unique(dataSlice['healpixID']))
+        healpixID = np.unique(dataSlice['healpixID']))
+
+        if not healpixID:
+            zlimsdf = pd.DataFrame()
+            # print(zlimsdf.columns, len(zlimsdf.columns))
+            return zlimsdf
+        
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
         self.pixRA = np.unique(dataSlice['pixRA'])[0]
