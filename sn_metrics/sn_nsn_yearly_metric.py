@@ -20,6 +20,7 @@ from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
 
+
 class SNNSNYMetric(BaseMetric):
     """
     Measure zlim of type Ia supernovae.
@@ -107,7 +108,7 @@ class SNNSNYMetric(BaseMetric):
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=True, templateLC={}, dbName='',**kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -167,14 +168,14 @@ class SNNSNYMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.03 # zstep
+        self.zStep = 0.03  # zstep
         # get redshift range for processing
         zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
         if zRange[0] < 1.e-6:
             zRange[0] = 0.01
 
         self.zRange = np.unique(zRange)
-        
+
         self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
@@ -221,10 +222,8 @@ class SNNSNYMetric(BaseMetric):
         if self.ploteffi and self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol,self.nightCol,
-                                           templateLC=templateLC,dbName=dbName)
-
-
+                                           self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
+                                           templateLC=templateLC, dbName=dbName)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -239,7 +238,7 @@ class SNNSNYMetric(BaseMetric):
 
         Returns
         ----------
-       
+
         """
 
         # time 0 for performance estimation purpose
@@ -248,19 +247,18 @@ class SNNSNYMetric(BaseMetric):
         dataSlice = dataSlice[goodFilters]
 
         print('processing pixel', np.unique(dataSlice['healpixID']))
-        
+
         self.pixRA = np.unique(dataSlice['pixRA'])[0]
         self.pixDec = np.unique(dataSlice['pixDec'])[0]
         self.healpixID = np.unique(dataSlice['healpixID'])[0]
 
-
         # Get ebvofMW here
-        print('boooo',self.ebvofMW)
+        print('boooo', self.ebvofMW)
         ebvofMW = self.ebvofMW
         if ebvofMW < 0:
             ebvofMW = self.ebvofMW_calc()
 
-        print('hello',self.pixRA, self.pixDec, self.healpixID,ebvofMW)
+        print('hello', self.pixRA, self.pixDec, self.healpixID, ebvofMW)
 
         # get the seasons
         seasons = self.season
@@ -268,12 +266,12 @@ class SNNSNYMetric(BaseMetric):
         # if seasons = -1: process the seasons seen in data
         if self.season == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
-            
+
         # season infos
         dfa = pd.DataFrame(np.copy(dataSlice))
         dfa = dfa[dfa['season'].isin(seasons)]
         season_info = dfa.groupby(['season']).apply(
-            lambda x: self.seasonInfo(x,min_duration=60)).reset_index()
+            lambda x: self.seasonInfo(x, min_duration=60)).reset_index()
 
         print(season_info)
 
@@ -294,24 +292,25 @@ class SNNSNYMetric(BaseMetric):
         if self.stacker is not None:
             obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
 
-            
         # generate LC here
         if ebvofMW < 0.25:
-          lc = obs.groupby(['season']).apply(lambda x : self.genLC(x,gen_par))
+            lc = obs.groupby(['season']).apply(
+                lambda x: self.genLC(x, gen_par))
 
-          print('LC',lc,self.ploteffi,self.fig_for_movie)
-          if self.ploteffi and self.fig_for_movie and len(lc) > 0:
-            
-              for season in obs['season'].unique():
-                  idxa = obs['season'] == season
-                  idxb = lc['season'] == season
-                  idxc = gen_par['season'] == season
-                  self.plotter.plotLoop(self.healpixID,season,
-                      obs[idxa].to_records(index=False), lc[idxb], gen_par[idxc].to_records(index=False))
-                
+            print('LC', lc, self.ploteffi, self.fig_for_movie)
+            if self.ploteffi and self.fig_for_movie and len(lc) > 0:
+                self.plot_for_movie(obs, lc, gen_par)
+
+            if len(lc) >= 0:
+                # lc = lc.rename_axis(None)
+                lc.index = lc.index.droplevel()
+                print(lc.columns)
+                sn = lc.groupby(['season', 'z']).apply(
+                    lambda x: self.supernovae(x)).reset_index()
+
     def ebvofMW_calc(self):
         """
-        Method to estimate E(B-V) 
+        Method to estimate E(B-V)
 
         Returns
         ----------
@@ -332,7 +331,7 @@ class SNNSNYMetric(BaseMetric):
         ebvofMW = sfd(coords)
 
         return ebvofMW
-    
+
     def seasonInfo(self, grp, min_duration):
         """
         Method to estimate seasonal info (cadence, season length, ...)
@@ -354,7 +353,7 @@ class SNNSNYMetric(BaseMetric):
         df['MJD_min'] = grp[self.mjdCol].min()
         df['MJD_max'] = grp[self.mjdCol].max()
         df['season_length'] = df['MJD_max']-df['MJD_min']
-        df['cadence'] = 0.       
+        df['cadence'] = 0.
 
         if len(grp) > 5:
             # to = grp.groupby(['night'])[self.mjdCol].median().sort_values()
@@ -365,10 +364,10 @@ class SNNSNYMetric(BaseMetric):
 
          # select seasons of at least 30 days
         idx = df['season_length'] >= min_duration
-        
+
         return df[idx]
 
-    def duration_z(self, grp,min_duration=60.):
+    def duration_z(self, grp, min_duration=60.):
         """
         Method to estimate the season length vs redshift
         This is necessary to take into account boundary effects
@@ -402,10 +401,10 @@ class SNNSNYMetric(BaseMetric):
 
         idx = dur_z['season_length'] > min_duration
         sel = dur_z[idx]
-        if len(sel)<2:
+        if len(sel) < 2:
             return pd.DataFrame()
         return dur_z
-    
+
     def calcDaymax(self, grp):
         """
         Method to estimate T0 (daymax) values for simulation.
@@ -457,7 +456,7 @@ class SNNSNYMetric(BaseMetric):
 
         """
         season = grp.name
-        print('there',season)
+        print('there', season)
         idx = gen_par_orig['season'] == season
         gen_par = gen_par_orig[idx].to_records(index=False)
 
@@ -467,9 +466,137 @@ class SNNSNYMetric(BaseMetric):
             if key == (-2.0, 0.2):
                 idx = gen_par_cp['z'] < 0.9
                 gen_par_cp = gen_par_cp[idx]
-            lc = vals(grp.to_records(index=False), 0.0, gen_par_cp, bands='grizy')
+            lc = vals(grp.to_records(index=False),
+                      0.0, gen_par_cp, bands='grizy')
             print(type(lc))
-            res = pd.concat((res,lc))
+            res = pd.concat((res, lc))
             break
+
+        return res
+
+    def plot_for_movie(self, obs, lc, gen_par):
+        """
+        Method to make a set of plot that may be assembled as a movie
+
+        Parameters
+        ---------------
+        obs: pandas df
+          observations
+        lc: pandas df
+          set of light curves
+        gen_par: pandas df
+          simulation parameters for SN
+
+        """
+
+        for season in obs['season'].unique():
+            idxa = obs['season'] == season
+            idxb = lc['season'] == season
+            idxc = gen_par['season'] == season
+            self.plotter.plotLoop(self.healpixID, season,
+                                  obs[idxa].to_records(index=False), lc[idxb], gen_par[idxc].to_records(index=False))
+
+    def supernovae(self, lc):
+        """
+        Method to transform LCs to supernovae
+
+        Parameters
+        ---------------
+        lc: pandas grp
+          light curve
+
+        """
+
+        lcarr = lc.to_records(index=False)
+
+        idx = lcarr['snr_m5'] >= self.snr_min
+
+        lcarr = lcarr[idx]
+
+        T0s = np.unique(lcarr['daymax'])
+
+        deltaT = lcarr['daymax']-T0s[:, np.newaxis]
+
+        flag = np.abs(deltaT) < 1.e-5
+        flag_idx = np.argwhere(flag)
+
+        resdf = pd.DataFrame(T0s, columns=['daymax'])
+        # get n_phase_min, n_phase_max
+        for vv in ['n_phmin', 'n_phmax', 'F_x0x0', 'F_x0x1', 'F_x0daymax', 'F_x0color', 'F_x1x1', 'F_x1daymax',
+                   'F_x1color', 'F_daymaxdaymax', 'F_daymaxcolor', 'F_colorcolor']:
+            resdf[vv] = self.get_sum(lcarr, vv, len(deltaT), flag)
+
+        nights = np.tile(lcarr['night'], (len(deltaT), 1))
+        phases = np.tile(lcarr['phase'], (len(deltaT), 1))
+
+        flagph = phases <= 0
+        resdf['nepochs_bef'] = self.get_epochs(nights, flag, flagph)
+        flagph = phases >= 0
+        resdf['nepochs_aft'] = self.get_epochs(nights, flag, flagph)
+
+        print(resdf)
+        print(self.sigmaSNparams(resdf))
+        print(test)
+
+    def get_sum(self, lcarr, varname, nvals, flag):
+
+        phmin = np.tile(lcarr[varname], (nvals, 1))
+        n_phmin = np.ma.array(phmin, mask=~flag)
+        n_phmin = n_phmin.sum(axis=1)
+
+        return n_phmin
+
+    def get_epochs(self, nights, flag, flagph):
+
+        B = np.ma.array(nights, mask=~(flag & flagph))
+        B.sort(axis=1)
+        C = np.diff(B, axis=1) > 0
+        D = C.sum(axis=1)+1
+        return D
+
+    def sigmaSNparams(self, grp):
+        """
+        Method to estimate variances of SN parameters
+        from inversion of the Fisher matrix
+        Parameters
+        ---------------
+        grp: pandas df of flux derivatives wrt SN parameters
+        Returns
+        ----------
+        Diagonal elements of the inverted matrix (as pandas df)
+        """
+
+        params = ['x0', 'x1', 'daymax', 'color']
+        parts = {}
+        for ia, vala in enumerate(params):
+            for jb, valb in enumerate(params):
+                if jb >= ia:
+                    parts[ia, jb] = grp['F_'+vala+valb]
+
+        print(parts)
+        size = len(grp)
+        npar = len(params)
+        Fisher_Big = np.zeros((npar*size, npar*size))
+        Big_Diag = np.zeros((npar*size, npar*size))
+        Big_Diag = []
+
+        for iv in range(size):
+            Fisher_Matrix = np.zeros((npar, npar))
+            for ia, vala in enumerate(params):
+                for jb, valb in enumerate(params):
+                    if jb >= ia:
+                        Fisher_Big[ia+npar*iv][jb+npar*iv] = parts[ia, jb][iv]
+
+        # pprint.pprint(Fisher_Big)
+
+        Fisher_Big = Fisher_Big + np.triu(Fisher_Big, 1).T
+        Big_Diag = np.diag(np.linalg.inv(Fisher_Big))
+
+        res = pd.DataFrame()
+        for ia, vala in enumerate(self.params):
+            indices = range(ia, len(Big_Diag), npar)
+            # restab.add_column(
+            #    Column(np.take(Big_Diag, indices), name='Cov_{}{}'.format(vala,vala)))
+            res['Cov_{}{}'.format(vala, vala)] = np.take(Big_Diag, indices)
 
         return res
