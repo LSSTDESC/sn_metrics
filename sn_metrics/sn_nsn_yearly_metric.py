@@ -106,7 +106,7 @@ class SNNSNYMetric(BaseMetric):
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
-                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
+                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
 
@@ -152,6 +152,7 @@ class SNNSNYMetric(BaseMetric):
         self.n_phase_min = n_phase_min  # nb of point with phase <=-5
         self.n_phase_max = n_phase_max  # nb of points with phase >=20
         self.errmodrel = errmodrel  # relative error model for g and r bands
+        self.sigmaC = sigmaC
 
         # print('selection', self.n_bef, self.n_aft,
         #      self.n_phase_min, self.n_phase_max)
@@ -184,8 +185,18 @@ class SNNSNYMetric(BaseMetric):
         self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
 
         # snrate
-        self.rateSN = SN_Rate(H0=70., Om0=0.3,
-                              min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
+        rateSN = SN_Rate(H0=70., Om0=0.3,
+                         min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
+        self.duration_ref = 180.
+        zz, rate, err_rate, nsn, err_nsn = rateSN(zmin=0.01,
+                                                  zmax=self.zmax,
+                                                  # duration_z=durinterp_z,
+                                                  duration=self.duration_ref,
+                                                  survey_area=self.pixArea,
+                                                  account_for_edges=True)
+
+        self.nsn_expected = interp1d(zz, nsn, kind='linear',
+                                     bounds_error=False, fill_value=0)
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
@@ -253,7 +264,6 @@ class SNNSNYMetric(BaseMetric):
         self.healpixID = np.unique(dataSlice['healpixID'])[0]
 
         # Get ebvofMW here
-        print('boooo', self.ebvofMW)
         ebvofMW = self.ebvofMW
         if ebvofMW < 0:
             ebvofMW = self.ebvofMW_calc()
@@ -294,19 +304,44 @@ class SNNSNYMetric(BaseMetric):
 
         # generate LC here
         if ebvofMW < 0.25:
+            # generate LC here
             lc = obs.groupby(['season']).apply(
                 lambda x: self.genLC(x, gen_par))
 
-            print('LC', lc, self.ploteffi, self.fig_for_movie)
+            # plot figs for movie
             if self.ploteffi and self.fig_for_movie and len(lc) > 0:
                 self.plot_for_movie(obs, lc, gen_par)
 
+            # get observing efficiencies
             if len(lc) >= 0:
                 # lc = lc.rename_axis(None)
                 lc.index = lc.index.droplevel()
                 print(lc.columns)
-                sn = lc.groupby(['season', 'z']).apply(
-                    lambda x: self.supernovae(x)).reset_index()
+                sn_effis = lc.groupby(['healpixID', 'season', 'z', 'x1', 'color']).apply(
+                    lambda x: self.sn_effi(x)).reset_index()
+
+            sn_effis['effi'] = sn_effis['nsel']/sn_effis['ntot']
+            sn_effis['effi_err'] = np.sqrt(
+                sn_effis['nsel']*(1.-sn_effis['effi']))/sn_effis['ntot']
+
+            for vv in ['healpixID', 'season']:
+                sn_effis[vv] = sn_effis[vv].astype(int)
+
+            # add season length here
+            sn_effis = sn_effis.merge(
+                dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
+
+            sn_effis['nsn'] = self.nsn_expected(
+                sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
+
+            print('hhh', sn_effis)
+
+            if self.ploteffi:
+                from sn_metrics.sn_plot_live import plotNSN_effi
+                for season in sn_effis['season'].unique():
+                    idx = sn_effis['season'] == season
+                    plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
+                                 'Observing Efficiencies', ls='-')
 
     def ebvofMW_calc(self):
         """
@@ -362,7 +397,7 @@ class SNNSNYMetric(BaseMetric):
             diff = np.asarray(nights[1:]-nights[:-1])
             df['cadence'] = np.median(diff).item()
 
-         # select seasons of at least 30 days
+            # select seasons of at least 30 days
         idx = df['season_length'] >= min_duration
 
         return df[idx]
@@ -456,7 +491,6 @@ class SNNSNYMetric(BaseMetric):
 
         """
         season = grp.name
-        print('there', season)
         idx = gen_par_orig['season'] == season
         gen_par = gen_par_orig[idx].to_records(index=False)
 
@@ -468,10 +502,10 @@ class SNNSNYMetric(BaseMetric):
                 gen_par_cp = gen_par_cp[idx]
             lc = vals(grp.to_records(index=False),
                       0.0, gen_par_cp, bands='grizy')
-            print(type(lc))
+            lc['x1'] = key[0]
+            lc['color'] = key[1]
             res = pd.concat((res, lc))
-            break
-
+            # break
         return res
 
     def plot_for_movie(self, obs, lc, gen_par):
@@ -496,7 +530,7 @@ class SNNSNYMetric(BaseMetric):
             self.plotter.plotLoop(self.healpixID, season,
                                   obs[idxa].to_records(index=False), lc[idxb], gen_par[idxc].to_records(index=False))
 
-    def supernovae(self, lc):
+    def sn_effi(self, lc):
         """
         Method to transform LCs to supernovae
 
@@ -514,6 +548,7 @@ class SNNSNYMetric(BaseMetric):
         lcarr = lcarr[idx]
 
         T0s = np.unique(lcarr['daymax'])
+        T0s.sort()
 
         deltaT = lcarr['daymax']-T0s[:, np.newaxis]
 
@@ -529,14 +564,18 @@ class SNNSNYMetric(BaseMetric):
         nights = np.tile(lcarr['night'], (len(deltaT), 1))
         phases = np.tile(lcarr['phase'], (len(deltaT), 1))
 
-        flagph = phases <= 0
-        resdf['nepochs_bef'] = self.get_epochs(nights, flag, flagph)
-        flagph = phases >= 0
+        flagph = phases >= 0.
         resdf['nepochs_aft'] = self.get_epochs(nights, flag, flagph)
+        flagph = phases <= 0.
+        resdf['nepochs_bef'] = self.get_epochs(nights, flag, flagph)
 
-        print(resdf)
-        print(self.sigmaSNparams(resdf))
-        print(test)
+        sigma_Fisher = self.sigmaSNparams(resdf)
+        resdf['Cov_colorcolor'] = sigma_Fisher['Cov_colorcolor']
+
+        # get selection efficiencies
+        effis = self.efficiencies(resdf)
+
+        return effis
 
     def get_sum(self, lcarr, varname, nvals, flag):
 
@@ -548,7 +587,8 @@ class SNNSNYMetric(BaseMetric):
 
     def get_epochs(self, nights, flag, flagph):
 
-        B = np.ma.array(nights, mask=~(flag & flagph))
+        nights_cp = np.copy(nights)
+        B = np.ma.array(nights_cp, mask=~(flag & flagph))
         B.sort(axis=1)
         C = np.diff(B, axis=1) > 0
         D = C.sum(axis=1)+1
@@ -573,7 +613,7 @@ class SNNSNYMetric(BaseMetric):
                 if jb >= ia:
                     parts[ia, jb] = grp['F_'+vala+valb]
 
-        print(parts)
+        # print(parts)
         size = len(grp)
         npar = len(params)
         Fisher_Big = np.zeros((npar*size, npar*size))
@@ -600,3 +640,44 @@ class SNNSNYMetric(BaseMetric):
             res['Cov_{}{}'.format(vala, vala)] = np.take(Big_Diag, indices)
 
         return res
+
+    def efficiencies(self, df):
+        """"
+        Method to estimate selection efficiencies
+
+        Parameters
+        ---------------
+        df: pandas df
+          data to process
+
+        """
+
+        df['select'] = df['n_phmin'] >= self.n_phase_min
+        df['select'] &= df['n_phmax'] >= self.n_phase_max
+        df['select'] &= df['nepochs_bef'] >= self.n_bef
+        df['select'] &= df['nepochs_aft'] >= self.n_aft
+        df['select'] &= df['Cov_colorcolor'] <= self.sigmaC**2
+        df['select'] = df['select'].astype(int)
+
+        idx = df['select'] == 1
+
+        return pd.DataFrame({'ntot': [len(df)], 'nsel': [len(df[idx])]})
+
+        """
+        arr = df.to_records(index=False)
+
+        T0s = np.unique(arr['daymax'])
+
+        deltaT = arr['daymax']-T0s[:, np.newaxis]
+
+        flag = np.abs(deltaT) < 1.e-5
+        flag_idx = np.argwhere(flag)
+
+        all_sn = np.tile(arr['all'], (len(deltaT), 1))
+        sel_sn = np.tile(arr['select'], (len(deltaT), 1))
+
+        A = np.ma.array(all_sn, mask=~flag).count(axis=0)
+        B = np.ma.array(sel_sn, mask=~flag).count(axis=0)
+
+        print(A, B)
+        """
