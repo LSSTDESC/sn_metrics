@@ -1,11 +1,8 @@
 import numpy as np
 from lsst.sims.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
-import healpy as hp
-import numpy.lib.recfunctions as rf
 import multiprocessing
 import yaml
-from scipy import interpolate
 import os
 from sn_tools.sn_calcFast import LCfast, CovColor
 from sn_tools.sn_telescope import Telescope
@@ -14,7 +11,6 @@ import time
 import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
-from scipy.interpolate import RegularGridInterpolator
 from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
@@ -317,24 +313,19 @@ class SNNSNYMetric(BaseMetric):
                 # lc = lc.rename_axis(None)
                 lc.index = lc.index.droplevel()
                 print(lc.columns)
-                sn_effis = lc.groupby(['healpixID', 'season', 'z', 'x1', 'color']).apply(
+                sn_effis = lc.groupby(['healpixID', 'season', 'z', 'x1', 'color', 'sntype']).apply(
                     lambda x: self.sn_effi(x)).reset_index()
 
+            # estimate efficiencies
+            for vv in ['healpixID', 'season']:
+                sn_effis[vv] = sn_effis[vv].astype(int)
             sn_effis['effi'] = sn_effis['nsel']/sn_effis['ntot']
             sn_effis['effi_err'] = np.sqrt(
                 sn_effis['nsel']*(1.-sn_effis['effi']))/sn_effis['ntot']
 
-            for vv in ['healpixID', 'season']:
-                sn_effis[vv] = sn_effis[vv].astype(int)
-
             # add season length here
             sn_effis = sn_effis.merge(
                 dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
-
-            sn_effis['nsn'] = self.nsn_expected(
-                sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
-
-            print('hhh', sn_effis)
 
             if self.ploteffi:
                 from sn_metrics.sn_plot_live import plotNSN_effi
@@ -342,6 +333,13 @@ class SNNSNYMetric(BaseMetric):
                     idx = sn_effis['season'] == season
                     plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
                                  'Observing Efficiencies', ls='-')
+
+            # estimate the number of supernovae
+            sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
+                sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
+
+            # get redshift limit and nsn
+            self.zcomp(sn_effis)
 
     def ebvofMW_calc(self):
         """
@@ -494,6 +492,7 @@ class SNNSNYMetric(BaseMetric):
         idx = gen_par_orig['season'] == season
         gen_par = gen_par_orig[idx].to_records(index=False)
 
+        sntype = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
         res = pd.DataFrame()
         for key, vals in self.lcFast.items():
             gen_par_cp = gen_par.copy()
@@ -504,6 +503,7 @@ class SNNSNYMetric(BaseMetric):
                       0.0, gen_par_cp, bands='grizy')
             lc['x1'] = key[0]
             lc['color'] = key[1]
+            lc['sntype'] = sntype[key]
             res = pd.concat((res, lc))
             # break
         return res
@@ -681,3 +681,33 @@ class SNNSNYMetric(BaseMetric):
 
         print(A, B)
         """
+
+    def zcomp(self, effi):
+
+        sntype = 'faint'
+        seleffi = effi[effi['sntype'] == sntype]
+        seleffi = seleffi.sort_values(by=['z'])
+        nsn_cum = np.cumsum(seleffi['nsn'].to_list())
+
+        zlim = interp1d(nsn_cum/nsn_cum[-1], seleffi['z'], kind='linear',
+                        bounds_error=False, fill_value=0)
+        zlimit = zlim(self.zlim_coeff)
+
+        if self.ploteffi:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.plot(seleffi['z'], nsn_cum/nsn_cum[-1])
+            axb = ax.twinx()
+            norm = np.max(seleffi['nsn'])
+            axb.plot(seleffi['z'], seleffi['nsn']/norm)
+            ax.plot([zlimit]*2, [0., self.zlim_coeff], ls='dashed', color='k')
+            ax.plot([self.zmin, self.zmax], [self.zlim_coeff]
+                    * 2, ls='dashed', color='k')
+            ax.grid()
+            ax.set_xlabel('z')
+            ax.set_ylabel('Cumulative N$_{SN}(z<)$')
+            axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
+            ax.set_xlim(self.zmin, self.zmax)
+            zstr = '$z_{complete}$'
+            ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
+            plt.show()
