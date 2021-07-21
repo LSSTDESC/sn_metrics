@@ -31,7 +31,7 @@ class Plot_NSN_metric:
 
     """
 
-    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol,nightCol, figdir='figures_nsn', templateLC={},dbName=''):
+    def __init__(self, snrmin, n_bef, n_aft, n_phase_min, n_phase_max, errmodrel, mjdCol, m5Col, filterCol, nightCol, figdir='figures_nsn', templateLC={}, dbName=''):
 
         self.snrmin = snrmin
         self.n_bef = n_bef
@@ -53,8 +53,7 @@ class Plot_NSN_metric:
         self.template_LC = {}
         if templateLC:
             self.templateLC = templateLC
-            
-        
+
     def plotLoop(self, healpixID, season, obs, lc, gen_par, x1=-2.0, color=0.2):
         """
         Method to loop on LC and plot results
@@ -83,7 +82,7 @@ class Plot_NSN_metric:
         #filt_layout = dict(zip('griz', [(1, 0), (1, 1), (2, 0), (2, 1)]))
         filt_layout = dict(zip('griz', [(0, 1), (0, 2), (1, 1), (1, 2)]))
         print(gen_par.dtype)
-    
+
         ifig = -1
         effi_z = None
         for zref in np.unique(lc['z']):
@@ -91,11 +90,11 @@ class Plot_NSN_metric:
             lca = lc[idxa]
             idg = np.abs(gen_par['z']-zref) < 1.e-5
             gen = gen_par[idg]
-            #select template LC here
+            # select template LC here
             lcref = None
             if self.templateLC:
-                idtemp = np.abs(self.templateLC[(x1,color)]['z']-zref)<1.e-5
-                lcref = self.templateLC[(x1,color)][idtemp]
+                idtemp = np.abs(self.templateLC[(x1, color)]['z']-zref) < 1.e-5
+                lcref = self.templateLC[(x1, color)][idtemp]
             T0_min = np.min(gen['daymax'])
             T0_max = np.max(gen['daymax'])
             nlc = 0
@@ -109,11 +108,12 @@ class Plot_NSN_metric:
                 nlc += 1
                 idxb = np.abs(lca['daymax']-daymax) < 1.e-5
                 lcb = lca[idxb]
-                fig = plt.figure(figsize=(15, 8),constrained_layout=True)
-                fig.suptitle('healpixID: {} - season {}'.format(healpixID, season), fontsize='medium')
-                gs = fig.add_gridspec(3,3)
+                fig = plt.figure(figsize=(15, 8), constrained_layout=True)
+                fig.suptitle(
+                    'healpixID: {} - season {}'.format(healpixID, season), fontsize='medium')
+                gs = fig.add_gridspec(3, 3)
                 # plot observations
-                self.plotObs(fig.add_subplot(gs[0,0]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
+                self.plotObs(fig.add_subplot(gs[0, 0]), obs, daymax, T0_min, T0_max, whatx=self.mjdCol, whaty=self.m5Col,
                              xlabel='MJD [day]', ylabel='5$\sigma$ depth [mag]')
                 # plot lc
                 for b in 'griz':
@@ -123,11 +123,11 @@ class Plot_NSN_metric:
                     ib = filt_layout[b][1]
                     lcrefb = None
                     if lcref:
-                        idp = lcref['band'] ==  b
+                        idp = lcref['band'] == b
                         idp &= lcref['flux_e_sec'] > 0.001
-                        if len(lcref[idp])> 0:
+                        if len(lcref[idp]) > 0:
                             lcrefb = lcref[idp]
-                    self.plotLC_T0(fig.add_subplot(gs[ia, ib]), selb, b, daymax, lcrefb,whatx='time',
+                    self.plotLC_T0(fig.add_subplot(gs[ia, ib]), selb, b, daymax, lcrefb, whatx='time',
                                    whaty='flux_e_sec', yerr='flux_e_sec_err', xlabel='MJD [day]', ylabel='flux [e/s]', axtitle='')
                 # get infos for selection
                 selected = self.getSelection(lcb, daymax, zref)
@@ -137,31 +137,34 @@ class Plot_NSN_metric:
                 nights = np.unique(lcb['phase'])
                 nights.sort()
                 diff = np.diff(nights)
-                ra.append((selected, daymax,np.median(diff),np.max(diff)))
-                resa = np.rec.fromrecords(ra, names=['sel', 'daymax','cadence','gap_max'])
+                ra.append((selected, daymax, np.median(diff), np.max(diff)))
+                resa = np.rec.fromrecords(
+                    ra, names=['sel', 'daymax', 'cadence', 'gap_max'])
                 rb.append((effi, effi_err, np.round(zref, 2)))
                 resb = np.rec.fromrecords(rb, names=['effi', 'effi_err', 'z'])
                 if effi_z is not None:
-                    resb = np.concatenate((resb,effi_z))
+                    resb = np.concatenate((resb, effi_z))
 
                 if iday == len(daymaxs)-1:
                     effi_z = np.array(resb)
-                    
-                #print(selected)
-                axa= fig.add_subplot(gs[1, 0])
-                self.plotSingle(axa, resa, varx='daymax', vary='cadence', legx='T$_0$ [day]', legy='SN sampling [day]')
-                self.plotSingle(axa.twinx(), resa, varx='daymax', vary='gap_max', legx='T$_0$ [day]', legy='SN max gap [day]',color='b')
+
+                # print(selected)
+                axa = fig.add_subplot(gs[1, 0])
+                self.plotSingle(axa, resa, varx='daymax', vary='cadence',
+                                legx='T$_0$ [day]', legy='SN sampling [day]')
+                self.plotSingle(axa.twinx(), resa, varx='daymax', vary='gap_max',
+                                legx='T$_0$ [day]', legy='SN max gap [day]', color='b')
                 self.plotSingle(fig.add_subplot(
                     gs[2, 0]), resa, varx='daymax', vary='sel', legx='T$_0$ [day]', legy='SN selection')
                 self.plotSingle(fig.add_subplot(
                     gs[2, 1]), resb, varx='z', vary='effi', erry='effi_err', legx='z', legy='$\epsilon$')
-                #plt.show()
+                # plt.show()
 
-                
-                figname = '{}/healpix{}_{}.png'.format(self.figdir,healpixID, self.nfig)
+                figname = '{}/healpix{}_{}.png'.format(
+                    self.figdir, healpixID, self.nfig)
                 fig.savefig(figname)
                 plt.close()
-                
+
     def plotObs(self, ax, obs, daymax, T0_min, T0_max, whatx, whaty, xlabel, ylabel):
         """
         Method to plot observations
@@ -203,7 +206,8 @@ class Plot_NSN_metric:
         ax.plot([T0_max]*2, [np.min(obs[whaty]),
                              np.max(obs[whaty])], ls='solid', color='r')
 
-        ax.legend(loc='upper left', bbox_to_anchor=(0., 1.20), ncol=4, fontsize=12, frameon=False)
+        ax.legend(loc='upper left', bbox_to_anchor=(
+            0., 1.20), ncol=4, fontsize=12, frameon=False)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
 
@@ -242,16 +246,17 @@ class Plot_NSN_metric:
         if yerr is not None:
             yerr = sel[yerr]
         ax.errorbar(sel[whatx], sel[whaty], yerr=yerr, color=filtercolors[band[-1]],
-                    marker='o', label='{} band'.format(band[-1]),ls='None')
+                    marker='o', label='{} band'.format(band[-1]), ls='None')
 
         if lcref is not None:
-            ax.plot(lcref[whatx]+daymax,lcref[whaty], color=filtercolors[band[-1]])
+            ax.plot(lcref[whatx]+daymax, lcref[whaty],
+                    color=filtercolors[band[-1]])
             fluxmin, fluxmax = np.min(lcref[whaty]), np.max(lcref[whaty])
             ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
 
         # ax.legend()
         tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
-      
+
         """
         ax.plot([daymax-5.]*2,
                 [fluxmin, fluxmax], color='k', ls='dashed')
@@ -297,7 +302,6 @@ class Plot_NSN_metric:
         n_aft = len(np.unique(lc[idx]['night']))
 
         var_color = CovColor(pd.DataFrame(lc).sum()).Cov_colorcolor
-
         # print('sel', n_bef, n_aft, n_phase_min,
         #      n_phase_max, np.sqrt(var_color), daymax, zref)
         if n_bef < self.n_bef:
@@ -425,10 +429,10 @@ class Plot_NSN_metric:
 
         return tabres
 
-    def loadTemplate(self, x1, color,templateDir = 'Template_LC'):
+    def loadTemplate(self, x1, color, templateDir='Template_LC'):
         """
         Method to load template LC
-        
+
         Parameters
         ---------------
         x1: float
@@ -449,7 +453,7 @@ class Plot_NSN_metric:
             wave_cutoff = '{}_{}'.format(self.bluecutoff, self.redcutoff)
         lcname = 'LC_{}_{}_{}_ebvofMW_0.0_vstack.hdf5'.format(
             x1, color, wave_cutoff)
-         # Load the file - lc reference
+        # Load the file - lc reference
         lcFullName = '{}/{}'.format(templateDir, lcName)
         f = h5py.File(lcFullName, 'r')
         keys = list(f.keys())
@@ -457,7 +461,8 @@ class Plot_NSN_metric:
         lc_ref_tot = Table.from_pandas(pd.read_hdf(lcFullName))
 
         return lc_ref_tot
-        
+
+
 def plotNSN_effi(effi, vary, erry=None, legy='', ls='None'):
     """
     Simple method to plot vs z
@@ -511,7 +516,7 @@ def plotNSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot, zlim_coeff, zlim, 
     tt = 'HealpixID {} - Season {}'.format(grp['healpixID'].unique().item(),
                                            grp['season'].unique().item())
     fig.suptitle(tt)
-    
+
     x1 = grp['x1'].unique()[0]
     color = grp['color'].unique()[0]
 
@@ -563,7 +568,7 @@ def plotNSN_z(grp, zplot, nsn_z, zlim_coeff, zlim, zmean, zpeak):
     y_min, y_max = ax.get_ylim()
     #plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
     plotzbar(ax, -1., -1., zmean, zpeak, y_min, y_max)
-    
+
     ax.grid()
     ax.set_xlabel('$z$')
     ax.set_ylabel('N$_{SN}$')
@@ -590,7 +595,8 @@ def plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max):
     if zlim > 0:
         ax.plot([zlim]*2, [y_min, y_max], ls='solid', color='b')
         zlimstr = '$z_{'+str(zlim_coeff)+'}$'
-        ax.text(0.4, 0.6*ymed, '{} = {}'.format(zlimstr, np.round(zlim, 2)), color='b')
+        ax.text(0.4, 0.6*ymed, '{} = {}'.format(zlimstr,
+                                                np.round(zlim, 2)), color='b')
 
 
 class Plot_Saturation_Metric:
@@ -610,7 +616,7 @@ class Plot_Saturation_Metric:
     zref: redshift value
     """
 
-    def __init__(self, healpixID, zref, snr_min, mjdCol, m5Col, filterCol, fullwell, saturationLevel,figdir='figures_saturation'):
+    def __init__(self, healpixID, zref, snr_min, mjdCol, m5Col, filterCol, fullwell, saturationLevel, figdir='figures_saturation'):
 
         self.healpixID = healpixID
         self.zref = zref
@@ -625,7 +631,7 @@ class Plot_Saturation_Metric:
             os.mkdir(figdir)
         self.figdir = figdir
         self.nfig = -1
-        
+
     def __call__(self, obs, lc, season, T0_min, T0_max):
 
         idx = np.abs(lc['z']-self.zref) < 1.e-5
@@ -697,7 +703,6 @@ class Plot_Saturation_Metric:
 
             # plt.close()
 
-            
             figname = '{}/healpix{}_{}.jpg'.format(self.figdir,
                                                    self.healpixID, self.nfig)
             plt.savefig(figname)
@@ -908,5 +913,3 @@ class Plot_Saturation_Metric:
         ax.set_ylabel(legy, color=color)
         if label:
             ax.legend()
-
-    
