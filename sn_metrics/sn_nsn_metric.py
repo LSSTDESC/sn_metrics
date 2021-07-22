@@ -147,7 +147,7 @@ class SNNSNMetric(BaseMetric):
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='',**kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -260,8 +260,8 @@ class SNNSNMetric(BaseMetric):
         if self.ploteffi and self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol,self.nightCol,
-                                           templateLC=templateLC,dbName=dbName)
+                                           self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
+                                           templateLC=templateLC, dbName=dbName)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -309,7 +309,7 @@ class SNNSNMetric(BaseMetric):
             zlimsdf = pd.DataFrame()
             # print(zlimsdf.columns, len(zlimsdf.columns))
             return zlimsdf
-        
+
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
         self.pixRA = np.unique(dataSlice['pixRA'])[0]
@@ -347,7 +347,6 @@ class SNNSNMetric(BaseMetric):
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
-
 
         if self.verbose:
             print('duration vs z', dur_z)
@@ -414,7 +413,7 @@ class SNNSNMetric(BaseMetric):
 
         if self.outputType == 'effi':
             return vara_totdf
-
+        print(varb_totdf[['season', 'zlim_faint', 'nsn_zlim_faint']])
         return varb_totdf
 
     def ebvofMW_calc(self):
@@ -440,7 +439,7 @@ class SNNSNMetric(BaseMetric):
         ebvofMW = sfd(coords)
 
         return ebvofMW
-    
+
     def nooutput(self, pixRA, pixDec, healpixID, val='season_length'):
         """
         Method to return a dataframe when no data could be processed
@@ -544,7 +543,7 @@ class SNNSNMetric(BaseMetric):
         # print('data', obs[['night', 'filter',
         #                  'observationStartMJD', 'fieldRA', 'fieldDec']])
         # estimate m5 median and gaps
-        m5_med,gap_max,gap_med = self.getInfos_obs(obs)
+        m5_med, gap_max, gap_med = self.getInfos_obs(obs)
 
         # simulate supernovae and lc
         if self.verbose:
@@ -632,11 +631,15 @@ class SNNSNMetric(BaseMetric):
                     zlimsdf.loc[:, 'season_length'] = season_length
                     for b, vals in Nvisits.items():
                         zlimsdf.loc[:, 'N_{}'.format(b)] = vals
-                    zlimsdf.loc[:, 'cad_sn_mean'] = sn_infos['cad_sn_mean'].mean()
-                    zlimsdf.loc[:, 'cad_sn_std'] = np.sqrt(np.sum(sn_infos['cad_sn_std']**2))
-                    zlimsdf.loc[:, 'gap_sn_mean'] = sn_infos['gap_sn_mean'].mean()
-                    zlimsdf.loc[:, 'gap_sn_std'] = np.sqrt(np.sum(sn_infos['gap_sn_std']**2))
-                    
+                    zlimsdf.loc[:,
+                                'cad_sn_mean'] = sn_infos['cad_sn_mean'].mean()
+                    zlimsdf.loc[:, 'cad_sn_std'] = np.sqrt(
+                        np.sum(sn_infos['cad_sn_std']**2))
+                    zlimsdf.loc[:,
+                                'gap_sn_mean'] = sn_infos['gap_sn_mean'].mean()
+                    zlimsdf.loc[:, 'gap_sn_std'] = np.sqrt(
+                        np.sum(sn_infos['gap_sn_std']**2))
+
             else:
 
                 for seas in seasons:
@@ -675,7 +678,7 @@ class SNNSNMetric(BaseMetric):
         --------------
         obs: array
            observations
-        
+
         Returns
         ----------
         m5_med: dict
@@ -700,8 +703,8 @@ class SNNSNMetric(BaseMetric):
         gap_max = np.max(diffs)
         gap_med = np.median(diffs)
 
-        return m5_med,gap_max,gap_med
-        
+        return m5_med, gap_max, gap_med
+
     def duration_z(self, grp):
         """
         Method to estimate the season length vs redshift
@@ -734,7 +737,7 @@ class SNNSNMetric(BaseMetric):
 
         idx = dur_z['season_length'] > 60.
         sel = dur_z[idx]
-        if len(sel)<2:
+        if len(sel) < 2:
             return pd.DataFrame()
         return dur_z
 
@@ -828,10 +831,10 @@ class SNNSNMetric(BaseMetric):
         for vv in ['x1', 'color', 'zlim', 'zmean', 'zpeak', 'nsn_zlim', 'nsn_zmean', 'nsn_zpeak']:
             for ko in ['faint', 'medium']:
                 df['{}_{}'.format(vv, ko)] = [-1.0]
-                
-        for vv in ['cad_sn_mean','cad_sn_std','gap_sn_mean','gap_sn_std']:
+
+        for vv in ['cad_sn_mean', 'cad_sn_std', 'gap_sn_mean', 'gap_sn_std']:
             df[vv] = [-1]
-            
+
         for ko in ['faint', 'medium']:
             df['status_{}'.format(ko)] = [int(errortype)]
 
@@ -1656,11 +1659,19 @@ class SNNSNMetric(BaseMetric):
                                                        # duration = np.mean(duration_z['season_length']),
                                                        survey_area=self.pixArea,
                                                        account_for_edges=False)
-
+        print('booo', duration_z(np.arange(0.1, 0.5, 0.03)))
         # rate interpolation
         rateInterp = interp1d(zz, nsn, kind='linear',
                               bounds_error=False, fill_value=0)
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+
+        ax.plot(zz, effiInterp(zz))
+        axb = ax.twinx()
+        ax.plot(zz, nsn_cum)
+
+        plt.show()
 
         nsn_interp = interp1d(
             zplot, nsn_cum, bounds_error=False, fill_value=0.)
@@ -1961,17 +1972,18 @@ class SNNSNMetric(BaseMetric):
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
 
             if key == (-2.0, 0.2):
-                tt = lc.groupby(['z','daymax']).apply(lambda x : self.sn_cad_gap(x)).reset_index()
-                sn_info = tt.groupby(['z']).apply(lambda x : self.sn_cad_gap_sum(x)).reset_index()
-                
-            if self.ploteffi and self.fig_for_movie and len(lc)>0 and key==(-2.0, 0.2):
+                tt = lc.groupby(['z', 'daymax']).apply(
+                    lambda x: self.sn_cad_gap(x)).reset_index()
+                sn_info = tt.groupby(['z']).apply(
+                    lambda x: self.sn_cad_gap_sum(x)).reset_index()
+
+            if self.ploteffi and self.fig_for_movie and len(lc) > 0 and key == (-2.0, 0.2):
                 for season in np.unique(obs['season']):
-                  idxa = obs['season'] == season
-                  idxb = lc['season'] == season
-                  idxc = gen_par['season'] == season
-                  self.plotter.plotLoop(self.healpixID,season,
-                      obs[idxa], lc[idxb], gen_par[idxc])
-                
+                    idxa = obs['season'] == season
+                    idxb = lc['season'] == season
+                    idxc = gen_par['season'] == season
+                    self.plotter.plotLoop(self.healpixID, season,
+                                          obs[idxa], lc[idxb], gen_par[idxc])
 
             if self.verbose:
                 print('End of simulation', key, time.time()-time_refs)
@@ -2012,17 +2024,16 @@ class SNNSNMetric(BaseMetric):
         return sn_tot, lc_tot, sn_info
 
     def sn_cad_gap_sum(self, grp):
-        
+
         res = pd.DataFrame()
         if len(grp) > 0:
             res = pd.DataFrame({'cad_sn_mean': [grp['cad_sn'].mean()],
                                 'cad_sn_std': [grp['cad_sn'].std()],
                                 'gap_sn_mean': [grp['gap_sn'].mean()],
                                 'gap_sn_std': [grp['gap_sn'].std()]})
-            
+
         return res
 
-        
     def sn_cad_gap(self, grp):
         """
         Method to estimate cadence and gap for a set od grp points
@@ -2031,18 +2042,18 @@ class SNNSNMetric(BaseMetric):
         --------------
         grp: pandas group
           data to process
-        
+
 
         """
         nights = np.unique(grp[self.nightCol])
-        
+
         nights.sort()
         diff = np.diff(nights)
-        if len(diff)>=2:
+        if len(diff) >= 2:
             return pd.DataFrame({'cad_sn': [np.median(diff)], 'gap_sn': [np.max(diff)]})
         else:
             return pd.DataFrame()
-        
+
     def plotLC(self, lc, zref=0.5):
         """
         Method to plot LC
