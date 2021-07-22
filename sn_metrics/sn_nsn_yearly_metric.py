@@ -191,6 +191,12 @@ class SNNSNYMetric(BaseMetric):
                                                   survey_area=self.pixArea,
                                                   account_for_edges=True)
 
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.plot(zz, np.cumsum(nsn))
+        plt.show()
+        """
         self.nsn_expected = interp1d(zz, nsn, kind='linear',
                                      bounds_error=False, fill_value=0)
 
@@ -202,7 +208,7 @@ class SNNSNYMetric(BaseMetric):
         self.status = dict(
             zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters', 'low_effi'], [1, -1, -2, -3, -4, -5]))
 
-        # supernovae parameters
+        # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
 
         # output type and proxy level
@@ -248,10 +254,11 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
-        # time 0 for performance estimation purpose
-        time_ref = time.time()
-        goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
-        dataSlice = dataSlice[goodFilters]
+        healpixID = np.unique(dataSlice['healpixID'])
+
+        if not healpixID:
+            zlimsdf = pd.DataFrame()
+            return zlimsdf
 
         print('processing pixel', np.unique(dataSlice['healpixID']))
 
@@ -259,18 +266,156 @@ class SNNSNYMetric(BaseMetric):
         self.pixDec = np.unique(dataSlice['pixDec'])[0]
         self.healpixID = np.unique(dataSlice['healpixID'])[0]
 
-        # Get ebvofMW here
+        # get ebvofMW
         ebvofMW = self.ebvofMW
         if ebvofMW < 0:
             ebvofMW = self.ebvofMW_calc()
+        if ebvofMW > 0.25:
+            return pd.DataFrame()
 
-        print('hello', self.pixRA, self.pixDec, self.healpixID, ebvofMW)
+        # get infos on obs - filter allocation (before stacking)
+        obs_alloc = pd.DataFrame(np.copy(dataSlice)).groupby(['season']).apply(
+            lambda x: self.filter_allocation(x)).reset_index()
 
-        # get the seasons
-        seasons = self.season
+        # print(obs_alloc)
 
+        # select observations filter
+        goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
+        dataSlice = dataSlice[goodFilters]
+
+        # get the season durations
+        seasons, dur_z = self.season_length(self.season, dataSlice)
+
+        # get simulation parameters
+        gen_par = dur_z.groupby(['z', 'season']).apply(
+            lambda x: self.calcDaymax(x)).reset_index()
+
+        # print(gen_par)
+
+        # select observations corresponding to seasons
+        obs = pd.DataFrame(np.copy(dataSlice))
+        obs = obs[obs['season'].isin(seasons)]
+
+        # coaddition per night and per band (if requested by the user)
+        if self.stacker is not None:
+            obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
+
+        # get infos on obs: cadence, max gap
+        cad_gap = obs.groupby(['season']).apply(lambda x:
+                                                self.cadence_gap(x)).reset_index()
+
+        # merge cad_gap with obs_alloc
+        cad_gap = cad_gap.merge(
+            obs_alloc, left_on=['season'], right_on=['season'])
+        #print('cad gap', cad_gap)
+
+        metricValues = None
+
+        # generate LC here
+        lc = self.step_lc(obs, gen_par)
+
+        # get observing efficiencies and build sn for metric
+        if len(lc) >= 0:
+            lc.index = lc.index.droplevel()
+            # get infos on lc (cadence, gap)
+            cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
+                lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
+            cad_gap_lc = cad_gap_lc_all.groupby(
+                ['season']).mean().reset_index()
+            # print(cad_gap_lc)
+            cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
+                                    'season'], right_on=['season'])
+            # estimate efficiencies
+            sn_effis = self.step_efficiencies(lc)
+            # estimate nsn
+            sn = self.step_nsn(sn_effis, dur_z)
+            # estimate redshift limit and nsn
+            metricValues = sn.groupby(['season']).apply(
+                lambda x: self.metric(x)).reset_index()
+            # add ID parameters here
+            metricValues['healpixID'] = self.healpixID
+            metricValues['pixRA'] = self.pixRA
+            metricValues['pixDec'] = self.pixDec
+            # merge with all parameters
+            metricValues = metricValues.merge(
+                cad_gap, left_on=['season'], right_on=['season'])
+
+        print('ici', metricValues)
+        return metricValues
+
+    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
+        """
+        Method to estimate the cadence and max gap for a set of observations
+
+        Parameters
+        ---------------
+        grp: pandas df
+          data to process
+        cadName: str, opt
+          cadence col name (default: cadence)
+        gapName: str, opt
+          gap max col name (default: gap_max)
+
+        Returns
+        -----------
+        pandas df with cadence and max gap
+
+        """
+        grp = grp.sort_values(by=['night'])
+        cadence = -1
+        gap_max = -1
+
+        diff = np.diff(np.unique(grp['night']))
+        if len(diff) >= 2:
+            cadence = np.median(diff)
+            gap_max = np.max(diff)
+
+        return pd.DataFrame({cadName: [cadence], gapName: [gap_max]})
+
+    def filter_allocation(self, grp):
+        """
+        Method to estimate filter allocation
+
+        Parameters
+        ---------------
+        grp: pandas df
+          data to process
+
+        Returns
+        -----------
+        pandas df with filter allocation
+
+        """
+
+        dictres = {}
+        bands = 'ugrizy'
+        ntot = len(grp)
+        for b in bands:
+            io = grp['filter'] == b
+            dictres['frac_{}'.format(b)] = [len(grp[io])/ntot]
+
+        return pd.DataFrame(dictres)
+
+    def season_length(self, seasons, dataSlice):
+        """
+        Method to estimate season lengths vs z
+
+        Parameters
+        ---------------
+        seasons: list(int)
+          list of seasons to process
+        dataSlice: numpy array
+          array of observations
+
+        Returns
+        -----------
+        seasons: list(int)
+          list of seasons to process
+        dur_z: pandas df
+          season lengths vs z
+        """
         # if seasons = -1: process the seasons seen in data
-        if self.season == [-1]:
+        if seasons == [-1]:
             seasons = np.unique(dataSlice[self.seasonCol])
 
         # season infos
@@ -279,76 +424,93 @@ class SNNSNYMetric(BaseMetric):
         season_info = dfa.groupby(['season']).apply(
             lambda x: self.seasonInfo(x, min_duration=60)).reset_index()
 
-        print(season_info)
+        # print(season_info)
 
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
 
-        print(dur_z)
+        return seasons, dur_z
 
-        # get simulation parameters
-        gen_par = dur_z.groupby(['z', 'season']).apply(
-            lambda x: self.calcDaymax(x)).reset_index()
+    def step_lc(self, obs, gen_par):
+        """
+        Method to generate lc
 
-        print(gen_par)
-        obs = pd.DataFrame(np.copy(dataSlice))
-        obs = obs[obs['season'].isin(seasons)]
-        # coaddition per night and per band (if requested by the user)
-        if self.stacker is not None:
-            obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
+        Parameters
+        ---------------
+        obs: array
+          observations
+        gen_par: array
+          simulation parameters
 
-        # generate LC here
-        if ebvofMW < 0.25:
-            # generate LC here
-            lc = obs.groupby(['season']).apply(
-                lambda x: self.genLC(x, gen_par))
+        Returns
+        ----------
+        SN light curves (astropy table)
 
-            # plot figs for movie
-            if self.ploteffi and self.fig_for_movie and len(lc) > 0:
-                self.plot_for_movie(obs, lc, gen_par)
+        """
+        lc = obs.groupby(['season']).apply(
+            lambda x: self.genLC(x, gen_par))
 
-            # get observing efficiencies
-            if len(lc) >= 0:
-                # lc = lc.rename_axis(None)
-                lc.index = lc.index.droplevel()
-                print(lc.columns)
-                sn_effis = lc.groupby(['healpixID', 'season', 'z', 'x1', 'color', 'sntype']).apply(
-                    lambda x: self.sn_effi(x)).reset_index()
+        # plot figs for movie
+        if self.ploteffi and self.fig_for_movie and len(lc) > 0:
+            self.plot_for_movie(obs, lc, gen_par)
 
-            # estimate efficiencies
-            for vv in ['healpixID', 'season']:
-                sn_effis[vv] = sn_effis[vv].astype(int)
-            sn_effis['effi'] = sn_effis['nsel']/sn_effis['ntot']
-            sn_effis['effi_err'] = np.sqrt(
-                sn_effis['nsel']*(1.-sn_effis['effi']))/sn_effis['ntot']
+        return lc
 
-            # add season length here
-            sn_effis = sn_effis.merge(
-                dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
+    def step_efficiencies(self, lc):
+        """
+        Method to estimate observing efficiencies
 
-            if self.ploteffi:
-                from sn_metrics.sn_plot_live import plotNSN_effi
-                for season in sn_effis['season'].unique():
-                    idx = sn_effis['season'] == season
-                    plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
-                                 'Observing Efficiencies', ls='-')
+        Parameter
+        -------------
+        lc: pandas df
+           light curves
 
-            # estimate the number of supernovae
-            sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
-                sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
+        Returns
+        -----------
+        pandas df with efficiencies
 
-            # get redshift limit and nsn
-            metric = sn_effis.groupby(['season']).apply(
-                lambda x: self.metric(x)).reset_index()
-            print('ici', metric)
+        """
+        sn_effis = lc.groupby(['healpixID', 'season', 'z', 'x1', 'color', 'sntype']).apply(
+            lambda x: self.sn_effi(x)).reset_index()
 
-            if self.ploteffi:
-                from sn_metrics.sn_plot_live import plot_zlim
-                for season in sn_effis['season'].unique():
-                    idx = sn_effis['season'] == season
-                    plot_zlim(sn_effis[idx], 'faint', self.zmin,
-                              self.zmax, self.zlim_coeff)
+        # estimate efficiencies
+        for vv in ['healpixID', 'season']:
+            sn_effis[vv] = sn_effis[vv].astype(int)
+        sn_effis['effi'] = sn_effis['nsel']/sn_effis['ntot']
+        sn_effis['effi_err'] = np.sqrt(
+            sn_effis['nsel']*(1.-sn_effis['effi']))/sn_effis['ntot']
+
+        if self.ploteffi:
+            from sn_metrics.sn_plot_live import plotNSN_effi
+            for season in sn_effis['season'].unique():
+                idx = sn_effis['season'] == season
+                plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
+                             'Observing Efficiencies', ls='-')
+
+        return sn_effis
+
+    def step_nsn(self, sn_effis, dur_z):
+        """
+        Method to estimate the number of supernovae from efficiencies
+
+        Parameters
+        ---------------
+        sn_effis: pandas df
+          data with efficiencies of observation
+        dur_z:  array
+          array of season length
+
+        """
+        # add season length here
+        sn_effis = sn_effis.merge(
+            dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
+        # estimate the number of supernovae
+        print('hhh', sn_effis[['z', 'season_length']])
+        sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
+            sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
+
+        return sn_effis
 
     def ebvofMW_calc(self):
         """
@@ -614,24 +776,24 @@ class SNNSNYMetric(BaseMetric):
         Diagonal elements of the inverted matrix (as pandas df)
         """
 
-        params = ['x0', 'x1', 'daymax', 'color']
+        # params = ['x0', 'x1', 'daymax', 'color']
         parts = {}
-        for ia, vala in enumerate(params):
-            for jb, valb in enumerate(params):
+        for ia, vala in enumerate(self.params):
+            for jb, valb in enumerate(self.params):
                 if jb >= ia:
                     parts[ia, jb] = grp['F_'+vala+valb]
 
         # print(parts)
         size = len(grp)
-        npar = len(params)
+        npar = len(self.params)
         Fisher_Big = np.zeros((npar*size, npar*size))
         Big_Diag = np.zeros((npar*size, npar*size))
         Big_Diag = []
 
         for iv in range(size):
             Fisher_Matrix = np.zeros((npar, npar))
-            for ia, vala in enumerate(params):
-                for jb, valb in enumerate(params):
+            for ia, vala in enumerate(self.params):
+                for jb, valb in enumerate(self.params):
                     if jb >= ia:
                         Fisher_Big[ia+npar*iv][jb+npar*iv] = parts[ia, jb][iv]
 
@@ -643,8 +805,6 @@ class SNNSNYMetric(BaseMetric):
         res = pd.DataFrame()
         for ia, vala in enumerate(self.params):
             indices = range(ia, len(Big_Diag), npar)
-            # restab.add_column(
-            #    Column(np.take(Big_Diag, indices), name='Cov_{}{}'.format(vala,vala)))
             res['Cov_{}{}'.format(vala, vala)] = np.take(Big_Diag, indices)
 
         return res
@@ -736,7 +896,7 @@ class SNNSNYMetric(BaseMetric):
                            bounds_error=False, fill_value=0)
             res = nsn(zlim)
 
-        return res
+        return np.round(res, 6)
 
     def metric(self, grp):
         """
@@ -755,5 +915,11 @@ class SNNSNYMetric(BaseMetric):
         if grp['effi'].mean() > 0.02:
             zcomp = self.zlim_or_nsn(grp, 'faint', -1)
             nsn = self.zlim_or_nsn(grp, 'medium', zcomp)
+
+        if self.ploteffi:
+            from sn_metrics.sn_plot_live import plot_zlim, plot_nsn
+            plot_zlim(grp, 'faint', self.zmin,
+                      self.zmax, self.zlim_coeff)
+            plot_nsn(grp, 'medium', self.zmin, self.zmax, zcomp)
 
         return pd.DataFrame({'zcomp': [zcomp], 'nsn': [nsn]})
