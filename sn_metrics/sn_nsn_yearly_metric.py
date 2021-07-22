@@ -339,7 +339,16 @@ class SNNSNYMetric(BaseMetric):
                 sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
 
             # get redshift limit and nsn
-            self.zcomp(sn_effis)
+            metric = sn_effis.groupby(['season']).apply(
+                lambda x: self.metric(x)).reset_index()
+            print('ici', metric)
+
+            if self.ploteffi:
+                from sn_metrics.sn_plot_live import plot_zlim
+                for season in sn_effis['season'].unique():
+                    idx = sn_effis['season'] == season
+                    plot_zlim(sn_effis[idx], 'faint', self.zmin,
+                              self.zmax, self.zlim_coeff)
 
     def ebvofMW_calc(self):
         """
@@ -545,7 +554,7 @@ class SNNSNYMetric(BaseMetric):
 
         idx = lcarr['snr_m5'] >= self.snr_min
 
-        lcarr = lcarr[idx]
+        lcarr = np.copy(lcarr[idx])
 
         T0s = np.unique(lcarr['daymax'])
         T0s.sort()
@@ -556,6 +565,7 @@ class SNNSNYMetric(BaseMetric):
         flag_idx = np.argwhere(flag)
 
         resdf = pd.DataFrame(T0s, columns=['daymax'])
+
         # get n_phase_min, n_phase_max
         for vv in ['n_phmin', 'n_phmax', 'F_x0x0', 'F_x0x1', 'F_x0daymax', 'F_x0color', 'F_x1x1', 'F_x1daymax',
                    'F_x1color', 'F_daymaxdaymax', 'F_daymaxcolor', 'F_colorcolor']:
@@ -568,9 +578,6 @@ class SNNSNYMetric(BaseMetric):
         resdf['nepochs_aft'] = self.get_epochs(nights, flag, flagph)
         flagph = phases <= 0.
         resdf['nepochs_bef'] = self.get_epochs(nights, flag, flagph)
-
-        sigma_Fisher = self.sigmaSNparams(resdf)
-        resdf['Cov_colorcolor'] = sigma_Fisher['Cov_colorcolor']
 
         # get selection efficiencies
         effis = self.efficiencies(resdf)
@@ -598,6 +605,7 @@ class SNNSNYMetric(BaseMetric):
         """
         Method to estimate variances of SN parameters
         from inversion of the Fisher matrix
+
         Parameters
         ---------------
         grp: pandas df of flux derivatives wrt SN parameters
@@ -641,7 +649,7 @@ class SNNSNYMetric(BaseMetric):
 
         return res
 
-    def efficiencies(self, df):
+    def efficiencies(self, dfo):
         """"
         Method to estimate selection efficiencies
 
@@ -652,16 +660,28 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
+        df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
         df['select'] &= df['nepochs_bef'] >= self.n_bef
         df['select'] &= df['nepochs_aft'] >= self.n_aft
-        df['select'] &= df['Cov_colorcolor'] <= self.sigmaC**2
         df['select'] = df['select'].astype(int)
+        df['Cov_colorcolor'] = 100.
 
         idx = df['select'] == 1
 
-        return pd.DataFrame({'ntot': [len(df)], 'nsel': [len(df[idx])]})
+        badSN = pd.DataFrame(df.loc[~idx])
+        goodSN = pd.DataFrame()
+        if len(df[idx]) > 0:
+            goodSN = pd.DataFrame(df.loc[idx].reset_index())
+            sigma_Fisher = self.sigmaSNparams(goodSN)
+            goodSN['Cov_colorcolor'] = sigma_Fisher['Cov_colorcolor']
+
+        allSN = pd.concat((goodSN, badSN))
+        allSN['select'] &= allSN['Cov_colorcolor'] <= self.sigmaC**2
+        idx = allSN['select'] == 1
+
+        return pd.DataFrame({'ntot': [len(allSN)], 'nsel': [len(allSN[idx])]})
 
         """
         arr = df.to_records(index=False)
@@ -682,32 +702,58 @@ class SNNSNYMetric(BaseMetric):
         print(A, B)
         """
 
-    def zcomp(self, effi):
+    def zlim_or_nsn(self, effi, sntype='faint', zlim=-1):
+        """
+        Method to estimate the redshift limit or the number of sn
 
-        sntype = 'faint'
+        Parameters
+        ---------------
+        effi: pandas df
+          data to process
+        sntype: str, opt
+          type of SN to consider for estimation (default: faint)
+        zlim: float, opt
+          redshift limit
+
+        Returns
+        -----------
+        if zlim<0: returns the redshift limit
+        if zlim>0: returns the number of sn up to zlim
+
+
+        """
         seleffi = effi[effi['sntype'] == sntype]
         seleffi = seleffi.sort_values(by=['z'])
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
 
-        zlim = interp1d(nsn_cum/nsn_cum[-1], seleffi['z'], kind='linear',
-                        bounds_error=False, fill_value=0)
-        zlimit = zlim(self.zlim_coeff)
+        res = -999
+        if zlim < 0:
+            zlim = interp1d(nsn_cum/nsn_cum[-1], seleffi['z'], kind='linear',
+                            bounds_error=False, fill_value=0)
+            res = zlim(self.zlim_coeff)
+        else:
+            nsn = interp1d(seleffi['z'], nsn_cum, kind='linear',
+                           bounds_error=False, fill_value=0)
+            res = nsn(zlim)
 
-        if self.ploteffi:
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots()
-            ax.plot(seleffi['z'], nsn_cum/nsn_cum[-1])
-            axb = ax.twinx()
-            norm = np.max(seleffi['nsn'])
-            axb.plot(seleffi['z'], seleffi['nsn']/norm)
-            ax.plot([zlimit]*2, [0., self.zlim_coeff], ls='dashed', color='k')
-            ax.plot([self.zmin, self.zmax], [self.zlim_coeff]
-                    * 2, ls='dashed', color='k')
-            ax.grid()
-            ax.set_xlabel('z')
-            ax.set_ylabel('Cumulative N$_{SN}(z<)$')
-            axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
-            ax.set_xlim(self.zmin, self.zmax)
-            zstr = '$z_{complete}$'
-            ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
-            plt.show()
+        return res
+
+    def metric(self, grp):
+        """
+        Method to estimate the metric(zcomp, nsn)
+
+        Parameters
+        ---------------
+        grp: pandas group
+
+        Returns
+        ------------
+        pandas df with the metric as cols
+        """
+        zcomp = -1
+        nsn = -1
+        if grp['effi'].mean() > 0.02:
+            zcomp = self.zlim_or_nsn(grp, 'faint', -1)
+            nsn = self.zlim_or_nsn(grp, 'medium', zcomp)
+
+        return pd.DataFrame({'zcomp': [zcomp], 'nsn': [nsn]})
