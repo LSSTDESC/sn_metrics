@@ -20,9 +20,9 @@ plt.rcParams['axes.labelsize'] = 15
 plt.rcParams['figure.titlesize'] = 15
 plt.rcParams['legend.fontsize'] = 15
 plt.rcParams['font.size'] = 15
-#plt.rcParams['font.weight'] = 'bold'
+# plt.rcParams['font.weight'] = 'bold'
 plt.rcParams['font.family'] = 'Arial'
-#plt.rcParams['font.sans-serif'] = ['Helvetica']
+# plt.rcParams['font.sans-serif'] = ['Helvetica']
 
 
 class Plot_NSN_metric:
@@ -79,7 +79,7 @@ class Plot_NSN_metric:
         idm &= lc['snr_m5'] >= self.snrmin
         lc = lc[idm]
         lc['flux_e_sec_err'] = lc['flux_e_sec']/lc['snr_m5']
-        #filt_layout = dict(zip('griz', [(1, 0), (1, 1), (2, 0), (2, 1)]))
+        # filt_layout = dict(zip('griz', [(1, 0), (1, 1), (2, 0), (2, 1)]))
         filt_layout = dict(zip('griz', [(0, 1), (0, 2), (1, 1), (1, 2)]))
         print(gen_par.dtype)
 
@@ -525,7 +525,7 @@ def plotNSN_cumul(grp, nsn_cum_norm, nsn_cum_norm_err, zplot, zlim_coeff, zlim, 
     ax.fill_between(zplot, nsn_cum_norm-nsn_cum_norm_err,
                     nsn_cum_norm+nsn_cum_norm_err, color='y')
 
-    #plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, 0., zlim_coeff)
+    # plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, 0., zlim_coeff)
     plotzbar(ax, zlim, zlim_coeff, -1.0, -1.0, 0., zlim_coeff)
     """
     ax.plot([zlim]*2, [0, zlim_coeff], ls='solid', color='b')
@@ -566,7 +566,7 @@ def plotNSN_z(grp, zplot, nsn_z, zlim_coeff, zlim, zmean, zpeak):
             label='(x1,color)=({},{})'.format(x1, color))
     ax.set_ylim(0., None)
     y_min, y_max = ax.get_ylim()
-    #plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
+    # plotzbar(ax, zlim, zlim_coeff, zmean, zpeak, y_min, y_max)
     plotzbar(ax, -1., -1., zmean, zpeak, y_min, y_max)
 
     ax.grid()
@@ -792,7 +792,7 @@ class Plot_Saturation_Metric:
             ax.plot(selb[whatx], selb[whaty],
                     '{}o'.format(filtercolors[band[-1]]), label='{} band'.format(band[-1]))
         # ax.legend()
-        #tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
+        # tmin, tmax = np.min(sel[whatx]), np.max(sel[whatx])
         fluxmin, fluxmax = np.min(sel[whaty]), np.max(sel[whaty])
         ax.plot([tmin, tmax], [self.fullwell]*2, color='k')
         ax.plot([daymax]*2, [fluxmin, fluxmax], color='k', ls='solid')
@@ -955,4 +955,49 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
     ax.set_xlim(zmin, zmax)
     zstr = '$z_{complete}$'
     ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
+    plt.show()
+
+
+def plot_nsn(effi, sntype='medium', zmin=0.1, zmax=0.5, zlim=0.3):
+    """
+    Method to plot number of sn vs z
+
+    Parameters
+    ---------------
+    effi : pandas df
+      data to process
+    sntype: str, opt
+      type of SN (default: medium)
+    zmin: float, opt
+      min redshift for plot (default: 0.1)
+    zmax: float, opt
+      max redshift for plot (default: 0.5)
+    zlim: float, opt
+      zlim to get nsn (default: 0.3)
+
+    """
+
+    from scipy.interpolate import interp1d
+    fig, ax = plt.subplots()
+    seleffi = effi[effi['sntype'] == sntype]
+    seleffi = seleffi.sort_values(by=['z'])
+    ax.plot(seleffi['z'], seleffi['effi'])
+    axb = ax.twinx()
+    axb.plot(seleffi['z'], seleffi['nsn'])
+    plt.show()
+    nsn_cum = np.cumsum(seleffi['nsn'].to_list())
+    nsn_interp = interp1d(seleffi['z'], nsn_cum, kind='linear',
+                          bounds_error=False, fill_value=0)
+    nsn = nsn_interp(zlim)
+    zvals = np.arange(zmin, zmax, 0.01)
+    ax.plot(zvals, nsn_interp(zvals))
+    ax.plot([zmin, zmax], [nsn]*2, ls='dashed', color='k')
+    ax.plot([zlim]*2, [0., nsn], ls='dashed', color='k')
+    ax.set_xlabel('$z$')
+    nsnstr = 'N$_{SN}$'
+    ax.set_ylabel(nsnstr)
+    ax.text(0.3, 1.1*nsn, '{}={}'.format(nsnstr, np.round(nsn, 2)))
+    ax.set_xlim(zmin, zmax)
+    ax.set_ylim(0., None)
+    ax.grid()
     plt.show()
