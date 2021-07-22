@@ -913,3 +913,46 @@ class Plot_Saturation_Metric:
         ax.set_ylabel(legy, color=color)
         if label:
             ax.legend()
+
+
+def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
+    """
+    Method to illustrate how zlim is estimated
+
+    Parameters
+    ----------------
+    seleffi: pandas df
+      data to process
+    sntype: str, opt
+      type of SN (default: faint)
+    zmin: float, opt
+      min redshift for plot (default: 0.1)
+    zmax: float, opt
+      max redshift for plot (default: 0.5)
+    zlim_coeff: float, opt
+      zlim_coeff to estimate zlim (default: 0.85)
+
+    """
+    from scipy.interpolate import interp1d
+    fig, ax = plt.subplots()
+    seleffi = effi[effi['sntype'] == sntype]
+    seleffi = seleffi.sort_values(by=['z'])
+    nsn_cum = np.cumsum(seleffi['nsn'].to_list())
+    zlim = interp1d(nsn_cum/nsn_cum[-1], seleffi['z'], kind='linear',
+                    bounds_error=False, fill_value=0)
+    zlimit = zlim(zlim_coeff)
+    ax.plot(seleffi['z'], nsn_cum/nsn_cum[-1])
+    axb = ax.twinx()
+    norm = np.max(seleffi['nsn'])
+    axb.plot(seleffi['z'], seleffi['nsn']/norm)
+    ax.plot([zlimit]*2, [0., zlim_coeff], ls='dashed', color='k')
+    ax.plot([zmin, zmax], [zlim_coeff]
+            * 2, ls='dashed', color='k')
+    ax.grid()
+    ax.set_xlabel('z')
+    ax.set_ylabel('Cumulative N$_{SN}(z<)$')
+    axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
+    ax.set_xlim(zmin, zmax)
+    zstr = '$z_{complete}$'
+    ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
+    plt.show()
