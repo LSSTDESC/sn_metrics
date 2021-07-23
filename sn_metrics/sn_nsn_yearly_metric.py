@@ -184,8 +184,9 @@ class SNNSNYMetric(BaseMetric):
         rateSN = SN_Rate(H0=70., Om0=0.3,
                          min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
         self.duration_ref = 180.
-        zz, rate, err_rate, nsn, err_nsn = rateSN(zmin=0.01,
+        zz, rate, err_rate, nsn, err_nsn = rateSN(zmin=self.zmin,
                                                   zmax=self.zmax,
+                                                  dz=self.zStep,
                                                   # duration_z=durinterp_z,
                                                   duration=self.duration_ref,
                                                   survey_area=self.pixArea,
@@ -340,7 +341,7 @@ class SNNSNYMetric(BaseMetric):
             metricValues = metricValues.merge(
                 cad_gap, left_on=['season'], right_on=['season'])
 
-        print('ici', metricValues)
+        print('ici', metricValues[['season', 'zcomp', 'nsn']])
         return metricValues
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
