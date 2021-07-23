@@ -1659,19 +1659,11 @@ class SNNSNMetric(BaseMetric):
                                                        # duration = np.mean(duration_z['season_length']),
                                                        survey_area=self.pixArea,
                                                        account_for_edges=False)
-        print('booo', duration_z(np.arange(0.1, 0.5, 0.03)))
         # rate interpolation
         rateInterp = interp1d(zz, nsn, kind='linear',
                               bounds_error=False, fill_value=0)
         nsn_cum = np.cumsum(effiInterp(zplot)*nsn)
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-
-        ax.plot(zz, effiInterp(zz))
-        axb = ax.twinx()
-        ax.plot(zz, nsn_cum)
-
-        plt.show()
+        
 
         nsn_interp = interp1d(
             zplot, nsn_cum, bounds_error=False, fill_value=0.)
