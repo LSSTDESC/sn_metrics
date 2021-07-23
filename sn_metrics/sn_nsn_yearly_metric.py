@@ -165,13 +165,13 @@ class SNNSNYMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zStep = 0.03  # zstep
+        self.zstep = 0.03  # zstep
         # get redshift range for processing
-        zRange = list(np.arange(self.zmin, self.zmax, self.zStep))
-        if zRange[0] < 1.e-6:
-            zRange[0] = 0.01
+        zrange = list(np.arange(self.zmin, self.zmax, self.zstep))
+        if zrange[0] < 1.e-6:
+            zrange[0] = 0.01
 
-        self.zRange = np.unique(zRange)
+        self.zrange = np.unique(zrange)
 
         self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
@@ -181,26 +181,20 @@ class SNNSNYMetric(BaseMetric):
         self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
 
         # snrate
-        rateSN = SN_Rate(H0=70., Om0=0.3,
+        self.rateSN = SN_Rate(H0=70., Om0=0.3,
                          min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
-        self.duration_ref = 180.
-        zz, rate, err_rate, nsn, err_nsn = rateSN(zmin=self.zmin,
-                                                  zmax=self.zmax,
-                                                  dz=self.zStep,
-                                                  # duration_z=durinterp_z,
-                                                  duration=self.duration_ref,
-                                                  survey_area=self.pixArea,
-                                                  account_for_edges=True)
-
+        # snrate
+        #rateSN = SN_Rate(H0=70., Om0=0.3,
+        #                 min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
         """
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-        ax.plot(zz, np.cumsum(nsn))
-        plt.show()
-        """
-        self.nsn_expected = interp1d(zz, nsn, kind='linear',
+        self.duration_ref = 110.
+        grp = pd.DataFrame([1800],columns=['MJD_min'])
+        grp['MJD_max'] = grp['MJD_min']+self.duration_ref
+        dur_z = self.duration_z(grp)
+        nsn = self.nsn_from_rate(dur_z)
+        self.nsn_expected = interp1d(self.zrange, nsn['nsn_expected'], kind='linear',
                                      bounds_error=False, fill_value=0)
-
+        """
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
         self.timer = timer
@@ -290,9 +284,9 @@ class SNNSNYMetric(BaseMetric):
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
             lambda x: self.calcDaymax(x)).reset_index()
-
+        
         # print(gen_par)
-
+    
         # select observations corresponding to seasons
         obs = pd.DataFrame(np.copy(dataSlice))
         obs = obs[obs['season'].isin(seasons)]
@@ -301,6 +295,7 @@ class SNNSNYMetric(BaseMetric):
         if self.stacker is not None:
             obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
 
+        
         # get infos on obs: cadence, max gap
         cad_gap = obs.groupby(['season']).apply(lambda x:
                                                 self.cadence_gap(x)).reset_index()
@@ -309,7 +304,7 @@ class SNNSNYMetric(BaseMetric):
         cad_gap = cad_gap.merge(
             obs_alloc, left_on=['season'], right_on=['season'])
         #print('cad gap', cad_gap)
-
+        
         metricValues = None
 
         # generate LC here
@@ -319,6 +314,7 @@ class SNNSNYMetric(BaseMetric):
         if len(lc) >= 0:
             lc.index = lc.index.droplevel()
             # get infos on lc (cadence, gap)
+            
             cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
                 lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
             cad_gap_lc = cad_gap_lc_all.groupby(
@@ -326,6 +322,7 @@ class SNNSNYMetric(BaseMetric):
             # print(cad_gap_lc)
             cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
                                     'season'], right_on=['season'])
+            
             # estimate efficiencies
             sn_effis = self.step_efficiencies(lc)
             # estimate nsn
@@ -338,10 +335,11 @@ class SNNSNYMetric(BaseMetric):
             metricValues['pixRA'] = self.pixRA
             metricValues['pixDec'] = self.pixDec
             # merge with all parameters
+            
             metricValues = metricValues.merge(
                 cad_gap, left_on=['season'], right_on=['season'])
-
-        print('ici', metricValues[['season', 'zcomp', 'nsn']])
+            
+        #print('metricValues', metricValues[['season', 'zcomp', 'nsn']],metricValues.columns)
         return metricValues
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
@@ -506,11 +504,11 @@ class SNNSNYMetric(BaseMetric):
         # add season length here
         sn_effis = sn_effis.merge(
             dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
+        
         # estimate the number of supernovae
-        print('hhh', sn_effis[['z', 'season_length']])
-        sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
-            sn_effis['z'].to_list())*sn_effis['season_length']/self.duration_ref
-
+        sn_effis['nsn'] = sn_effis['effi']*sn_effis['nsn_expected']
+        #sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
+        #    sn_effis['z'].to_list())/(1.+(sn_effis['season_length_orig']/self.duration_ref)/sn_effis['season_length'])
         return sn_effis
 
     def ebvofMW_calc(self):
@@ -598,12 +596,15 @@ class SNNSNYMetric(BaseMetric):
 
         daymin = grp['MJD_min'].values
         daymax = grp['MJD_max'].values
-        dur_z = pd.DataFrame(self.zRange, columns=['z'])
+        dur_z = pd.DataFrame(self.zrange, columns=['z'])
         dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
-        # dur_z['season_length'] = [daymax-daymin]*len(self.zRange)
-
+        #dur_z['season_length_orig'] = daymax-daymin
+        #dur_z['season_length_orig'] = [daymax-daymin]*len(self.zrange)
+        nsn = self.nsn_from_rate(dur_z)
+        dur_z = dur_z.merge(nsn,left_on=['z'],right_on=['z'])
+        
         idx = dur_z['season_length'] > min_duration
         sel = dur_z[idx]
         if len(sel) < 2:
@@ -924,3 +925,33 @@ class SNNSNYMetric(BaseMetric):
             plot_nsn(grp, 'medium', self.zmin, self.zmax, zcomp)
 
         return pd.DataFrame({'zcomp': [zcomp], 'nsn': [nsn]})
+
+    def nsn_from_rate(self,grp):
+        """
+        Method to estimate the expected number of supernovae
+        
+        Parameters
+        ---------------
+        grp: pandas df
+          data to process
+
+        Returns
+        -----------
+        pandas df with z and nsn_expected as cols
+
+        """
+        durinterp_z = interp1d(grp['z'],grp['season_length'],kind='linear',
+                                     bounds_error=False, fill_value=0)
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
+                                                  zmax=self.zmax,
+                                                  dz=self.zstep,
+                                                  duration_z=durinterp_z,
+                                                  #duration=self.duration_ref,
+                                                  survey_area=self.pixArea,
+                                                       account_for_edges=False)
+        
+        nsn_expected = interp1d(zz, nsn, kind='linear',
+                                     bounds_error=False, fill_value=0)
+        nsn_res = nsn_expected(grp['z'])
+
+        return pd.DataFrame({'nsn_expected': nsn_res,'z': grp['z'].to_list()})
