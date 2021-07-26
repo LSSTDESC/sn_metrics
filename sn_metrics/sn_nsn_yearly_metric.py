@@ -280,11 +280,18 @@ class SNNSNYMetric(BaseMetric):
 
         # get the season durations
         seasons, dur_z = self.season_length(self.season, dataSlice)
-
+        
+        if not seasons or dur_z.empty:
+            df = self.resError(self.status['season_length'])
+            return df
+        
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
             lambda x: self.calcDaymax(x)).reset_index()
-        
+
+        if gen_par.empty:
+            df = self.resError(self.status['simu_parameters'])
+            return df
         # print(gen_par)
     
         # select observations corresponding to seasons
@@ -305,41 +312,44 @@ class SNNSNYMetric(BaseMetric):
             obs_alloc, left_on=['season'], right_on=['season'])
         #print('cad gap', cad_gap)
         
-        metricValues = None
+        metricValues = pd.DataFrame()
 
         # generate LC here
         lc = self.step_lc(obs, gen_par)
 
+        if len(lc) == 0:
+            df = self.resError(self.status['nosn'])
+            return df
+        
         # get observing efficiencies and build sn for metric
-        if len(lc) >= 0:
-            lc.index = lc.index.droplevel()
-            # get infos on lc (cadence, gap)
+        lc.index = lc.index.droplevel()
+        # get infos on lc (cadence, gap)
             
-            cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
-                lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
-            cad_gap_lc = cad_gap_lc_all.groupby(
-                ['season']).mean().reset_index()
-            # print(cad_gap_lc)
-            cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
-                                    'season'], right_on=['season'])
+        cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
+            lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
+        cad_gap_lc = cad_gap_lc_all.groupby(
+            ['season']).mean().reset_index()
+        # print(cad_gap_lc)
+        cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
+            'season'], right_on=['season'])
             
-            # estimate efficiencies
-            sn_effis = self.step_efficiencies(lc)
-            # estimate nsn
-            sn = self.step_nsn(sn_effis, dur_z)
-            # estimate redshift limit and nsn
-            metricValues = sn.groupby(['season']).apply(
-                lambda x: self.metric(x)).reset_index()
-            # add ID parameters here
-            metricValues['healpixID'] = self.healpixID
-            metricValues['pixRA'] = self.pixRA
-            metricValues['pixDec'] = self.pixDec
-            # merge with all parameters
-            
-            metricValues = metricValues.merge(
-                cad_gap, left_on=['season'], right_on=['season'])
-            
-        #print('metricValues', metricValues[['season', 'zcomp', 'nsn']],metricValues.columns)
+        # estimate efficiencies
+        sn_effis = self.step_efficiencies(lc)
+        # estimate nsn
+        sn = self.step_nsn(sn_effis, dur_z)
+        # estimate redshift limit and nsn
+        metricValues = sn.groupby(['season']).apply(
+            lambda x: self.metric(x)).reset_index()
+        # add ID parameters here
+        metricValues['healpixID'] = self.healpixID
+        metricValues['pixRA'] = self.pixRA
+        metricValues['pixDec'] = self.pixDec
+        # merge with all parameters
+        metricValues['status'] = self.status['ok']
+        metricValues = metricValues.merge(
+            cad_gap, left_on=['season'], right_on=['season'])
+
+        #print('metricValues', metricValues[['season', 'zcomp', 'nsn','status']])
         return metricValues
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
@@ -423,13 +433,14 @@ class SNNSNYMetric(BaseMetric):
         season_info = dfa.groupby(['season']).apply(
             lambda x: self.seasonInfo(x, min_duration=60)).reset_index()
 
-        # print(season_info)
+        if season_info.empty:
+            return [], pd.DataFrame()
 
         # get season length depending on the redshift
         dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
 
-        return seasons, dur_z
+        return season_info['season'].to_list(), dur_z
 
     def step_lc(self, obs, gen_par):
         """
@@ -499,6 +510,10 @@ class SNNSNYMetric(BaseMetric):
           data with efficiencies of observation
         dur_z:  array
           array of season length
+
+        Returns
+        ----------
+        initial sn_effis appended with a set of infos (duration, nsn)
 
         """
         # add season length here
@@ -712,6 +727,9 @@ class SNNSNYMetric(BaseMetric):
         lc: pandas grp
           light curve
 
+        Returns
+        ----------
+        pandas df of sn efficiencies vs z
         """
 
         lcarr = lc.to_records(index=False)
@@ -749,6 +767,25 @@ class SNNSNYMetric(BaseMetric):
         return effis
 
     def get_sum(self, lcarr, varname, nvals, flag):
+        """
+        Method to get the sum of variables using broadcasting
+
+        Parameters
+        --------------
+        lcarr: numpy array
+          data to process
+        varname: str
+          col to process in lcarr
+        nvals: int
+          dimension for tiling
+        flag: array(bool)
+          flag to apply
+
+        Returns
+        ----------
+        array: the sum of the corresponding variable
+
+        """
 
         phmin = np.tile(lcarr[varname], (nvals, 1))
         n_phmin = np.ma.array(phmin, mask=~flag)
@@ -757,7 +794,23 @@ class SNNSNYMetric(BaseMetric):
         return n_phmin
 
     def get_epochs(self, nights, flag, flagph):
+        """
+        Method to get the number of epochs
 
+        Parameters
+        ---------------
+        nights: array
+          night number array
+        flag: array(bool)
+          flag to apply
+        flagph: array(bool)
+          flag to apply
+
+        Returns
+        -----------
+        array with the number of epochs
+
+        """
         nights_cp = np.copy(nights)
         B = np.ma.array(nights_cp, mask=~(flag & flagph))
         B.sort(axis=1)
@@ -955,3 +1008,30 @@ class SNNSNYMetric(BaseMetric):
         nsn_res = nsn_expected(grp['z'])
 
         return pd.DataFrame({'nsn_expected': nsn_res,'z': grp['z'].to_list()})
+
+    def resError(self, istatus):
+        """
+        Method to return a dataframe corresponding to anomalous result
+
+        Parameters
+        --------------
+        istatus: int
+         
+        Returns
+        ----------
+        pandas df with sn_status
+
+        """
+
+        df = pd.DataFrame([self.healpixID], columns=['healpixID'])
+        df['pixRA'] = self.pixRA
+        df['pixDec'] = self.pixDec
+        
+        cols = ['season','zcomp', 'nsn', 'cadence', 'gap_max', 'frac_u', 'frac_g','frac_r', 'frac_i', 'frac_z', 'frac_y', 'cadence_sn', 'gap_max_sn']
+
+        for col in cols:
+            df[col] = -1
+
+        df['status'] = istatus
+
+        return df
