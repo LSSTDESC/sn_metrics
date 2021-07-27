@@ -242,17 +242,14 @@ class SNSaturationMetric(BaseMetric):
         # time 0 for performance estimation purpose
         time_ref = time.time()
 
-        # Get ebvofMW here
-        ebvofMW = self.ebvofMW
-        # get pixel id
+        healpixID = np.unique(dataSlice['healpixID'])
+
+        if not healpixID:
+            return pd.DataFrame()
+        
         pixRA = np.unique(dataSlice['pixRA'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
         healpixID = int(np.unique(dataSlice['healpixID'])[0])
-
-        self.pixInfo = {}
-        self.pixInfo['healpixID'] = healpixID
-        self.pixInfo['pixRA'] = pixRA
-        self.pixInfo['pixDec'] = pixDec
 
         self.healpixID = healpixID
         self.pixRA = pixRA
@@ -260,15 +257,21 @@ class SNSaturationMetric(BaseMetric):
 
 
         print('processing',healpixID)
-        if self.figs_for_movie:
-            self.plot_live = Plot_Saturation_Metric(
-                self.pixInfo['healpixID'], 0.02, self.snr_min,
-                self.mjdCol, self.m5Col, self.filterCol, self.fullwell, self.saturationLevel)
-
+        # Get ebvofMW here
+        ebvofMW = self.ebvofMW
         if ebvofMW < 0.:
             # in that case ebvofMW value is taken from a map
-           ebvofMW = get_ebv()
+           ebvofMW = self.get_ebv()
 
+        if ebvofMW > 0.25:
+            return pd.DataFrame()
+      
+        if self.figs_for_movie:
+            self.plot_live = Plot_Saturation_Metric(
+                self.healpixID, 0.02, self.snr_min,
+                self.mjdCol, self.m5Col, self.filterCol, self.fullwell, self.saturationLevel)
+
+       
         # get the seasons
         seasons = self.season
 
@@ -519,9 +522,9 @@ class SNSaturationMetric(BaseMetric):
                 resb[['z', 'probasat', 'probasat_err', 'effipeak', 'effipeak_err','effipeak_sat', 'effipeak_sat_err','twiphase','fractwi']])
             """
             resb['season'] = seasons[0]
-            for vv in ['healpixID','pixRA','pixDec']:
-                resb[vv] = self.pixInfo[vv]
-
+            resb['healpixID'] = self.healpixID
+            resb['pixRA'] = self.pixRA
+            resb['pixDec'] = self.pixDec
                 
             if self.plotmetric:
                 self.plotSat(resb.to_records(index=False))
