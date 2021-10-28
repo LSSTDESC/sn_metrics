@@ -428,44 +428,74 @@ class SNSNRTIMEMetric(BaseMetric):
 
         return df_tot
 
-    def run_autogen(self, mjds, grp, runmode, downtimes=False):
+    def run_autogen(self, mjds, grp, runmode, downtimes=False, frac_gap=0.8):
 
         mjd_min, df_downtimes = self.load_downtimes(downtimes)
         window_width = 30
 
-        mjd_max = mjd_min+360.  # season length: 180 days
+        mjd_max = mjd_min+180.  # season length: 180 days
         mjds = np.arange(mjd_min, mjd_max, 1.)
 
+        mjds = pd.DataFrame(mjds, columns=['MJD'])
+        mjds['night'] = mjds['MJD']-mjds['MJD'].min()+1
+        mjds['night'] = mjds['night'].astype(int)
+
+        nights_gap = self.random_gaps(
+            mjds.to_records(index=False), frac_gap)
+        nights_gap['night'] = nights_gap['night'].astype(int)
+
+        print('gaps', nights_gap)
+
         df_tot = pd.DataFrame()
-
-        print('autogen1', grp)
-
         obs = pd.DataFrame()
+
         mjd_start_obs = mjd_min-self.min_rf_phase_qual*self.zmin
 
-        for i, mjd in enumerate(mjds):
-            inight = i+1
+        for i, val in mjds.iterrows():
+            inight = int(val['night'])
+            mjd = val['MJD']
             downtime = False
+            #  check if the mjd is downtime
             if not df_downtimes.empty:
                 df_downtimes['MJD'] = mjd
                 idd = df_downtimes['MJD'] >= df_downtimes['MJD_min']
                 idd &= df_downtimes['MJD'] <= df_downtimes['MJD_max']
                 downtime = not df_downtimes[idd].empty
-
+            # check if this mjd is a gap
+            igap = nights_gap['night'].isin([inight])
+            gaptime = not nights_gap[igap].empty
+            #print(inight, mjd, downtime, gaptime)
             # if mjd >= mjd_start_obs:
             if inight >= window_width:
                 df_mjd = self.get_SNRTime_single(
-                    inight-1, mjds, obs, runmode, window_width)
+                    inight-1, mjds['MJD'].to_list(), obs, runmode, window_width)
                 # print(df_mjd)
                 df_tot = pd.concat((df_tot, df_mjd))
-            if obs.empty and not downtime:
+            if obs.empty and not downtime and not gaptime:
                 obs = self.add_obs(obs, inight, mjd, grp)
             else:
                 ilast_night = np.max(obs['night'])
-                if inight-ilast_night >= self.cadence_obs and not downtime:
+                if inight-ilast_night >= self.cadence_obs and not downtime and not gaptime:
                     obs = self.add_obs(obs, inight, mjd, grp)
 
         return df_tot, obs
+
+    def random_gaps(self, dataSlice, frac_gap):
+
+        all_nights = np.unique(dataSlice['night'])
+
+        all_nights.sort()
+        dataSlice.sort(order='night')
+        all_nights_noborder = all_nights[1:-1]
+
+        # dataSlice = np.random.choice(dataSlice, int(
+        #    frac*len(dataSlice)), replace=False)
+        nights = np.random.choice(all_nights_noborder, int(
+            frac_gap*len(all_nights_noborder)), replace=False)
+
+        nights = list(nights)
+
+        return pd.DataFrame(nights, columns=['night'])
 
     def load_downtimes(self, downtimes):
 
@@ -542,7 +572,7 @@ class SNSNRTIMEMetric(BaseMetric):
         if not dur_z.empty:
             gen_par = dur_z.groupby(['z', 'season']).apply(
                 lambda x: self.calcDaymax(x)).reset_index()
-            print('hello', gen_par)
+            print('hello here', gen_par)
             lc = self.step_lc(data, gen_par)
             if not lc.empty:
                 lc.index = lc.index.droplevel()
@@ -558,7 +588,6 @@ class SNSNRTIMEMetric(BaseMetric):
 
     def get_SNRTime_one_lc(self, index, mjds, grp, window=30.):
 
-        # print('hello one lc', mjds, index)
         zref = 0.6
         T0 = mjds[index]
         mjd_max_time = T0
