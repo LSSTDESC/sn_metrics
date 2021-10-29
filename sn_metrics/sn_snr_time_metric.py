@@ -122,6 +122,7 @@ class SNSNRTIMEMetric(BaseMetric):
         self.pixArea = pixArea
         self.pixArea = 9.6
         self.ploteffi = ploteffi
+        # self.ploteffi = True
         self.x1_color_dist = x1_color_dist
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
@@ -168,7 +169,7 @@ class SNSNRTIMEMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zstep = 0.05  # zstep
+        self.zstep = 0.01  # zstep
         # get redshift range for processing
         zrange = list(np.arange(self.zmin, self.zmax+self.zstep, self.zstep))
         if zrange[0] < 1.e-6:
@@ -176,7 +177,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
         self.zrange = np.unique(zrange)
 
-        self.daymaxStep = 2.  # daymax step
+        self.daymaxStep = 1.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
@@ -251,8 +252,42 @@ class SNSNRTIMEMetric(BaseMetric):
         ----------
 
         """
+
+        # get the cadence of observation
+        cadence_obs = self.cadence(dataSlice)
+
+        # get a template for obs (Nvisits, m5, ...)
+        obs = pd.DataFrame(dataSlice)
+        nights = obs['night'].unique()
+        night_min = nights.min()
+        idx = obs['night'] == night_min
+        template_obs = obs[idx]
+
+        # cadence_obs = 1
+        import matplotlib.pyplot as plt
+        res = pd.read_hdf('testrecovery.hdf5')
+
+        r = []
+        for i in range(len(res)-3):
+            co = res[3*i:3*(i+1)]
+            x = np.mean(co['MJD_obs'])
+            y = np.mean(co['SNR_z'])
+            erry = np.std(co['SNR_z'])
+            r.append((x, y, erry))
+        tt = np.rec.fromrecords(r, names=['MJD_obs', 'SNR_z', 'SNR_z_rms'])
+
+        fig, ax = plt.subplots()
+        ax.errorbar(tt['MJD_obs'], tt['SNR_z'],
+                    yerr=tt['SNR_z_rms'], marker='o', color='k', mfc=None)
+        #plt.plot(res['MJD_obs'], res['SNR_z'], 'r*')
+        plt.show()
+
+        self.sequence(template_obs, int(cadence_obs),
+                      downtimes_tel=True, downtimes_telcloud=True, recovery=True)
+        print(test)
+
         obs = pd.DataFrame(np.copy(dataSlice))
-        #obs = obs[obs['season'].isin(seasons)]
+        # obs = obs[obs['season'].isin(seasons)]
         sn = self.simul_sn(obs)
         print('simulation', sn)
         autogen = True
@@ -326,7 +361,11 @@ class SNSNRTIMEMetric(BaseMetric):
         band = 'z'
         fig, ax = plt.subplots()
         tpl = 'SNR_{}'.format(band)
-        ax.plot(res['MJD_obs'], res[tpl], 'ko')
+        N = 1
+        x = np.convolve(res['MJD_obs'], np.ones((N,))/N)[(N-1):]
+        y = np.convolve(res[tpl], np.ones((N,))/N)[(N-1):]
+        ax.plot(x, y, 'ko')
+        ax.plot(res['MJD_obs'], res[tpl])
         axb = ax.twinx()
         idx = dataSlice['filter'] == band
         sel_obs = dataSlice[idx]
@@ -365,11 +404,12 @@ class SNSNRTIMEMetric(BaseMetric):
 
     def add_obs(self, obs, night, MJD, template_obs):
 
-        template_obs[self.nightCol] = night
-        template_obs[self.mjdCol] = MJD
+        tt = template_obs.copy()
+        tt.loc[:, self.nightCol] = night
+        tt.loc[:, self.mjdCol] = MJD
 
-        obs = pd.concat((obs, template_obs))
-
+        obs = pd.concat((obs, tt))
+        obs = obs.sort_values(by=[self.mjdCol])
         return obs
 
     def get_SNRTime(self, grp, mjd_min, mjd_max, autogen=False, downtimes=True, runmode='one_lc'):
@@ -430,7 +470,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
     def run_autogen(self, mjds, grp, runmode, downtimes=False, frac_gap=0.8):
 
-        mjd_min, df_downtimes = self.load_downtimes(downtimes)
+        mjd_min, df_downtimes = self.load_downtimes_tel(downtimes)
         window_width = 30
 
         mjd_max = mjd_min+180.  # season length: 180 days
@@ -443,8 +483,6 @@ class SNSNRTIMEMetric(BaseMetric):
         nights_gap = self.random_gaps(
             mjds.to_records(index=False), frac_gap)
         nights_gap['night'] = nights_gap['night'].astype(int)
-
-        print('gaps', nights_gap)
 
         df_tot = pd.DataFrame()
         obs = pd.DataFrame()
@@ -464,7 +502,7 @@ class SNSNRTIMEMetric(BaseMetric):
             # check if this mjd is a gap
             igap = nights_gap['night'].isin([inight])
             gaptime = not nights_gap[igap].empty
-            #print(inight, mjd, downtime, gaptime)
+            # print(inight, mjd, downtime, gaptime)
             # if mjd >= mjd_start_obs:
             if inight >= window_width:
                 df_mjd = self.get_SNRTime_single(
@@ -497,7 +535,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
         return pd.DataFrame(nights, columns=['night'])
 
-    def load_downtimes(self, downtimes):
+    def load_downtimes_tel(self, downtimes):
 
         # get mjdmin and down time from simulation
         from lsst.sims.featureScheduler.modelObservatory import Model_observatory
@@ -509,8 +547,64 @@ class SNSNRTIMEMetric(BaseMetric):
             downtim = mo.downtimes.tolist()
             df_downtimes = pd.DataFrame(
                 downtim, columns=['MJD_min', 'MJD_max'])
+            nights_off = []
+            for i, vals in df_downtimes.iterrows():
+                night_min = int(vals['MJD_min']-mjd_min)+1
+                night_max = int(vals['MJD_max']-mjd_min)+1
+                nn = range(night_min, night_max+1, 1)
+                nights_off += list(nn)
+            df_downtimes = pd.DataFrame(nights_off, columns=['night'])
+            df_downtimes['MJD'] = mjd_min+df_downtimes['night']-1
 
         return mjd_min, df_downtimes
+
+    def gaps_downtimes(self, mjd_min, df_downtimes):
+
+        season_length = 180
+        nseasons = 20
+
+        mjds = np.arange(mjd_min, mjd_min+nseasons*season_length, 1)
+        df = pd.DataFrame(mjds, columns=['MJD'])
+        df['night'] = (df['MJD']-mjd_min+1)
+        df['night'] = df['night'].astype(int)
+        df['obs'] = 0
+
+        df['obs'] = ~df['night'].isin(df_downtimes['night'].to_list())
+
+        r = []
+        # for i in range(nseasons):
+        Nmax = 19
+        dd_tot = pd.DataFrame()
+        for i in range(len(mjds)-season_length):
+            ib = i
+            ie = ib+season_length
+            df_season = df[ib:ie]
+            # get some stat
+            idx = df_season['obs'] == 1
+            seas_up = df_season[idx]
+            seas_up = seas_up.sort_values(by=['night'])
+            diff = np.diff(seas_up['night'])-1
+            diff = diff[diff > 0.].tolist()
+            dictout = {}
+            for ic in range(1, Nmax, 1):
+                dictout['gap_{}'.format(ic)] = [diff.count(ic)]
+            dictout['frac_down'] = [1.-len(seas_up)/len(df_season)]
+            dictout['gap_median'] = [np.median(diff)]
+            dictout['gap_min'] = [np.min(diff)]
+            dictout['gap_max'] = [np.max(diff)]
+            ddf = pd.DataFrame.from_dict(dictout)
+            dd_tot = pd.concat((dd_tot, ddf))
+
+        for vv in dd_tot.columns:
+            print(vv, np.mean(dd_tot[vv]), np.std(dd_tot[vv]))
+
+        """
+        import matplotlib.pyplot as plt
+        df = df.to_records(index=False)
+        # plt.plot(df['night'], df['night']/df['night'])
+        plt.plot(df['night'], df['obs'])
+        plt.show()
+        """
 
     def get_SNRTime_single(self, index, mjds, grp, runmode, window=80):
 
@@ -572,7 +666,13 @@ class SNSNRTIMEMetric(BaseMetric):
         if not dur_z.empty:
             gen_par = dur_z.groupby(['z', 'season']).apply(
                 lambda x: self.calcDaymax(x)).reset_index()
+
+            """
+            idx = gen_par['daymax'] >= 59895
+            idx &= gen_par['daymax'] <= 59896
+            gen_par = gen_par[idx]
             print('hello here', gen_par)
+            """
             lc = self.step_lc(data, gen_par)
             if not lc.empty:
                 lc.index = lc.index.droplevel()
@@ -626,41 +726,235 @@ class SNSNRTIMEMetric(BaseMetric):
         sn['MJD_obs'] = T0
 
         return sn
-        print(lc)
 
-        print(test)
+    def get_SNRTime_one_lc_new(self, mjd, obs, window=30., zref=0.6):
 
-        # plt.plot(data['observationStartMJD'], data['fiveSigmaDepth'], 'r*')
-        # plt.show()
-        dd = pd.DataFrame([(season, mjd_min_time, mjd_max_time)], columns=[
-            'season', 'MJD_min', 'MJD_max'])
-        dur_z = dd.groupby(['season']).apply(
-            lambda x: self.duration_z(x, 1.))
-        if not dur_z.empty:
-            gen_par = dur_z.groupby(['z', 'season']).apply(
-                lambda x: self.calcDaymax(x)).reset_index()
-            # generate LC here
-            # print('generating LC', len(data), mjd_min_time, mjd_max_time)
-            lc = self.step_lc(data, gen_par)
-            # transform lc to sn
-            # print('ahooo', len(lc), gen_par)
-            if not lc.empty:
-                lc.index = lc.index.droplevel()
-            # estimate efficiencies
-            sn = self.get_nsn(lc, dur_z, grp, mjd_max_time)
-            sn['cadence'] = self.cadence(
-                data.to_records(index=False), op=np.mean)
-            # get the number of epochs
-            sn['Nepochs'] = len(data['night'].unique())
-            return sn
+        T0 = mjd
+        mjd_max_time = T0
+        mjd_min_time = T0-window
 
-        return pd.DataFrame()
+        if mjd_min_time < 0:
+            return pd.DataFrame()
+
+        # select data
+        season = 1
+        idx = obs['observationStartMJD'] <= mjd_max_time
+        idx &= obs['observationStartMJD'] >= mjd_min_time
+        data = pd.DataFrame(obs[idx])
+        data['season'] = season
+
+        r = [(zref, season, T0, self.min_rf_phase, self.max_rf_phase)]
+        gen_par = pd.DataFrame(
+            r, columns=['z', 'season', 'daymax', 'minRFphase', 'maxRFphase'])
+
+        # generate lc here
+        lc = self.step_lc(data, gen_par)
+
+        # estimate SNR per band for lc point with snr > 1.
+
+        idx = lc['snr_m5'] > 1.
+        lc = lc[idx]
+
+        dicout = {}
+        for b in np.unique(lc['band']):
+            io = lc['band'] == b
+            sel_lc = lc[io]
+            dicout['SNR_{}'.format(b.split(':')[-1])
+                   ] = [np.sqrt(np.sum(sel_lc['snr_m5']**2))]
+
+        sn = pd.DataFrame.from_dict(dicout)
+        sn['MJD_obs'] = T0
+
+        return sn
+
+    def survey(self, template_obs, mjd_min=59853.98, season_length=180., cadence=3):
+
+        mjd_max = mjd_min+season_length
+        mjds = np.arange(mjd_min, mjd_max+cadence, cadence)
+
+        obs = pd.DataFrame()
+        for mjd in mjds:
+            night = int(mjd-np.min(mjds)+1)
+            obs = self.add_obs(obs, night, mjd, template_obs)
+
+        return obs
+
+    def sequence(self, template_obs, cadence,
+                 mjd_min=-1., season_length=180.,
+                 downtimes_tel=False, downtimes_telcloud=False, recovery=False, recovery_threshold=65.):
+
+        # get mjd_min from survey
+        mjd_min, df_downtimes = self.load_downtimes(
+            downtimes_tel, downtimes_telcloud)
+
+        # generate observations
+        obs = self.survey(template_obs, mjd_min=mjd_min,
+                          season_length=season_length, cadence=cadence)
+
+        # if there are downtimes: remove them from obs
+        if not df_downtimes.empty:
+            # print('night obs before', obs['night'].unique())
+            idx = obs['night'].isin(df_downtimes['night'].to_list())
+            obs = obs[~idx]
+            # print('night obs', obs['night'].unique())
+        # get mjds for this survey
+
+        mjds = np.arange(mjd_min, mjd_min+season_length+1, 1.)
+
+        # for each mjd: estimate SNR_band
+
+        df_res = pd.DataFrame()
+        for i, mjd in enumerate(mjds):
+            inight = i+1
+            df_time = self.get_SNRTime_one_lc_new(mjd, obs)
+            # print(df_time)
+            if not df_time.empty:
+                df_res = pd.concat((df_res, df_time))
+                if recovery and inight >= 3:
+                    io = df_downtimes['night'].isin([inight])
+                    isdowntime = not df_downtimes[io].empty
+                    """
+                    smoothed = self.smooth_it(
+                        df_res, cadence, 'MJD_obs', 'SNR_z')
+                    """
+                    # get the last
+                    idx = df_res['MJD_obs'] <= mjd-cadence
+                    SNR_last = df_res[idx]['SNR_z'].mean()
+                    # self.plot_smooth(smoothed)
+                    # if below threshold -> recovery
+                    inew = False
+                    if SNR_last <= 65. and not isdowntime:
+                        #ilast_night = np.max(obs['night'])
+                        # if inight-ilast_night >= 1:
+                        obs = self.add_obs(obs, inight, mjd, template_obs)
+
+        """
+        # get the total number of sn for this survey
+        sn = self.simul_sn(obs)
+        print('NSN', sn)
+        """
+        # display the results
+        df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
+        import matplotlib.pyplot as plt
+        band = 'z'
+        fig, ax = plt.subplots()
+        tpl = 'SNR_{}'.format(band)
+        N = 3
+        x = np.convolve(df_res['MJD_obs'], np.ones(
+            (N,))/N, mode='valid')[(N-1):]
+        y = np.convolve(df_res[tpl], np.ones((N,))/N, mode='valid')[(N-1):]
+        ax.plot(df_res['MJD_obs'], df_res[tpl], 'bo', mfc=None)
+        ax.plot(x, y, 'k*')
+        # ax.plot(df_res['MJD_obs'], df_res[tpl], 'ko')
+        axb = ax.twinx()
+        idx = obs['filter'] == band
+        sel_obs = obs[idx].to_records(index=False)
+        axb.plot(sel_obs['observationStartMJD'],
+                 sel_obs['fiveSigmaDepth'], 'r*')
+        print('hello', np.mean(df_res[tpl]), np.std(df_res[tpl]))
+        plt.show()
+
+    def plot_smooth(self, data):
+
+        import matplotlib.pyplot as plt
+        plt.plot(data['MJD_obs'], data['SNR_z'], 'ko')
+        plt.show()
+
+    def smooth_it(self, res, N, varx, vary):
+
+        r = []
+        for i in range(len(res)-N):
+            co = res[N*i:N*(i+1)]
+            x = np.mean(co[varx])
+            y = np.mean(co[vary])
+            erry = np.std(co[vary])
+            r.append((x, y, erry))
+        tt = np.rec.fromrecords(r, names=['MJD_obs', 'SNR_z', 'SNR_z_rms'])
+        tt.sort(order='MJD_obs')
+        return tt
+
+    def load_downtimes(self, downtimes_tel=False, downtimes_telcloud=False):
+
+        downtimes_tel_here = downtimes_tel
+        if downtimes_telcloud and not downtimes_tel:
+            # this is requested since we need to subtract downtimes from tel
+            downtimes_tel_here = True
+
+        mjd_min, df_downtimes_tel = self.load_downtimes_tel(downtimes_tel_here)
+
+        if not df_downtimes_tel.empty:
+            self.gaps_downtimes(mjd_min, df_downtimes_tel)
+
+        df_downtimes_telcloud = pd.DataFrame()
+        if downtimes_telcloud:
+            df_downtimes_telcloud = pd.DataFrame(
+                np.load('baseline_nexp1_v1.7_10yrs_no_obs.npy'))
+            print('analyzing df_downtimes_telcloud')
+            self.gaps_downtimes(mjd_min, df_downtimes_telcloud)
+
+        df_downtimes = pd.DataFrame()
+
+        if downtimes_tel and not downtimes_telcloud:
+            df_downtimes = df_downtimes_tel.copy()
+        if downtimes_tel and downtimes_telcloud:
+            df_downtimes = df_downtimes_telcloud.copy()
+        if not downtimes_tel and downtimes_telcloud:
+            # need to subtract downtime from telescop to downtime from telcloud
+            idx = df_downtimes_telcloud['night'].isin(
+                df_downtimes_tel['night'].to_list())
+            df_downtimes = pd.DataFrame(df_downtimes_telcloud[idx])
+
+        return mjd_min, df_downtimes
+
+    def get_SNRTime_one_lc_deprecated(self, index, mjds, grp, window=30.):
+
+        zref = 0.6
+        T0 = mjds[index]
+        mjd_max_time = T0
+        mjd_min_time = T0-window
+
+        if mjd_min_time < 0:
+            return pd.DataFrame()
+
+        # select data
+        season = 1
+        idx = grp['observationStartMJD'] <= mjd_max_time
+        idx &= grp['observationStartMJD'] >= mjd_min_time
+        data = pd.DataFrame(grp[idx])
+        data['season'] = season
+
+        r = [(zref, season, T0, self.min_rf_phase, self.max_rf_phase)]
+        gen_par = pd.DataFrame(
+            r, columns=['z', 'season', 'daymax', 'minRFphase', 'maxRFphase'])
+
+        # generate lc here
+        lc = self.step_lc(data, gen_par)
+
+        # estimate SNR per band for lc point with snr > 1.
+
+        idx = lc['snr_m5'] > 1.
+        lc = lc[idx]
+
+        dicout = {}
+        for b in np.unique(lc['band']):
+            io = lc['band'] == b
+            sel_lc = lc[io]
+            dicout['SNR_{}'.format(b.split(':')[-1])
+                   ] = [np.sqrt(np.sum(sel_lc['snr_m5']**2))]
+
+        sn = pd.DataFrame.from_dict(dicout)
+        sn['MJD_obs'] = T0
+
+        return sn
 
     def get_nsn(self, lc, dur_z, grp, mjd_max_time):
 
         if lc.empty:
             return pd.DataFrame()
+        # print('ooo', np.unique(lc['daymax']))
         sn_effis = self.step_efficiencies(lc)
+        print('effis', sn_effis)
+
         # estimate nsn
         sn = self.step_nsn(sn_effis, dur_z)
         print('sn', sn)
@@ -1300,6 +1594,8 @@ class SNSNRTIMEMetric(BaseMetric):
         idx = df['select'] == 1
 
         badSN = pd.DataFrame(df.loc[~idx])
+        # print('bad sn', len(badSN), self.n_phase_min,
+        #      self.n_phase_max, self.n_bef, self.n_aft)
         goodSN = pd.DataFrame()
         if len(df[idx]) > 0:
             goodSN = pd.DataFrame(df.loc[idx].reset_index())
