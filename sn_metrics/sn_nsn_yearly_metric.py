@@ -165,7 +165,7 @@ class SNNSNYMetric(BaseMetric):
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zstep = 0.03  # zstep
+        self.zstep = 0.01  # zstep
         # get redshift range for processing
         zrange = list(np.arange(self.zmin, self.zmax, self.zstep))
         if zrange[0] < 1.e-6:
@@ -182,9 +182,9 @@ class SNNSNYMetric(BaseMetric):
 
         # snrate
         self.rateSN = SN_Rate(H0=70., Om0=0.3,
-                         min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
+                              min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
         # snrate
-        #rateSN = SN_Rate(H0=70., Om0=0.3,
+        # rateSN = SN_Rate(H0=70., Om0=0.3,
         #                 min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
         """
         self.duration_ref = 110.
@@ -280,11 +280,11 @@ class SNNSNYMetric(BaseMetric):
 
         # get the season durations
         seasons, dur_z = self.season_length(self.season, dataSlice)
-        
+
         if not seasons or dur_z.empty:
             df = self.resError(self.status['season_length'])
             return df
-        
+
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
             lambda x: self.calcDaymax(x)).reset_index()
@@ -293,7 +293,7 @@ class SNNSNYMetric(BaseMetric):
             df = self.resError(self.status['simu_parameters'])
             return df
         # print(gen_par)
-    
+
         # select observations corresponding to seasons
         obs = pd.DataFrame(np.copy(dataSlice))
         obs = obs[obs['season'].isin(seasons)]
@@ -302,7 +302,6 @@ class SNNSNYMetric(BaseMetric):
         if self.stacker is not None:
             obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
 
-        
         # get infos on obs: cadence, max gap
         cad_gap = obs.groupby(['season']).apply(lambda x:
                                                 self.cadence_gap(x)).reset_index()
@@ -311,7 +310,7 @@ class SNNSNYMetric(BaseMetric):
         cad_gap = cad_gap.merge(
             obs_alloc, left_on=['season'], right_on=['season'])
         #print('cad gap', cad_gap)
-        
+
         metricValues = pd.DataFrame()
 
         # generate LC here
@@ -320,11 +319,11 @@ class SNNSNYMetric(BaseMetric):
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])
             return df
-        
+
         # get observing efficiencies and build sn for metric
         lc.index = lc.index.droplevel()
         # get infos on lc (cadence, gap)
-            
+
         cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
             lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
         cad_gap_lc = cad_gap_lc_all.groupby(
@@ -332,7 +331,7 @@ class SNNSNYMetric(BaseMetric):
         # print(cad_gap_lc)
         cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
             'season'], right_on=['season'])
-            
+
         # estimate efficiencies
         sn_effis = self.step_efficiencies(lc)
         # estimate nsn
@@ -349,7 +348,9 @@ class SNNSNYMetric(BaseMetric):
         metricValues = metricValues.merge(
             cad_gap, left_on=['season'], right_on=['season'])
 
-        #print('metricValues', metricValues[['season', 'zcomp', 'nsn','status']])
+        if self.verbose:
+            print('metricValues', metricValues[[
+                'season', 'zcomp', 'nsn', 'status']])
         return metricValues
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
@@ -519,10 +520,10 @@ class SNNSNYMetric(BaseMetric):
         # add season length here
         sn_effis = sn_effis.merge(
             dur_z, left_on=['season', 'z'], right_on=['season', 'z'])
-        
+
         # estimate the number of supernovae
         sn_effis['nsn'] = sn_effis['effi']*sn_effis['nsn_expected']
-        #sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
+        # sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
         #    sn_effis['z'].to_list())/(1.+(sn_effis['season_length_orig']/self.duration_ref)/sn_effis['season_length'])
         return sn_effis
 
@@ -618,8 +619,8 @@ class SNNSNYMetric(BaseMetric):
         #dur_z['season_length_orig'] = daymax-daymin
         #dur_z['season_length_orig'] = [daymax-daymin]*len(self.zrange)
         nsn = self.nsn_from_rate(dur_z)
-        dur_z = dur_z.merge(nsn,left_on=['z'],right_on=['z'])
-        
+        dur_z = dur_z.merge(nsn, left_on=['z'], right_on=['z'])
+
         idx = dur_z['season_length'] > min_duration
         sel = dur_z[idx]
         if len(sel) < 2:
@@ -979,10 +980,10 @@ class SNNSNYMetric(BaseMetric):
 
         return pd.DataFrame({'zcomp': [zcomp], 'nsn': [nsn]})
 
-    def nsn_from_rate(self,grp):
+    def nsn_from_rate(self, grp):
         """
         Method to estimate the expected number of supernovae
-        
+
         Parameters
         ---------------
         grp: pandas df
@@ -993,21 +994,21 @@ class SNNSNYMetric(BaseMetric):
         pandas df with z and nsn_expected as cols
 
         """
-        durinterp_z = interp1d(grp['z'],grp['season_length'],kind='linear',
-                                     bounds_error=False, fill_value=0)
+        durinterp_z = interp1d(grp['z'], grp['season_length'], kind='linear',
+                               bounds_error=False, fill_value=0)
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
-                                                  zmax=self.zmax,
-                                                  dz=self.zstep,
-                                                  duration_z=durinterp_z,
-                                                  #duration=self.duration_ref,
-                                                  survey_area=self.pixArea,
+                                                       zmax=self.zmax,
+                                                       dz=self.zstep,
+                                                       duration_z=durinterp_z,
+                                                       # duration=self.duration_ref,
+                                                       survey_area=self.pixArea,
                                                        account_for_edges=False)
-        
+
         nsn_expected = interp1d(zz, nsn, kind='linear',
-                                     bounds_error=False, fill_value=0)
+                                bounds_error=False, fill_value=0)
         nsn_res = nsn_expected(grp['z'])
 
-        return pd.DataFrame({'nsn_expected': nsn_res,'z': grp['z'].to_list()})
+        return pd.DataFrame({'nsn_expected': nsn_res, 'z': grp['z'].to_list()})
 
     def resError(self, istatus):
         """
@@ -1016,7 +1017,7 @@ class SNNSNYMetric(BaseMetric):
         Parameters
         --------------
         istatus: int
-         
+
         Returns
         ----------
         pandas df with sn_status
@@ -1026,8 +1027,9 @@ class SNNSNYMetric(BaseMetric):
         df = pd.DataFrame([self.healpixID], columns=['healpixID'])
         df['pixRA'] = self.pixRA
         df['pixDec'] = self.pixDec
-        
-        cols = ['season','zcomp', 'nsn', 'cadence', 'gap_max', 'frac_u', 'frac_g','frac_r', 'frac_i', 'frac_z', 'frac_y', 'cadence_sn', 'gap_max_sn']
+
+        cols = ['season', 'zcomp', 'nsn', 'cadence', 'gap_max', 'frac_u', 'frac_g',
+                'frac_r', 'frac_i', 'frac_z', 'frac_y', 'cadence_sn', 'gap_max_sn']
 
         for col in cols:
             df[col] = -1
