@@ -263,6 +263,7 @@ class SNSNRTIMEMetric(BaseMetric):
         idx = obs['night'] == night_min
         template_obs = obs[idx]
 
+        """
         # cadence_obs = 1
         import matplotlib.pyplot as plt
         res = pd.read_hdf('testrecovery.hdf5')
@@ -281,9 +282,9 @@ class SNSNRTIMEMetric(BaseMetric):
                     yerr=tt['SNR_z_rms'], marker='o', color='k', mfc=None)
         #plt.plot(res['MJD_obs'], res['SNR_z'], 'r*')
         plt.show()
-
+        """
         self.sequence(template_obs, int(cadence_obs),
-                      downtimes_tel=True, downtimes_telcloud=True, recovery=True)
+                      downtimes_tel=True, downtimes_telcloud=True, recovery=2)
         print(test)
 
         obs = pd.DataFrame(np.copy(dataSlice))
@@ -562,7 +563,6 @@ class SNSNRTIMEMetric(BaseMetric):
 
         season_length = 180
         nseasons = 20
-
         mjds = np.arange(mjd_min, mjd_min+nseasons*season_length, 1)
         df = pd.DataFrame(mjds, columns=['MJD'])
         df['night'] = (df['MJD']-mjd_min+1)
@@ -583,20 +583,44 @@ class SNSNRTIMEMetric(BaseMetric):
             idx = df_season['obs'] == 1
             seas_up = df_season[idx]
             seas_up = seas_up.sort_values(by=['night'])
+            diff_on = np.min(df_season['night'])-np.min(seas_up['night'])
+            if diff_on < -5:
+                continue
             diff = np.diff(seas_up['night'])-1
             diff = diff[diff > 0.].tolist()
             dictout = {}
             for ic in range(1, Nmax, 1):
                 dictout['gap_{}'.format(ic)] = [diff.count(ic)]
+                if ic >= 16 and diff.count(ic) > 0:
+                    print(mjd_min+seas_up['night']-1, diff)
+                    # print(test)
+                    """
+                    import matplotlib.pyplot as plt
+                    plt.plot(seas_up['MJD'], seas_up['night'] /
+                             seas_up['night'], 'r*')
+                    plt.show()
+                    """
             dictout['frac_down'] = [1.-len(seas_up)/len(df_season)]
             dictout['gap_median'] = [np.median(diff)]
             dictout['gap_min'] = [np.min(diff)]
             dictout['gap_max'] = [np.max(diff)]
+            dictout['MJD_min'] = [np.min(df_season['MJD'])]
             ddf = pd.DataFrame.from_dict(dictout)
             dd_tot = pd.concat((dd_tot, ddf))
 
-        for vv in dd_tot.columns:
+        nconfigs = len(dd_tot)
+        print(dd_tot)
+        for vv in ['frac_down', 'gap_median', 'gap_min', 'gap_max']:
             print(vv, np.mean(dd_tot[vv]), np.std(dd_tot[vv]))
+
+        for i in range(1, Nmax):
+            what = 'gap_{}'.format(i)
+            io = dd_tot[what] > 0
+            sel = dd_tot[io]
+            print(what, len(sel)/len(dd_tot),
+                  np.mean(sel[what]), np.std(sel[what]))
+            if i >= 14:
+                print(i, sel['MJD_min'])
 
         """
         import matplotlib.pyplot as plt
@@ -767,29 +791,36 @@ class SNSNRTIMEMetric(BaseMetric):
 
         return sn
 
-    def survey(self, template_obs, mjd_min=59853.98, season_length=180., cadence=3):
+    def survey(self, template_obs, mjd_min_survey=59853.98, mjd_min=59853.98, season_length=180., cadence=3):
 
         mjd_max = mjd_min+season_length
         mjds = np.arange(mjd_min, mjd_max+cadence, cadence)
 
         obs = pd.DataFrame()
-        for mjd in mjds:
-            night = int(mjd-np.min(mjds)+1)
+        night_min = int(np.min(mjds)-mjd_min_survey+1)
+        for ii, mjd in enumerate(mjds):
+            night = night_min+ii*cadence
             obs = self.add_obs(obs, night, mjd, template_obs)
 
         return obs
 
     def sequence(self, template_obs, cadence,
                  mjd_min=-1., season_length=180.,
-                 downtimes_tel=False, downtimes_telcloud=False, recovery=False, recovery_threshold=65.):
+                 downtimes_tel=False, downtimes_telcloud=False, recovery=0, recovery_threshold=65.):
 
         # get mjd_min from survey
         mjd_min, df_downtimes = self.load_downtimes(
             downtimes_tel, downtimes_telcloud)
 
+        # analysis downtime
+        mjd_min = 60700.983839
+        #self.gaps_downtimes(mjd_min, df_downtimes)
+
         # generate observations
         obs = self.survey(template_obs, mjd_min=mjd_min,
                           season_length=season_length, cadence=cadence)
+        # get the total number of expected epochs
+        night_expected = len(np.unique(obs['night']))
 
         # if there are downtimes: remove them from obs
         if not df_downtimes.empty:
@@ -798,9 +829,22 @@ class SNSNRTIMEMetric(BaseMetric):
             obs = obs[~idx]
             # print('night obs', obs['night'].unique())
         # get mjds for this survey
+        night_effective = len(np.unique(obs['night']))
+        # add observation to recover from gaps
 
-        mjds = np.arange(mjd_min, mjd_min+season_length+1, 1.)
+        deltaN = 0
+        if recovery == 1:
+            deltaN = night_expected-night_effective
+            mjd_max = np.max(obs['observationStartMJD'])
+            night_max = np.max(obs['night'])
+            for n in range(deltaN):
+                nnight = night_max+cadence*(n+1)
+                mmjd = mjd_max+cadence*(n+1)
+                obs = self.add_obs(obs, nnight, mmjd, template_obs)
 
+        mjds = np.arange(mjd_min, mjd_min+season_length+1+cadence*deltaN, 1.)
+
+        print('mjds', mjds, deltaN)
         # for each mjd: estimate SNR_band
 
         df_res = pd.DataFrame()
@@ -810,7 +854,7 @@ class SNSNRTIMEMetric(BaseMetric):
             # print(df_time)
             if not df_time.empty:
                 df_res = pd.concat((df_res, df_time))
-                if recovery and inight >= 3:
+                if recovery == 2 and inight >= 20:
                     io = df_downtimes['night'].isin([inight])
                     isdowntime = not df_downtimes[io].empty
                     """
@@ -833,18 +877,29 @@ class SNSNRTIMEMetric(BaseMetric):
         sn = self.simul_sn(obs)
         print('NSN', sn)
         """
+        iii = obs['filter'] == 'z'
+        print('number of obs', night_expected, len(np.unique(obs['night'])), np.median(
+            np.diff(obs[iii]['observationStartMJD'])))
         # display the results
         df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
+        np.save('obs_test.npy', obs.to_records(index=False))
         import matplotlib.pyplot as plt
         band = 'z'
         fig, ax = plt.subplots()
         tpl = 'SNR_{}'.format(band)
+        """
         N = 3
         x = np.convolve(df_res['MJD_obs'], np.ones(
             (N,))/N, mode='valid')[(N-1):]
         y = np.convolve(df_res[tpl], np.ones((N,))/N, mode='valid')[(N-1):]
         ax.plot(df_res['MJD_obs'], df_res[tpl], 'bo', mfc=None)
         ax.plot(x, y, 'k*')
+        """
+        from scipy.ndimage.filters import gaussian_filter
+        x = gaussian_filter(df_res['MJD_obs'], 3)
+        y = gaussian_filter(df_res[tpl], 3)
+        ax.plot(x, y, 'bo', mfc=None)
+
         # ax.plot(df_res['MJD_obs'], df_res[tpl], 'ko')
         axb = ax.twinx()
         idx = obs['filter'] == band
@@ -882,14 +937,15 @@ class SNSNRTIMEMetric(BaseMetric):
 
         mjd_min, df_downtimes_tel = self.load_downtimes_tel(downtimes_tel_here)
 
+        """
         if not df_downtimes_tel.empty:
             self.gaps_downtimes(mjd_min, df_downtimes_tel)
-
+        """
         df_downtimes_telcloud = pd.DataFrame()
         if downtimes_telcloud:
             df_downtimes_telcloud = pd.DataFrame(
                 np.load('baseline_nexp1_v1.7_10yrs_no_obs.npy'))
-            print('analyzing df_downtimes_telcloud')
+            #print('analyzing df_downtimes_telcloud')
             self.gaps_downtimes(mjd_min, df_downtimes_telcloud)
 
         df_downtimes = pd.DataFrame()
@@ -897,6 +953,8 @@ class SNSNRTIMEMetric(BaseMetric):
         if downtimes_tel and not downtimes_telcloud:
             df_downtimes = df_downtimes_tel.copy()
         if downtimes_tel and downtimes_telcloud:
+            #print('yes man')
+            # print(test)
             df_downtimes = df_downtimes_telcloud.copy()
         if not downtimes_tel and downtimes_telcloud:
             # need to subtract downtime from telescop to downtime from telcloud
