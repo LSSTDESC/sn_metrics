@@ -284,7 +284,7 @@ class SNSNRTIMEMetric(BaseMetric):
         plt.show()
         """
         self.sequence_autogen(template_obs, int(cadence_obs),
-                              downtimes_tel=True, downtimes_telcloud=True, recovery=0)
+                              downtimes_tel=False, downtimes_telcloud=False, recovery=0, recovery_threshold=61.)
         print(test)
 
         obs = pd.DataFrame(np.copy(dataSlice))
@@ -538,10 +538,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
     def load_downtimes_tel(self, downtimes):
 
-        # get mjdmin and down time from simulation
-        from lsst.sims.featureScheduler.modelObservatory import Model_observatory
-        import itertools
-        mo = Model_observatory()
+        mo = self.load_downtimes_tel_observatory()
         mjd_min = mo.mjd
         df_downtimes = pd.DataFrame()
         if downtimes:
@@ -558,6 +555,14 @@ class SNSNRTIMEMetric(BaseMetric):
             df_downtimes['MJD'] = mjd_min+df_downtimes['night']-1
 
         return mjd_min, df_downtimes
+
+    def load_downtimes_tel_observatory(self):
+        # get mjdmin and down time from simulation
+        from lsst.sims.featureScheduler.modelObservatory import Model_observatory
+        #import itertools
+        mo = Model_observatory()
+
+        return mo
 
     def gaps_downtimes(self, mjd_min, df_downtimes, plot=False):
 
@@ -942,14 +947,33 @@ class SNSNRTIMEMetric(BaseMetric):
         # get mjd_min from survey
         mjd_min, df_downtimes = self.load_downtimes(
             downtimes_tel, downtimes_telcloud)
+        # analysis downtimes here
+        #self.gaps_downtimes(mjd_min, df_downtimes, plot=True)
 
         mjd_min_survey = mjd_min
 
-        # analysis downtime
-        mjd_min = 60700.983839
-        # self.gaps_downtimes(mjd_min, df_downtimes)
+        mjd_min = 60325.983839
+
         mjd_max = mjd_min+season_length+1
         nnight_expected = int(season_length/cadence+1)
+
+        """
+        if recovery == 3:
+            # load downtimes corresponding to tel maintenance only
+            mo = self.load_downtimes_tel_observatory()
+            print(mo.downtimes)
+            gap_min, gap_max = 0., 0.
+            for vv in mo.downtimes:
+                if vv[0] >= mjd_min and vv[1] <= mjd_max:
+                    gap = vv[1]-vv[0]
+                    if gap >= 14.:
+                        gap_min = vv[0]
+                        gap_max = vv[1]
+                        break
+            Nobs = (gap_max-gap_min)/cadence
+            print('Nmeas', gap_max, gap_min, int(Nobs))
+            print(test)
+        """
 
         obs = pd.DataFrame()
 
@@ -971,20 +995,31 @@ class SNSNRTIMEMetric(BaseMetric):
                 df_time = self.get_SNRTime_one_lc_new(mjd, obs)
                 df_res = pd.concat((df_res, df_time))
             if obs.empty and not isdowntime:
+                # first mjd, first obs
                 obs = self.add_obs(obs, inight, mjd, template_obs)
 
             else:
                 ilast_night = np.max(obs['night'])
-                if recovery == 0:
-                    if inight-ilast_night >= cadence and not isdowntime:
-                        obs = self.add_obs(obs, inight, mjd, template_obs)
+                if recovery == 0 or recovery == 1 or recovery == 3:
+                    # check wether the number of obs is as expected
+                    Nobs = len(np.unique(obs['night']))
+                    Nexp = int((mjd-mjd_min)/cadence)+1
+                    diff_night = Nexp-Nobs
+                    print('dd', mjd, diff_night, Nexp, Nobs)
+                    if recovery == 3 and diff_night >= 1 and inight >= 10 and not isdowntime:
+                        obs = self.add_obs(
+                            obs, inight, mjd, template_obs)
+                    else:
+                        if inight-ilast_night >= cadence and not isdowntime:
+                            obs = self.add_obs(
+                                obs, inight, mjd, template_obs)
                 else:
                     if recovery == 2:
                         idx = np.abs(df_res['MJD_obs'] -
                                      df_res['MJD_obs'].max()) < 1.e-5
                         SNR_last = df_res.loc[idx, 'SNR_z'].to_list()[0]
                         print(SNR_last, nnight)
-                        if SNR_last <= 40. and not isdowntime and nnight >= 10:
+                        if SNR_last <= recovery_threshold and not isdowntime and nnight >= 10:
                             obs = self.add_obs(obs, inight, mjd, template_obs)
                         else:
                             if inight-ilast_night >= cadence and not isdowntime:
@@ -1010,30 +1045,34 @@ class SNSNRTIMEMetric(BaseMetric):
         # display the results
         df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
         np.save('obs_test.npy', obs.to_records(index=False))
+
+        self.plot_resu(df_res, obs)
+
+    def plot_resu(self, df_res, obs):
+
         import matplotlib.pyplot as plt
+        from scipy.ndimage.filters import gaussian_filter
+
         band = 'z'
         fig, ax = plt.subplots()
         tpl = 'SNR_{}'.format(band)
-        """
-        N = 3
-        x = np.convolve(df_res['MJD_obs'], np.ones(
-            (N,))/N, mode='valid')[(N-1):]
-        y = np.convolve(df_res[tpl], np.ones((N,))/N, mode='valid')[(N-1):]
-        ax.plot(df_res['MJD_obs'], df_res[tpl], 'bo', mfc=None)
-        ax.plot(x, y, 'k*')
-        """
-        from scipy.ndimage.filters import gaussian_filter
+
         x = gaussian_filter(df_res['MJD_obs'], 3)
         y = gaussian_filter(df_res[tpl], 3)
-        ax.plot(x, y, 'bo', mfc=None)
+        ax.plot(x, y, color='k', marker='.', mfc=None)
 
         # ax.plot(df_res['MJD_obs'], df_res[tpl], 'ko')
         axb = ax.twinx()
         idx = obs['filter'] == band
         sel_obs = obs[idx].to_records(index=False)
         axb.plot(sel_obs['observationStartMJD'],
-                 sel_obs['fiveSigmaDepth'], 'r*')
+                 sel_obs['fiveSigmaDepth'], 'ro', mfc='None')
         print('hello', np.mean(df_res[tpl]), np.std(df_res[tpl]))
+
+        ax.set_xlabel('MJD [day]')
+        ax.set_ylabel('$SNR_z$')
+        ax.grid()
+        axb.set_ylabel('$m_5^z$ [mag]')
         plt.show()
 
     def check_eos(self, obs, nnight_expected, mjd_max, cadence, inight, mjd, template_obs):
