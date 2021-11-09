@@ -284,7 +284,7 @@ class SNSNRTIMEMetric(BaseMetric):
         plt.show()
         """
         self.sequence_autogen(template_obs, int(cadence_obs),
-                              downtimes_tel=False, downtimes_telcloud=False, recovery=0, recovery_threshold=61.)
+                              downtimes_tel=True, downtimes_telcloud=True, recovery=2, recovery_threshold=61.)
         print(test)
 
         obs = pd.DataFrame(np.copy(dataSlice))
@@ -403,11 +403,12 @@ class SNSNRTIMEMetric(BaseMetric):
 
         return cad
 
-    def add_obs(self, obs, night, MJD, template_obs):
+    def add_obs(self, obs, night, MJD, template_obs, recovery=0):
 
         tt = template_obs.copy()
         tt.loc[:, self.nightCol] = night
         tt.loc[:, self.mjdCol] = MJD
+        tt.loc[:, 'recovery'] = recovery
 
         obs = pd.concat((obs, tt))
         obs = obs.sort_values(by=[self.mjdCol])
@@ -1008,7 +1009,7 @@ class SNSNRTIMEMetric(BaseMetric):
                     print('dd', mjd, diff_night, Nexp, Nobs)
                     if recovery == 3 and diff_night >= 1 and inight >= 10 and not isdowntime:
                         obs = self.add_obs(
-                            obs, inight, mjd, template_obs)
+                            obs, inight, mjd, template_obs, 1)
                     else:
                         if inight-ilast_night >= cadence and not isdowntime:
                             obs = self.add_obs(
@@ -1018,11 +1019,15 @@ class SNSNRTIMEMetric(BaseMetric):
                         idx = np.abs(df_res['MJD_obs'] -
                                      df_res['MJD_obs'].max()) < 1.e-5
                         SNR_last = df_res.loc[idx, 'SNR_z'].to_list()[0]
-                        print(SNR_last, nnight)
-                        if SNR_last <= recovery_threshold and not isdowntime and nnight >= 10:
-                            obs = self.add_obs(obs, inight, mjd, template_obs)
+                        #print(SNR_last, nnight)
+                        if SNR_last <= recovery_threshold and not isdowntime and nnight >= 12:
+                            obs = self.add_obs(
+                                obs, inight, mjd, template_obs, 1)
+                            print('recovery', SNR_last, mjd, inight, nnight)
                         else:
                             if inight-ilast_night >= cadence and not isdowntime:
+                                print('no recovery', SNR_last,
+                                      mjd, inight, nnight)
                                 obs = self.add_obs(
                                     obs, inight, mjd, template_obs)
             if np.abs(mjd-mjd_max) < 1.e-5:
@@ -1065,8 +1070,12 @@ class SNSNRTIMEMetric(BaseMetric):
         axb = ax.twinx()
         idx = obs['filter'] == band
         sel_obs = obs[idx].to_records(index=False)
-        axb.plot(sel_obs['observationStartMJD'],
-                 sel_obs['fiveSigmaDepth'], 'ro', mfc='None')
+        io = sel_obs['recovery'] == 0
+        axb.plot(sel_obs[io]['observationStartMJD'],
+                 sel_obs[io]['fiveSigmaDepth'], 'ro', mfc='None')
+        axb.plot(sel_obs[~io]['observationStartMJD'],
+                 sel_obs[~io]['fiveSigmaDepth'], 'b*', mfc='None')
+
         print('hello', np.mean(df_res[tpl]), np.std(df_res[tpl]))
 
         ax.set_xlabel('MJD [day]')
@@ -1088,7 +1097,7 @@ class SNSNRTIMEMetric(BaseMetric):
             mjd_max += delta_night*cadence
             for i in range(1, delta_night+1):
                 obs = self.add_obs(
-                    obs, inight+i*cadence, mjd+i*cadence, template_obs)
+                    obs, inight+i*cadence, mjd+i*cadence, template_obs, 1)
         return obs, mjd_max
 
     def plot_smooth(self, data):
