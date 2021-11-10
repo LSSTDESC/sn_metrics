@@ -639,9 +639,9 @@ class SNSNRTIMEMetric(BaseMetric):
         if plot:
             from sn_plotter_metrics import plt
             fig, ax = plt.subplots(figsize=(12, 9))
-            ax.plot(ro['gap'], ro['proba'], color='k')
+            ax.plot(ro['gap'], ro['proba'], color='k', lw=2)
             axb = ax.twinx()
-            axb.plot(ro['gap'], ro['mean_gap'], color='b', ls='dotted')
+            axb.plot(ro['gap'], ro['mean_gap'], color='b', ls='dashed', lw=2)
 
             ax.set_xlabel('gap [night]')
             ax.set_ylabel('Gap probability')
