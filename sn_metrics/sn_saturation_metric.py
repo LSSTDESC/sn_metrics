@@ -107,6 +107,14 @@ class SNSaturationMetric(BaseMetric):
      proxy level for the processing (default: 0)
      snr_min: float, opt
        minimal SNR of LC points (default: 5.0)
+    n_bef: int, opt
+      number of LC points LC before T0 (default:5)
+    n_aft: int, opt
+      number of LC points after T0 (default: 10)
+     n_phase_min: int, opt
+       number of LC points with phase<= -5(default:1)
+    n_phase_max: int, opt
+      number of LC points with phase>= 20 (default: 1)
     lightOutput: bool, opt
       output level of information (light or more) (default:True)
     fracpixel: numpyarray, opt
@@ -124,8 +132,7 @@ class SNSaturationMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=0.05,
-                 verbose=False, timer=False, plotmetric=False, snr_min=5.,
-                 lightOutput=False, ebvofMW=-1., fracpixel=None, fullwell=90000., saturationLevel=0.99,figs_for_movie=False,
+                 verbose=False, timer=False, plotmetric=False, snr_min=5., n_bef=4, n_aft=10, n_phase_min=1, n_phase_max=1, lightOutput=False, ebvofMW=-1., fracpixel=None, fullwell=90000., saturationLevel=0.99, figs_for_movie=False,
                  obsstat=False, **kwargs):
 
         self.mjdCol = mjdCol
@@ -145,7 +152,7 @@ class SNSaturationMetric(BaseMetric):
         self.fullwell = fullwell
         self.saturationLevel = saturationLevel
         self.figs_for_movie = figs_for_movie
-        
+        # self.figs_for_movie = True
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingCol]
 
@@ -163,6 +170,10 @@ class SNSaturationMetric(BaseMetric):
 
         # LC selection parameters
         self.snr_min = snr_min  # SNR cut for points before/after peak
+        self.n_bef = n_bef
+        self.n_aft = n_aft
+        self.n_phase_min = n_phase_min
+        self.n_phase_max = n_phase_max
 
         # print('selection', self.n_bef, self.n_aft,
         #      self.n_phase_min, self.n_phase_max)
@@ -185,8 +196,8 @@ class SNSaturationMetric(BaseMetric):
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
-        self.min_rf_phase_qual = -15.  # min ref phase for bounds effects
-        self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
+        self.min_rf_phase_qual = 0.  # min ref phase for bounds effects
+        self.max_rf_phase_qual = 0.  # max ref phase for bounds effects
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
@@ -246,7 +257,7 @@ class SNSaturationMetric(BaseMetric):
 
         if not healpixID:
             return pd.DataFrame()
-        
+
         pixRA = np.unique(dataSlice['pixRA'])[0]
         pixDec = np.unique(dataSlice['pixDec'])[0]
         healpixID = int(np.unique(dataSlice['healpixID'])[0])
@@ -255,23 +266,21 @@ class SNSaturationMetric(BaseMetric):
         self.pixRA = pixRA
         self.pixDec = pixDec
 
-
-        print('processing',healpixID)
+        print('processing', healpixID)
         # Get ebvofMW here
         ebvofMW = self.ebvofMW
         if ebvofMW < 0.:
             # in that case ebvofMW value is taken from a map
-           ebvofMW = self.get_ebv()
+            ebvofMW = self.get_ebv()
 
         if ebvofMW > 0.25:
             return pd.DataFrame()
-      
+
         if self.figs_for_movie:
             self.plot_live = Plot_Saturation_Metric(
                 self.healpixID, 0.02, self.snr_min,
                 self.mjdCol, self.m5Col, self.filterCol, self.fullwell, self.saturationLevel)
 
-       
         # get the seasons
         seasons = self.season
 
@@ -354,7 +363,7 @@ class SNSaturationMetric(BaseMetric):
         if self.verbose:
             print('finally - eop', time.time()-time_ref)
             toshow = ['pixRA', 'pixDec', 'healpixID', 'season', 'probasat', 'probasat_err',
-                      'deltaT_sat', 'deltaT_befsat', 'nbef_sat', 'effipeak', 'effipeak_err','effipeak_sat', 'effipeak_sat_err','fractwi','twiphase']
+                      'deltaT_sat', 'deltaT_befsat', 'nbef_sat', 'effipeak', 'effipeak_err', 'effipeak_sat', 'effipeak_sat_err', 'fractwi', 'twiphase']
             """
             if self.obsstat:
                 # toshow += ['N_filters_night']
@@ -383,7 +392,7 @@ class SNSaturationMetric(BaseMetric):
             config['data_dir'] = 'dustmaps'
             import dustmaps.sfd
             dustmaps.sfd.fetch()
-                # dustmaps('dustmaps')
+            # dustmaps('dustmaps')
         sfd = SFDQuery()
         ebvofMW = sfd(coords)
 
@@ -426,7 +435,7 @@ class SNSaturationMetric(BaseMetric):
             dataSlice[self.filterCol], np.array(['g', 'r', 'i']))
         dataSlice = dataSlice[goodfilters]
 
-        if len(dataSlice)<=5:
+        if len(dataSlice) <= 5:
             if self.verbose:
                 print('Obs sample too small')
             return pd.DataFrame()
@@ -505,8 +514,8 @@ class SNSaturationMetric(BaseMetric):
                 lc['visitExposureTime']/lc['numExposures']
 
             if self.figs_for_movie:
-                self.plot_live(obs, lc.to_records(index=False),seasons[0],
-                    T0_min, T0_max)
+                self.plot_live(obs, lc.to_records(index=False), seasons[0],
+                               T0_min, T0_max)
 
             res = lc.groupby(['daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
@@ -525,7 +534,7 @@ class SNSaturationMetric(BaseMetric):
             resb['healpixID'] = self.healpixID
             resb['pixRA'] = self.pixRA
             resb['pixDec'] = self.pixDec
-                
+
             if self.plotmetric:
                 self.plotSat(resb.to_records(index=False))
 
@@ -548,12 +557,15 @@ class SNSaturationMetric(BaseMetric):
         dictout['effipeak'] = [npeak/nevts]
         dictout['effipeak_sat'] = [npeak_sat/nsat]
         dictout['effipeak_err'] = [np.sqrt(npeak*(1.-npeak/nevts)/nevts)]
-        dictout['effipeak_sat_err'] = [np.sqrt(npeak_sat*(1.-npeak_sat/nsat)/nsat)]
-        
-        for vv in ['deltaT_sat', 'deltaT_befsat', 'nbef_sat','fractwi','twiphase']:
+        dictout['effipeak_sat_err'] = [
+            np.sqrt(npeak_sat*(1.-npeak_sat/nsat)/nsat)]
+
+        for vv in ['deltaT_sat', 'deltaT_befsat', 'nbef_sat', 'fractwi', 'twiphase']:
             io = grp[vv] < 500.
             dictout[vv] = [np.nanmedian(grp[io][vv])]
+
         dictout['fractwi'] = [np.mean(grp['fractwi'])]
+
         return pd.DataFrame.from_dict(dictout)
 
     def plotExptime(self, data):
@@ -596,9 +608,28 @@ class SNSaturationMetric(BaseMetric):
         # select LC points with SNR>=SNRmin
 
         T0 = grp.name[0]
+        # select lc points with minimal SNR
         idx = grp['snr_m5'] >= self.snr_min
         sel = grp[idx]
 
+        # get some general infos on LC
+        ida = sel['phase'] <= 0
+        n_phase_neg = len(sel[ida])
+        n_phase_pos = len(sel[ida])
+        idb = sel['phase'] <= -10
+        n_phase_m10 = len(sel[idb])
+        idb = sel['phase'] >= 20
+        n_phase_p20 = len(sel[idb])
+
+        # check whether this sn pass the selection criteria
+        isel_lc = True
+        isel_lc &= n_phase_neg >= self.n_bef
+        isel_lc &= n_phase_pos >= self.n_aft
+        isel_lc &= n_phase_m10 >= self.n_phase_min
+        isel_lc &= n_phase_p20 >= self.n_phase_max
+
+        if isel_lc == 0:
+            return pd.DataFrame()
         # sort by mjd
         sel = sel.sort_values(by=['time'])
 
@@ -617,16 +648,19 @@ class SNSaturationMetric(BaseMetric):
         if np_near_max >= 3:
             ipeak = 1
 
-        selsat = sel.groupby(['night']).apply(lambda x: pd.DataFrame({'sat': [np.sum(x['sat'])/len(x)],
-                                                                      'time': [np.median(x['time'])],'twivisits': [len(x[x[self.exptimeCol]< 14.])],
-                                                                      'twiphase': [np.median(x[x[self.exptimeCol]< 14.]['phase'])]})).reset_index()
+        # selsat = sel.groupby(['night']).apply(lambda x: pd.DataFrame({'sat': [np.sum(x['sat'])/len(x)],
+        #                                                              'time': [np.median(x['time'])], 'twivisits': [len(x[x[self.exptimeCol] < 14.])],
+        #                                                              'twiphase': [np.median(x[x[self.exptimeCol] < 14.]['phase'])]})).reset_index()
+
+        selsat = sel.groupby(['night']).apply(
+            lambda x: self.satinfo(x)).reset_index()
 
         frac_twi = 0
         twiphase = np.median(selsat['twiphase'])
         idt = selsat['twivisits'] > 0
-        if len(selsat[idt])>0:
+        if len(selsat[idt]) > 0:
             frac_twi = len(selsat[idt])/len(selsat)
-                                                   
+
         isat = 0
         ipeak_sat = 0
         nbef_sat = 999
@@ -652,7 +686,24 @@ class SNSaturationMetric(BaseMetric):
                              'ipeak': [ipeak],
                              'ipeak_sat': [ipeak_sat],
                              'fractwi': [frac_twi],
-                             'twiphase': [twiphase]})
+                             'twiphase': [twiphase],
+                             'isel': [isel_lc]})
+
+    def satinfo(self, x):
+
+        sat = np.sum(x['sat'])/len(x)
+        ttime = np.median(x['time'])
+        twivisits = 0
+        twiphase = -100.
+        idx = x[self.exptimeCol] < 14.
+        if len(x[idx]) > 0:
+            twivisits = len(x[idx])
+            twiphase = np.median(x[idx]['phase'])
+
+        return pd.DataFrame({'sat': [sat],
+                             'time': [ttime],
+                             'twivisits': [twivisits],
+                             'twiphase': [twiphase]}).reset_index()
 
     def plotSat(self, tab):
         """
@@ -664,6 +715,9 @@ class SNSaturationMetric(BaseMetric):
           data to plot
 
         """
+        if len(tab) == 0:
+            return
+
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(nrows=5, figsize=(8, 12))
         plt.subplots_adjust(hspace=0)
@@ -861,7 +915,7 @@ class SNSaturationMetric(BaseMetric):
         - N_xx:  number of visits in xx where xx is defined in self.bandstat
 
         """
-        
+
         df = pd.DataFrame([len(grp)], columns=['Nvisits'])
         df['MJD_min'] = grp[self.mjdCol].min()
         df['MJD_max'] = grp[self.mjdCol].max()
