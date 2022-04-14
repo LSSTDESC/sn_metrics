@@ -19,6 +19,10 @@ from scipy.interpolate import RegularGridInterpolator
 from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
+import sncosmo
+from astropy import (cosmology, units as u, constants as const)
+from sn_fitter.fit_sn_cosmo import Fit_LC
+from sn_fit.sn_utils import Selection
 
 filtercolors = dict(zip('ugrizy', ['b', 'c', 'g', 'y', 'r', 'm']))
 
@@ -132,8 +136,7 @@ class SNSaturationMetric(BaseMetric):
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
                  vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=0.05,
-                 verbose=False, timer=False, plotmetric=False, snr_min=5., n_bef=4, n_aft=10, n_phase_min=1, n_phase_max=1, lightOutput=False, ebvofMW=-1., fracpixel=None, fullwell=90000., saturationLevel=0.99, figs_for_movie=False,
-                 obsstat=False, **kwargs):
+                 verbose=False, timer=False, plotmetric=False, snr_min=5., nbef=4, naft=10, n_phase_min=1, n_phase_max=1, lightOutput=False, ebvofMW=-1., fracpixel=None, fullwell=90000., saturationLevel=0.99, figs_for_movie=False, model='salt2-extended', version=1.0, telescope=None, display=False, bands='gr', obsstat=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -152,6 +155,7 @@ class SNSaturationMetric(BaseMetric):
         self.fullwell = fullwell
         self.saturationLevel = saturationLevel
         self.figs_for_movie = figs_for_movie
+        self.bands = bands
         # self.figs_for_movie = True
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.seeingCol]
@@ -170,8 +174,8 @@ class SNSaturationMetric(BaseMetric):
 
         # LC selection parameters
         self.snr_min = snr_min  # SNR cut for points before/after peak
-        self.n_bef = n_bef
-        self.n_aft = n_aft
+        self.n_bef = nbef
+        self.n_aft = naft
         self.n_phase_min = n_phase_min
         self.n_phase_max = n_phase_max
 
@@ -192,12 +196,12 @@ class SNSaturationMetric(BaseMetric):
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
         self.zStep = 0.005  # zstep
-        self.daymaxStep = 3.  # daymax step
+        self.daymaxStep = 2.  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
-        self.min_rf_phase_qual = 0.  # min ref phase for bounds effects
-        self.max_rf_phase_qual = 0.  # max ref phase for bounds effects
+        self.min_rf_phase_qual = -15.  # min ref phase for bounds effects
+        self.max_rf_phase_qual = 30.  # max ref phase for bounds effects
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
@@ -226,6 +230,11 @@ class SNSaturationMetric(BaseMetric):
         if fracpixel is not None:
             self.pixel_max = interp1d(
                 fracpixel['seeing'], fracpixel['pixel_frac_med'], fill_value=0.0, bounds_error=False)
+
+        self.selection = Selection(snr_min, nbef, naft, -1, phase_min=-5,
+                                   phase_max=20, nphase_min=n_phase_min, nphase_max=n_phase_max)
+        self.fit_lc = Fit_LC(model='salt2-extended', version=1.0, telescope=telescope, display=False, bands=bands, snrmin=snr_min, nbef=0,
+                             naft=0, nbands=-1, phasemin=-5, phasemax=20, nphasemin=0, nphasemax=0, errmodrel=-1., include_errmodel_in_lcerror=False)
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -372,6 +381,7 @@ class SNSaturationMetric(BaseMetric):
             """
             print(vara_totdf[toshow])
 
+        print('finally', type(vara_totdf), vara_totdf.dtypes)
         return vara_totdf
 
     def get_ebv(self):
@@ -432,7 +442,7 @@ class SNSaturationMetric(BaseMetric):
         dataSlice = dataSlice[goodseasons]
 
         goodfilters = np.in1d(
-            dataSlice[self.filterCol], np.array(['g', 'r', 'i']))
+            dataSlice[self.filterCol], np.array([b for b in self.bands]))
         dataSlice = dataSlice[goodfilters]
 
         if len(dataSlice) <= 5:
@@ -509,27 +519,46 @@ class SNSaturationMetric(BaseMetric):
                 index=False), verbose=self.verbose, timer=self.timer)
             # print('lc', np.unique(lc[self.exptimeCol]), gen_p)
             # estimate the total flux here
-            lc['flux_e'] = lc['flux_e_sec'] * \
+            lc['flux_e_max_pixel'] = lc['flux_e_sec'] * \
                 self.pixel_max(lc[self.seeingCol]) * \
                 lc['visitExposureTime']/lc['numExposures']
+            lc['flux_e'] = lc['flux_e_sec']*lc['visitExposureTime']
+            # add Poison noise (we may not be background dominated)
+            lc['sigma_noise'] = lc['flux_e']/lc['snr_m5']
+            lc['sigma_poisson'] = np.sqrt(lc['flux_e'])
+            lc['sigma_all'] = lc['sigma_noise']**2+lc['sigma_poisson']**2
+            lc['snr_all'] = lc['flux_e']/np.sqrt(lc['sigma_all'])
+            lc['fluxerr'] = lc['flux']/lc['snr_all']
+            # tag saturated points
+            lc['sat'] = 0
+            idx = lc['flux_e_max_pixel'] >= self.fullwell
+            lc.loc[idx, 'sat'] = 1
 
             if self.figs_for_movie:
                 self.plot_live(obs, lc.to_records(index=False), seasons[0],
                                T0_min, T0_max)
 
+            lc = lc.round({'daymax': 3, 'z': 3})
             res = lc.groupby(['daymax', 'z']).apply(
                 lambda x: self.calcLC(x)).reset_index()
-            """
-            print(res[['z', 'sat', 'ipeak', 'daymax','fractwi','twiphase']],seasons)
-            for ii, row in res.iterrows():
-                print(row[['z', 'sat', 'ipeak', 'daymax','fractwi','twiphase']])
-            """
+
+            res['season'] = seasons[0]
+            res['healpixID'] = self.healpixID
+            res['pixRA'] = self.pixRA
+            res['pixDec'] = self.pixDec
+
+            r = []
+            cols = res.columns
+            for vv in cols:
+                if 'mask' in vv:
+                    r.append(vv)
+            res = res.drop(columns=r)
+
+            return res
+
             resb = res.groupby(['z']).apply(
                 lambda x: self.proba(x)).reset_index()
-            """
-            print(
-                resb[['z', 'probasat', 'probasat_err', 'effipeak', 'effipeak_err','effipeak_sat', 'effipeak_sat_err','twiphase','fractwi']])
-            """
+
             resb['season'] = seasons[0]
             resb['healpixID'] = self.healpixID
             resb['pixRA'] = self.pixRA
@@ -607,50 +636,124 @@ class SNSaturationMetric(BaseMetric):
 
         # select LC points with SNR>=SNRmin
 
+        SNID = 'SN_{}'.format(self.healpixID)
+
         T0 = grp.name[0]
         # select lc points with minimal SNR
-        idx = grp['snr_m5'] >= self.snr_min
+        idx = grp['flux']/grp['fluxerr'] >= self.snr_min
         sel = grp[idx]
+        # get lc info
+        infos = self.lc_info(sel, T0)
+        infos['SNID'] = SNID
+        lcsel = Table.from_pandas(sel)
+        for vv in ['z', 'daymax']:
+            lcsel.meta[vv] = np.unique(lcsel[vv])[0]
+        lcsel.meta['ebvofMW'] = 0.0
+        lcsel.meta['status'] = 1
+        """
+        lcsel.meta['sn_type'] = 'SN_Ia'
+        lcsel.meta['x0'] = -1
+        lcsel.meta['x1'] = 0.0
+        lcsel.meta['color'] = 0.0
+        """
+        lcsel = self.selection.select(lcsel)
+        res = pd.DataFrame()
 
-        # get some general infos on LC
-        ida = sel['phase'] <= 0
-        n_phase_neg = len(sel[ida])
-        n_phase_pos = len(sel[ida])
-        idb = sel['phase'] <= -10
-        n_phase_m10 = len(sel[idb])
-        idb = sel['phase'] >= 20
-        n_phase_p20 = len(sel[idb])
+        col_rm = ['daymax', 'z']
+        if lcsel is None:
+            infos['isel'] = 0
+            fita = self.dummy_fit()
+            ra = pd.concat([fita.to_pandas(), infos], axis=1)
+            ra = ra.drop(columns=col_rm)
+            return ra
+        else:
+            infos['isel'] = 1
+            fita, fitb = self.fit_it(sel)
+            ra = pd.concat([fita.to_pandas(), infos], axis=1)
+            rb = pd.concat([fitb.to_pandas(), infos], axis=1)
+            res = pd.concat([ra, rb])
+            res = res.drop(columns=col_rm)
 
-        # check whether this sn pass the selection criteria
-        isel_lc = True
-        isel_lc &= n_phase_neg >= self.n_bef
-        isel_lc &= n_phase_pos >= self.n_aft
-        isel_lc &= n_phase_m10 >= self.n_phase_min
-        isel_lc &= n_phase_p20 >= self.n_phase_max
+        return res
 
-        if isel_lc == 0:
-            return pd.DataFrame()
+    def fit_it(self, sel):
+        """
+        Method to fit lc with and without saturated points
+
+        Parameters
+        --------------
+        sel: pandas df
+           data (lc points) to fit
+
+        Returns
+        ----------
+        fita, fitb: astropy tables
+          fitted values
+
+        """
+        lcf = Table.from_pandas(sel)
+        for vv in ['z', 'daymax']:
+            lcf.meta[vv] = np.unique(lcf[vv])[0]
+        lcf.meta['ebvofMW'] = 0.0
+        lcf.meta['status'] = 1
+        lcf.meta['sn_type'] = 'SN_Ia'
+        lcf.meta['x0'] = -1
+        lcf.meta['x1'] = 0.0
+        lcf.meta['color'] = 0.0
+        fita = self.fit_lc(lcf)
+        fitb = self.fit_lc(lcf[lcf['sat'] == 0])
+
+        fita['data'] = 'all'
+        fitb['data'] = 'nosat'
+
+        return fita, fitb
+
+    def dummy_fit(self):
+
+        dd = [('z', '<f8'), ('daymax', '<f8'), ('ebvofMW', '<f8'), ('status', '<i8'), ('z_fit', '<f8'),
+              ('Cov_zz', '<f8'), ('Cov_zt0', '<f8'), ('Cov_zx0', '<f8'), ('Cov_zx1', '<f8'), ('Cov_zcolor', '<f8'), ('Cov_t0t0', '<f8'), ('Cov_t0x0', '<f8'), ('Cov_t0x1', '<f8'), (
+            'Cov_t0color', '<f8'), ('Cov_x0x0', '<f8'), ('Cov_x0x1', '<f8'), ('Cov_x0color', '<f8'), ('Cov_x1x1', '<f8'), ('Cov_x1color', '<f8'), ('Cov_colorcolor', '<f8'),
+            ('t0_fit', '<f8'), ('x0_fit', '<f8'), ('x1_fit', '<f8'), ('color_fit', '<f8'), ('hostebv_fit', '<f8'), ('hostr_v_fit', '<f8'), ('mwebv_fit', '<f8'), ('mwr_v_fit', '<f8'), ('mbfit', '<f8'), ('fitstatus', '<U5'), ('chisq', '<f8'), ('ndof', '<i8'), ('data', '<U3'), ('x0', '<f8'), ('x1', '<f8'), ('color', '<f8'), ('sn_type', '<U5')]
+
+        dd = [('daymax', '<f8'), ('z', '<f8'), ('level_2', '<i8'), ('ebvofMW', '<f8'), ('status', '<i8'), ('sn_type', '<U5'), ('x0', '<i8'), ('x1', '<f8'), ('color', '<f8'), ('z_fit', '<f8'), ('Cov_t0t0', '<f8'), ('Cov_t0x0', '<f8'), ('Cov_t0x1', '<f8'), ('Cov_t0color', '<f8'), ('Cov_x0x0', '<f8'), ('Cov_x0x1', '<f8'), ('Cov_x0color', '<f8'), ('Cov_x1x1', '<f8'), ('Cov_x1color', '<f8'), ('Cov_colorcolor', '<f8'), ('t0_fit', '<f8'), ('x0_fit', '<f8'), ('x1_fit', '<f8'), ('color_fit', '<f8'), ('mbfit', '<f8'), ('fitstatus', '<U6'), ('chisq', '<f8'),
+              ('ndof', '<i8'), ('data', '<U5'), ('sat', '<i8'), ('nbef_sat', '<i8'), ('deltaT_sat', '<f8'), ('deltaT_befsat', '<f8'), ('ipeak', '<i8'), ('ipeak_sat', '<i8'), ('fractwi', '<i8'), ('twiphase', '<f8'), ('satphase', '<f8'), ('nlcsat', '<i8'), ('SNID', '<U8'), ('isel', '<i8'), ('Cov_zz', '<f8'), ('Cov_zt0', '<f8'), ('Cov_zx0', '<f8'), ('Cov_zx1', '<f8'), ('Cov_zcolor', '<f8'), ('hostebv_fit', '<f8'), ('hostr_v_fit', '<f8'), ('mwebv_fit', '<f8'), ('mwr_v_fit', '<f8'), ('season', '<i8'), ('healpixID', '<i8'), ('pixRA', '<f8'), ('pixDec', '<f8')]
+        pp = Table()
+
+        for d in dd:
+            ref_data = -99.0
+            if 'i8' in d[1]:
+                ref_data = 999
+            if 'U3' in d[1]:
+                ref_data = 'noo'
+            if 'U5' in d[1]:
+                ref_data = 'nodat'
+            if 'U8' in d[1]:
+                ref_data = 'SN_00000'
+            c = Column([ref_data], name=d[0])
+            pp.add_column(c)
+
+        return pp
+
+    def lc_info(self, sel, T0):
         # sort by mjd
         sel = sel.sort_values(by=['time'])
 
         # get mjdmin
         mjd_min = np.min(sel['time'])
 
-        # get saturated points (if any)
-        sel['sat'] = 0
-        idx = sel['flux_e'] >= self.fullwell
-        sel.loc[idx, 'sat'] = 1
-
         ipeak = 0
+        satphase = -100.
+        nlcsat = 0
+
+        io = sel['sat'] == 1
+        if len(sel[io]) > 0:
+            satphase = np.median(sel[io]['phase'])
+            nlcsat = len(sel[io])
         lcnosat = sel[sel['sat'] == 0]
         idxt = np.abs(lcnosat['time']-T0) <= 5.
         np_near_max = len(lcnosat[idxt])
         if np_near_max >= 3:
             ipeak = 1
-
-        # selsat = sel.groupby(['night']).apply(lambda x: pd.DataFrame({'sat': [np.sum(x['sat'])/len(x)],
-        #                                                              'time': [np.median(x['time'])], 'twivisits': [len(x[x[self.exptimeCol] < 14.])],
-        #                                                              'twiphase': [np.median(x[x[self.exptimeCol] < 14.]['phase'])]})).reset_index()
 
         selsat = sel.groupby(['night']).apply(
             lambda x: self.satinfo(x)).reset_index()
@@ -687,7 +790,8 @@ class SNSaturationMetric(BaseMetric):
                              'ipeak_sat': [ipeak_sat],
                              'fractwi': [frac_twi],
                              'twiphase': [twiphase],
-                             'isel': [isel_lc]})
+                             'satphase': [satphase],
+                             'nlcsat': [nlcsat]})
 
     def satinfo(self, x):
 
@@ -704,6 +808,12 @@ class SNSaturationMetric(BaseMetric):
                              'time': [ttime],
                              'twivisits': [twivisits],
                              'twiphase': [twiphase]}).reset_index()
+
+    def plotLC(self, lcf, fitted_model, errors):
+
+        import matplotlib.pyplot as plt
+        sncosmo.plot_lc(lcf, model=fitted_model, errors=errors)
+        plt.show()
 
     def plotSat(self, tab):
         """
@@ -975,8 +1085,8 @@ class SNSaturationMetric(BaseMetric):
 
         return df
 
-    @verbose_this('Simulation SN')
-    @time_this('Simulation SN')
+    @ verbose_this('Simulation SN')
+    @ time_this('Simulation SN')
     def gen_LC(self, obs, ebvofMW, gen_par, **kwargs):
         """
         Method to simulate LC and supernovae
