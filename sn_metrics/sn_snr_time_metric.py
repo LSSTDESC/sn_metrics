@@ -252,12 +252,12 @@ class SNSNRTIMEMetric(BaseMetric):
         ----------
 
         """
-
+        print('there man', dataSlice)
         # get the cadence of observation
         cadence_obs = self.cadence(dataSlice)
 
         # get a template for obs (Nvisits, m5, ...)
-        obs = pd.DataFrame(dataSlice)
+        obs = pd.DataFrame(np.copy(dataSlice))
         nights = obs['night'].unique()
         night_min = nights.min()
         idx = obs['night'] == night_min
@@ -283,6 +283,7 @@ class SNSNRTIMEMetric(BaseMetric):
         # plt.plot(res['MJD_obs'], res['SNR_z'], 'r*')
         plt.show()
         """
+        print('there man')
         self.sequence_autogen(template_obs, int(cadence_obs),
                               downtimes_tel=True, downtimes_telcloud=True, recovery=2, recovery_threshold=61.)
         print(test)
@@ -565,7 +566,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
         return mo
 
-    def gaps_downtimes(self, mjd_min, df_downtimes, plot=False):
+    def gaps_downtimes(self, mjd_min, df_downtimes, plot=True):
 
         season_length = 180
         nseasons = 20
@@ -574,7 +575,7 @@ class SNSNRTIMEMetric(BaseMetric):
         df['night'] = (df['MJD']-mjd_min+1)
         df['night'] = df['night'].astype(int)
         df['obs'] = 0
-
+        thecol = 'b'
         df['obs'] = ~df['night'].isin(df_downtimes['night'].to_list())
 
         r = []
@@ -638,18 +639,21 @@ class SNSNRTIMEMetric(BaseMetric):
         print(ro)
         if plot:
             from sn_plotter_metrics import plt
-            fig, ax = plt.subplots(figsize=(12, 9))
-            ax.plot(ro['gap'], ro['proba'], color='k', lw=2)
+            fig, ax = plt.subplots(figsize=(9, 8))
+            ax.plot(ro['gap'], ro['proba'], color='k', lw=3)
             axb = ax.twinx()
-            axb.plot(ro['gap'], ro['mean_gap'], color='b', ls='dashed', lw=2)
+            axb.plot(ro['gap'], ro['mean_gap'],
+                     color=thecol, ls='dashed', lw=3)
 
             ax.set_xlabel('gap [night]')
-            ax.set_ylabel('Gap probability')
-            axb.set_ylabel('<N$_{gap}$>')
+            ax.set_ylabel('gap probability')
+            axb.set_ylabel('<N$_{gap}$>', color=thecol)
             ax.grid()
             ax.set_xlim([1, 17])
             ax.set_ylim([0., 1.])
             axb.set_ylim([0., None])
+            axb.tick_params(axis='y', colors=thecol)
+            axb.spines['right'].set_color(thecol)
             plt.show()
 
         """
@@ -845,7 +849,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
         # analysis downtime
         mjd_min = 60700.983839
-        # self.gaps_downtimes(mjd_min, df_downtimes)
+        self.gaps_downtimes(mjd_min, df_downtimes)
 
         # generate observations
         obs = self.survey(template_obs, mjd_min=mjd_min,
@@ -949,7 +953,7 @@ class SNSNRTIMEMetric(BaseMetric):
         mjd_min, df_downtimes = self.load_downtimes(
             downtimes_tel, downtimes_telcloud)
         # analysis downtimes here
-        #self.gaps_downtimes(mjd_min, df_downtimes, plot=True)
+        self.gaps_downtimes(mjd_min, df_downtimes, plot=True)
 
         mjd_min_survey = mjd_min
 
