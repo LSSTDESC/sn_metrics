@@ -315,7 +315,7 @@ class SNNSNMetric(BaseMetric):
             idx = dataSlice['season'] == seas
             print(seas, len(dataSlice[idx]))
         """
-        dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
+        #dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
         # time 0 for performance estimation purpose
         time_ref = time.time()
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
