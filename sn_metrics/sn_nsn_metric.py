@@ -322,7 +322,17 @@ class SNNSNMetric(BaseMetric):
         dataSlice = dataSlice[goodFilters]
 
         healpixID = np.unique(dataSlice['healpixID'])
+
+        if self.verbose:
+            print('Observations')
+            print(dataSlice[[self.mjdCol, self.exptimeCol,
+                  self.filterCol, self.nightCol]])
         dataSlice = self.stacker._run(dataSlice)
+
+        if self.verbose:
+            print('Observations - after coadd')
+            print(dataSlice[[self.mjdCol, self.exptimeCol,
+                  self.filterCol, self.nightCol]])
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
