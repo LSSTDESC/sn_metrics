@@ -326,13 +326,13 @@ class SNNSNMetric(BaseMetric):
         if self.verbose:
             print('Observations')
             print(dataSlice[[self.mjdCol, self.exptimeCol,
-                  self.filterCol, self.nightCol]])
+                  self.filterCol, self.nightCol, self.nexpCol]])
         dataSlice = self.stacker._run(dataSlice)
 
         if self.verbose:
             print('Observations - after coadd')
             print(dataSlice[[self.mjdCol, self.exptimeCol,
-                  self.filterCol, self.nightCol]])
+                             self.filterCol, self.nightCol, self.nexpCol]])
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
