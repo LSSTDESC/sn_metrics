@@ -636,6 +636,14 @@ class SNNSNMetric(BaseMetric):
 
                 print('sn and lc', len(sn),
                       sel[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor', 'n_bef', 'n_aft']])
+                lc['test'] = lc[self.exptimeCol]/lc[self.nexpCol]
+                print(lc[['snr_m5', 'ratio', 'z', 'flux_5',
+                          'flux_5_back', 'mag', 'band', 'test', self.nexpCol, 'm5', 'gamma']])
+                iio = lc['ratio'] > 1
+                pp = lc[iio]
+                for ih, row in pp.iterrows():
+                    print(row['snr_m5'], row['ratio'], row['z'], row['flux_5'],
+                          row['flux_5_back'], row['mag'], row['band'], row['test'], row[self.nexpCol], row['gamma'], row['phase'])
 
             if self.outputType == 'lc' or self.outputType == 'sn':
                 return sn, lc
