@@ -100,8 +100,8 @@ class SNNSNYMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2,
-                 pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
+                 vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=1.2, zStep=0.03,
+                 daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
@@ -117,6 +117,7 @@ class SNNSNYMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.seeingCol = seeingCol
         self.pixArea = pixArea
         self.ploteffi = ploteffi
         self.x1_color_dist = x1_color_dist
@@ -132,8 +133,14 @@ class SNNSNYMetric(BaseMetric):
         self.stacker = None
         if coadd:
             cols += ['coadd']
-            self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
-                                        filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
+            self.stacker = CoaddStacker(col_sum=[self.nexpCol, self.vistimeCol, 'visitExposureTime'],
+                                        col_mean=[self.mjdCol, self.RACol, self.DecCol,
+                                                  self.m5Col, 'pixRA', 'pixDec', 'healpixID', 'season'],
+                                        col_median=['airmass',
+                                                    'sky', 'moonPhase'],
+                                        col_group=[
+                                            self.filterCol, self.nightCol],
+                                        col_coadd=[self.m5Col, 'visitExposureTime'])
         super(SNNSNYMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -159,13 +166,12 @@ class SNNSNYMetric(BaseMetric):
             self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
-                                      self.m5Col, self.seasonCol, self.nexpCol,
+                                      self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
                                       self.snr_min, lightOutput=lightOutput)
-
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
-        self.zstep = 0.01  # zstep
+        self.zstep = zStep  # zstep
         # get redshift range for processing
         zrange = list(np.arange(self.zmin, self.zmax, self.zstep))
         if zrange[0] < 1.e-6:
@@ -173,7 +179,7 @@ class SNNSNYMetric(BaseMetric):
 
         self.zrange = np.unique(zrange)
 
-        self.daymaxStep = 2.  # daymax step
+        self.daymaxStep = daymaxStep  # daymax step
         self.min_rf_phase = -20.  # min ref phase for LC points selection
         self.max_rf_phase = 60.  # max ref phase for LC points selection
 
@@ -183,18 +189,7 @@ class SNNSNYMetric(BaseMetric):
         # snrate
         self.rateSN = SN_Rate(H0=70., Om0=0.3,
                               min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
-        # snrate
-        # rateSN = SN_Rate(H0=70., Om0=0.3,
-        #                 min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
-        """
-        self.duration_ref = 110.
-        grp = pd.DataFrame([1800],columns=['MJD_min'])
-        grp['MJD_max'] = grp['MJD_min']+self.duration_ref
-        dur_z = self.duration_z(grp)
-        nsn = self.nsn_from_rate(dur_z)
-        self.nsn_expected = interp1d(self.zrange, nsn['nsn_expected'], kind='linear',
-                                     bounds_error=False, fill_value=0)
-        """
+
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
         self.timer = timer
@@ -278,6 +273,16 @@ class SNNSNYMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
+        # coaddition per night and per band (if requested by the user)
+        if self.stacker is not None:
+            #obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
+            dataSlice = self.stacker._run(dataSlice)
+
+        dataSlice.sort(order=self.mjdCol)
+        if self.verbose:
+            print('Observations')
+            print(dataSlice[[self.mjdCol, self.exptimeCol,
+                  self.filterCol, self.nightCol, self.nexpCol]])
         # get the season durations
         seasons, dur_z = self.season_length(self.season, dataSlice)
 
@@ -292,15 +297,10 @@ class SNNSNYMetric(BaseMetric):
         if gen_par.empty:
             df = self.resError(self.status['simu_parameters'])
             return df
-        # print(gen_par)
 
         # select observations corresponding to seasons
         obs = pd.DataFrame(np.copy(dataSlice))
         obs = obs[obs['season'].isin(seasons)]
-
-        # coaddition per night and per band (if requested by the user)
-        if self.stacker is not None:
-            obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
 
         # get infos on obs: cadence, max gap
         cad_gap = obs.groupby(['season']).apply(lambda x:
@@ -309,12 +309,14 @@ class SNNSNYMetric(BaseMetric):
         # merge cad_gap with obs_alloc
         cad_gap = cad_gap.merge(
             obs_alloc, left_on=['season'], right_on=['season'])
-        #print('cad gap', cad_gap)
 
         metricValues = pd.DataFrame()
 
         # generate LC here
         lc = self.step_lc(obs, gen_par)
+
+        if self.verbose:
+            print(lc['daymax'].unique())
 
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])
@@ -496,6 +498,7 @@ class SNNSNYMetric(BaseMetric):
             from sn_metrics.sn_plot_live import plotNSN_effi
             for season in sn_effis['season'].unique():
                 idx = sn_effis['season'] == season
+                print('effis', sn_effis[idx])
                 plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
                              'Observing Efficiencies', ls='-')
 
@@ -523,6 +526,7 @@ class SNNSNYMetric(BaseMetric):
 
         # estimate the number of supernovae
         sn_effis['nsn'] = sn_effis['effi']*sn_effis['nsn_expected']
+
         # sn_effis['nsn'] = sn_effis['effi']*self.nsn_expected(
         #    sn_effis['z'].to_list())/(1.+(sn_effis['season_length_orig']/self.duration_ref)/sn_effis['season_length'])
         return sn_effis
@@ -616,9 +620,12 @@ class SNNSNYMetric(BaseMetric):
         dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
         dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
-        #dur_z['season_length_orig'] = daymax-daymin
-        #dur_z['season_length_orig'] = [daymax-daymin]*len(self.zrange)
+        # dur_z['season_length_orig'] = daymax-daymin
+        # dur_z['season_length_orig'] = [daymax-daymin]*len(self.zrange)
         nsn = self.nsn_from_rate(dur_z)
+        if self.verbose:
+            print('dur_z', dur_z)
+            print('nsn expected', nsn)
         dur_z = dur_z.merge(nsn, left_on=['z'], right_on=['z'])
 
         idx = dur_z['season_length'] > min_duration

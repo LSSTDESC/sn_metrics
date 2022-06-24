@@ -144,7 +144,7 @@ class SNNSNMetric(BaseMetric):
                  metricName='SNNSNMetric',
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
-                 nightCol='night', obsidCol='observationId', nexpCol='numExposures',
+                 nightCol='night', obsidCol='observationId', nexpCol='numExposures', seeingCol='seeingFwhmEff',
                  vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2, zStep=0.03,
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
@@ -162,6 +162,7 @@ class SNNSNMetric(BaseMetric):
         self.obsidCol = obsidCol
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
+        self.seeingCol = seeingCol
         self.pixArea = pixArea
         self.ploteffi = ploteffi
         self.x1_color_dist = x1_color_dist
@@ -209,7 +210,7 @@ class SNNSNMetric(BaseMetric):
             self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
-                                      self.m5Col, self.seasonCol, self.nexpCol,
+                                      self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
                                       self.snr_min, lightOutput=lightOutput)
 
         # loading parameters
@@ -453,6 +454,8 @@ class SNNSNMetric(BaseMetric):
             print('Summary zlim_med:', np.median(
                 varb_totdf['zlim_faint']), 'NSN', np.sum(varb_totdf['nsn_zlim_faint']))
 
+        print('final result', varb_totdf[[
+              'season', 'zlim_faint', 'nsn_zlim_faint']])
         return varb_totdf
 
     def ebvofMW_calc(self):
@@ -637,13 +640,8 @@ class SNNSNMetric(BaseMetric):
                 print('sn and lc', len(sn),
                       sel[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor', 'n_bef', 'n_aft']])
                 lc['test'] = lc[self.exptimeCol]/lc[self.nexpCol]
-                print(lc[['snr_m5', 'ratio', 'z', 'flux_5',
-                          'flux_5_back', 'mag', 'band', 'test', self.nexpCol, 'm5', 'gamma']])
-                iio = lc['ratio'] > 1
-                pp = lc[iio]
-                for ih, row in pp.iterrows():
-                    print(row['snr_m5'], row['ratio'], row['z'], row['flux_5'],
-                          row['flux_5_back'], row['mag'], row['band'], row['test'], row[self.nexpCol], row['gamma'], row['phase'])
+                print(lc[['snr_m5', 'z', 'flux_5', 'mag', 'band',
+                          'test', self.nexpCol, self.m5Col]])
 
             if self.outputType == 'lc' or self.outputType == 'sn':
                 return sn, lc
@@ -1218,6 +1216,7 @@ class SNNSNMetric(BaseMetric):
 
             print('Estimating zlim', self.pixArea, self.zlim_coeff)
             print('season', duration_z[['z', 'season_length']])
+            print('zplot', zplot)
             print('effis', effiInterp(zplot))
             print('rate', rateInterp(zplot))
             print('nsn', nsn_cum)
@@ -1902,6 +1901,8 @@ class SNNSNMetric(BaseMetric):
 
         if self.verbose:
             print('after sel errmodel', len(tab))
+            print(tab[['band', 'snr_m5',
+                  'fluxerr_photo']])
 
         # select LC points with min snr
         idx = tab['snr_m5'] >= self.snr_min
@@ -1909,8 +1910,8 @@ class SNNSNMetric(BaseMetric):
 
         if self.verbose:
             print('LC', tab.columns)
-            print(tab[['band', 'night', 'snr_m5',
-                       'fluxerr', 'fluxerr_photo', 'fluxerr_model']])
+            print(tab[['band', 'snr_m5',
+                  'fluxerr_photo']])
         # now groupby
         tab = tab.round({'pixRA': 4, 'pixDec': 4, 'daymax': 5,
                          'z': 3, 'x1': 2, 'color': 2})
@@ -1931,7 +1932,8 @@ class SNNSNMetric(BaseMetric):
             lambda x: self.sumIt(x, tosum)).reset_index()
 
         if self.verbose:
-            idx = np.abs(sums['daymax']-61016.17090) < 1.e-5
+            print('jjj', sums)
+            idx = np.abs(sums['daymax']-60881.94101) < 1.e-5
             print('for sel', sums[idx])
         # select LC according to the number of points bef/aft peak
         idx = sums['n_aft'] >= self.n_aft
