@@ -455,11 +455,12 @@ class SNNSNMetric(BaseMetric):
             print('Summary zlim_med:', np.median(
                 varb_totdf['zlim_faint']), 'NSN', np.sum(varb_totdf['nsn_zlim_faint']))
 
-        print('final result', varb_totdf[[
-              'season', 'zlim_faint', 'nsn_zlim_faint']])
+        # print('final result', varb_totdf[[
+        #      'season', 'zlim_faint', 'nsn_zlim_faint']])
+        varb_totdf['timeproc'] = time.time()-time_ref
         if self.timeIt:
             print('processing time', time.time()-time_ref)
-            varb_totdf['timeproc'] = time.time()-time_ref
+
         return varb_totdf
 
     def ebvofMW_calc(self):
