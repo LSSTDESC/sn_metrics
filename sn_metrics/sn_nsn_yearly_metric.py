@@ -1,7 +1,6 @@
 import numpy as np
 from lsst.sims.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
-import multiprocessing
 import yaml
 import os
 from sn_tools.sn_calcFast import LCfast, CovColor
@@ -11,7 +10,7 @@ import time
 import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
-from functools import wraps
+#from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
@@ -93,6 +92,8 @@ class SNNSNYMetric(BaseMetric):
       bands to consider (default: grizy)
     fig_for_movie: bool, opt
       to save figures to make a movie showing how the metric is estimated
+    timeIt: bool, opt
+      to estimate processing time per pixel (default: False)
     """
 
     def __init__(self, lc_reference, dustcorr,
@@ -104,7 +105,7 @@ class SNNSNYMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -126,6 +127,7 @@ class SNNSNYMetric(BaseMetric):
         self.ebvofMW = ebvofMW
         self.bands = bands
         self.fig_for_movie = fig_for_movie
+        self.timeIt = timeIt
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -244,6 +246,8 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
+        time_ref = time.time()
+
         healpixID = np.unique(dataSlice['healpixID'])
 
         if not healpixID:
@@ -347,12 +351,16 @@ class SNNSNYMetric(BaseMetric):
         metricValues['pixDec'] = self.pixDec
         # merge with all parameters
         metricValues['status'] = self.status['ok']
+        metricValues['timeproc'] = time.time()-time_ref
         metricValues = metricValues.merge(
             cad_gap, left_on=['season'], right_on=['season'])
 
         if self.verbose:
             print('metricValues', metricValues[[
                 'season', 'zcomp', 'nsn', 'status']])
+
+        if self.timeIt:
+            print('processing time', self.healpixID, time.time()-time_ref)
         return metricValues
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):

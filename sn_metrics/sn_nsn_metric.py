@@ -149,7 +149,7 @@ class SNNSNMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, mjd_LSST_Start=60218.83514, dbName='', **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, mjd_LSST_Start=60218.83514, dbName='', timeIt=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -171,6 +171,7 @@ class SNNSNMetric(BaseMetric):
         self.ebvofMW = ebvofMW
         self.bands = bands
         self.fig_for_movie = fig_for_movie
+        self.timeIt = timeIt
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -456,6 +457,9 @@ class SNNSNMetric(BaseMetric):
 
         print('final result', varb_totdf[[
               'season', 'zlim_faint', 'nsn_zlim_faint']])
+        if self.timeIt:
+            print('processing time', time.time()-time_ref)
+            varb_totdf['timeproc'] = time.time()-time_ref
         return varb_totdf
 
     def ebvofMW_calc(self):
