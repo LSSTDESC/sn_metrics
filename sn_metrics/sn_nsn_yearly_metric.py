@@ -248,7 +248,7 @@ class SNNSNYMetric(BaseMetric):
 
         time_ref = time.time()
 
-        healpixID = np.unique(dataSlice['healpixID'])
+        healpixID = np.unique(dataSlice['healpixID']).tolist()
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
@@ -256,9 +256,9 @@ class SNNSNYMetric(BaseMetric):
 
         print('processing pixel', np.unique(dataSlice['healpixID']))
 
-        self.pixRA = np.unique(dataSlice['pixRA'])[0]
-        self.pixDec = np.unique(dataSlice['pixDec'])[0]
-        self.healpixID = np.unique(dataSlice['healpixID'])[0]
+        self.pixRA = np.mean(dataSlice['pixRA'])
+        self.pixDec = np.mean(dataSlice['pixDec'])
+        self.healpixID = healpixID[0]
 
         # get ebvofMW
         ebvofMW = self.ebvofMW
