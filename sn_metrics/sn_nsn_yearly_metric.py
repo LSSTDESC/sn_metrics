@@ -358,6 +358,7 @@ class SNNSNYMetric(BaseMetric):
         if self.verbose:
             print('metricValues', metricValues[[
                 'season', 'zcomp', 'nsn', 'status']])
+            print('mm', metricValues)
 
         if self.timeIt:
             print('processing time', self.healpixID, time.time()-time_ref)
@@ -410,9 +411,14 @@ class SNNSNYMetric(BaseMetric):
         dictres = {}
         bands = 'ugrizy'
         ntot = len(grp)
+        mjdmin = grp[self.mjdCol].min()
+        mjdmax = grp[self.mjdCol].min()
+        dictres['season_length'] = mjdmax-mjdmin
+
         for b in bands:
             io = grp['filter'] == b
             dictres['frac_{}'.format(b)] = [len(grp[io])/ntot]
+            dictres['N{}'.format(b)] = len(grp[io])
 
         return pd.DataFrame(dictres)
 
@@ -1044,7 +1050,7 @@ class SNNSNYMetric(BaseMetric):
         df['pixDec'] = self.pixDec
 
         cols = ['season', 'zcomp', 'nsn', 'cadence', 'gap_max', 'frac_u', 'frac_g',
-                'frac_r', 'frac_i', 'frac_z', 'frac_y', 'cadence_sn', 'gap_max_sn']
+                'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length']
 
         for col in cols:
             df[col] = -1
