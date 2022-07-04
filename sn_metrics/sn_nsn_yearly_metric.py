@@ -10,7 +10,7 @@ import time
 import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
-#from functools import wraps
+# from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
@@ -279,7 +279,7 @@ class SNNSNYMetric(BaseMetric):
 
         # coaddition per night and per band (if requested by the user)
         if self.stacker is not None:
-            #obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
+            # obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
             dataSlice = self.stacker._run(dataSlice)
 
         dataSlice.sort(order=self.mjdCol)
@@ -307,12 +307,14 @@ class SNNSNYMetric(BaseMetric):
         obs = obs[obs['season'].isin(seasons)]
 
         # get infos on obs: cadence, max gap
-        cad_gap = obs.groupby(['season']).apply(lambda x:
-                                                self.cadence_gap(x)).reset_index()
+        cad_gap = self.add_infos(
+            obs_alloc, obs, grpCol='season', cadCol='cadence', gapCol='gap_max')
 
-        # merge cad_gap with obs_alloc
-        cad_gap = cad_gap.merge(
-            obs_alloc, left_on=['season'], right_on=['season'])
+        goodFilters = obs[self.filterCol].isin(['g', 'r', 'i'])
+        obs_gri = obs[goodFilters]
+
+        cad_gap = self.add_infos(
+            cad_gap, obs_gri, grpCol='season', cadCol='cadence_gri', gapCol='gap_max_gri')
 
         metricValues = pd.DataFrame()
 
@@ -357,12 +359,39 @@ class SNNSNYMetric(BaseMetric):
 
         if self.verbose:
             print('metricValues', metricValues[[
-                'season', 'zcomp', 'nsn', 'status']])
-            print('mm', metricValues)
+                'season', 'zcomp', 'nsn', 'status', 'cadence', 'cadence_gri', 'cadence_sn']])
+            print('mm', metricValues, metricValues.columns)
 
         if self.timeIt:
             print('processing time', self.healpixID, time.time()-time_ref)
         return metricValues
+
+    def add_infos(self, infos, obs, grpCol='season', cadCol='cadence', gapCol='gap_max'):
+        """
+        Estimate cadence and gap max and update a df
+
+        Parameters
+        --------------
+        infos: pandas df
+           df to update
+        obs: pandas df
+          observations for estimation of cadence and gap max
+        grpCol: str, opt
+          col to group the df (default: season)
+        cadenceCol: str, opt
+          name of the (output) cadence col name (default: cadence)
+        gapCol: str, opt
+           name of the (output) gap col name (default: gap_max)
+
+        """
+        cad_gap_res = obs.groupby([grpCol]).apply(lambda x:
+                                                  self.cadence_gap(x, cadCol, gapCol)).reset_index()
+
+        # merge cad_gap with obs_alloc
+        cad_gap_res = cad_gap_res.merge(
+            infos, left_on=[grpCol], right_on=[grpCol])
+
+        return cad_gap_res
 
     def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
         """
