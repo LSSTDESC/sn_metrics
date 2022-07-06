@@ -105,7 +105,7 @@ class SNNSNYMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -128,7 +128,6 @@ class SNNSNYMetric(BaseMetric):
         self.bands = bands
         self.fig_for_movie = fig_for_movie
         self.timeIt = timeIt
-        self.slower = slower
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
@@ -268,11 +267,10 @@ class SNNSNYMetric(BaseMetric):
         if ebvofMW > 0.25:
             return pd.DataFrame()
 
-        """
         # get infos on obs - filter allocation (before stacking)
         obs_alloc = pd.DataFrame(np.copy(dataSlice)).groupby(['season']).apply(
             lambda x: self.filter_allocation(x)).reset_index()
-        """
+
         # print(obs_alloc)
 
         # select observations filter
@@ -289,30 +287,8 @@ class SNNSNYMetric(BaseMetric):
             print('Observations')
             print(dataSlice[[self.mjdCol, self.exptimeCol,
                   self.filterCol, self.nightCol, self.nexpCol]])
-
-        # get redshift values per season
-        zseason = self.z_season(self.season, dataSlice)
-        zseason_allz = self.z_season_allz(zseason)
-
-        metricValues = self.metric(
-            dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1, metric='zlim')
-
-        zseason = metricValues[['season', 'zcomp']]
-        zseason.loc[:, 'zmin'] = 0.01
-        zseason.loc[:, 'zstep'] = self.zstep
-        zseason = zseason.rename(columns={"zcomp": "zmax"})
-        zseason['zmax'] += self.zstep
-        zseason_allz = self.z_season_allz(zseason)
-
-        nsn_zcomp = self.metric(
-            dataSlice, zseason_allz, x1=0.0, color=0.0, zlim=metricValues[['season', 'zcomp']], metric='nsn')
-
-        metricValues = metricValues.merge(
-            nsn_zcomp, left_on=['season'], right_on=['season'])
-
-        """
         # get the season durations
-        seasons, dur_z = self.season_length(self.season, dataSlice, zseason)
+        seasons, dur_z = self.season_length(self.season, dataSlice)
 
         if not seasons or dur_z.empty:
             df = self.resError(self.status['season_length'])
@@ -320,7 +296,7 @@ class SNNSNYMetric(BaseMetric):
 
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
-            lambda x: self.calcDaymax(x, self.daymaxStep)).reset_index()
+            lambda x: self.calcDaymax(x)).reset_index()
 
         if gen_par.empty:
             df = self.resError(self.status['simu_parameters'])
@@ -329,8 +305,7 @@ class SNNSNYMetric(BaseMetric):
         # select observations corresponding to seasons
         obs = pd.DataFrame(np.copy(dataSlice))
         obs = obs[obs['season'].isin(seasons)]
-        """
-        """
+
         # get infos on obs: cadence, max gap
         cad_gap = self.add_infos(
             obs_alloc, obs, grpCol='season', cadCol='cadence', gapCol='gap_max')
@@ -340,14 +315,11 @@ class SNNSNYMetric(BaseMetric):
 
         cad_gap = self.add_infos(
             cad_gap, obs_gri, grpCol='season', cadCol='cadence_gri', gapCol='gap_max_gri')
-        """
-        """
+
         metricValues = pd.DataFrame()
 
         # generate LC here
-        lc = self.step_lc(obs, gen_par, x1=-2.0, color=0.2)
-
-        print('lc here', lc)
+        lc = self.step_lc(obs, gen_par)
 
         if self.verbose:
             print(lc['daymax'].unique())
@@ -358,8 +330,6 @@ class SNNSNYMetric(BaseMetric):
 
         # get observing efficiencies and build sn for metric
         lc.index = lc.index.droplevel()
-        """
-        """
         # get infos on lc (cadence, gap)
 
         cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
@@ -369,16 +339,14 @@ class SNNSNYMetric(BaseMetric):
         # print(cad_gap_lc)
         cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
             'season'], right_on=['season'])
-        """
-        """
+
         # estimate efficiencies
         sn_effis = self.step_efficiencies(lc)
         # estimate nsn
         sn = self.step_nsn(sn_effis, dur_z)
-        # estimate redshift completeness
+        # estimate redshift limit and nsn
         metricValues = sn.groupby(['season']).apply(
-            lambda x: self.zlim(x)).reset_index()
-        """
+            lambda x: self.metric(x)).reset_index()
         # add ID parameters here
         metricValues['healpixID'] = self.healpixID
         metricValues['pixRA'] = self.pixRA
@@ -386,15 +354,13 @@ class SNNSNYMetric(BaseMetric):
         # merge with all parameters
         metricValues['status'] = self.status['ok']
         metricValues['timeproc'] = time.time()-time_ref
-        """
         metricValues = metricValues.merge(
             cad_gap, left_on=['season'], right_on=['season'])
-        """
+
         if self.verbose:
             print('metricValues', metricValues[[
                 'season', 'zcomp', 'nsn', 'status', 'cadence', 'cadence_gri', 'cadence_sn']])
-
-        print('mm', metricValues, metricValues.columns)
+            print('mm', metricValues, metricValues.columns)
 
         if self.timeIt:
             print('processing time', self.healpixID, time.time()-time_ref)
@@ -485,38 +451,7 @@ class SNNSNYMetric(BaseMetric):
 
         return pd.DataFrame(dictres)
 
-    def z_season(self, seasons, dataSlice):
-        """
-        Fill the z values per season
-
-        Parameters
-        --------------
-        seasons: list
-          seasons to process
-        dataSlice: array
-          data to process
-
-        """
-        # if seasons = -1: process the seasons seen in data
-        if seasons == [-1]:
-            seasons = np.unique(dataSlice[self.seasonCol])
-
-        # pandas df with zmin, zmax, zstep per season
-        zseason = pd.DataFrame(seasons, columns=['season'])
-        zseason['zmin'] = self.zmin
-        zseason['zmax'] = self.zmax
-        zseason['zstep'] = self.zstep
-
-        return zseason
-
-    def z_season_allz(self, zseason):
-
-        zseason_allz = zseason.groupby(['season']).apply(lambda x: pd.DataFrame(
-            {'z': list(np.arange(x['zmin'].mean(), x['zmax'].mean(), x['zstep'].mean()))})).reset_index()
-
-        return zseason_allz[['season', 'z']]
-
-    def season_length(self, seasons, dataSlice, zseason):
+    def season_length(self, seasons, dataSlice):
         """
         Method to estimate season lengths vs z
 
@@ -540,27 +475,20 @@ class SNNSNYMetric(BaseMetric):
 
         # season infos
         dfa = pd.DataFrame(np.copy(dataSlice))
-        dfa = pd.DataFrame(dfa[dfa['season'].isin(seasons)])
-
-        season_info = self.get_season_info(dfa, zseason)
+        dfa = dfa[dfa['season'].isin(seasons)]
+        season_info = dfa.groupby(['season']).apply(
+            lambda x: self.seasonInfo(x, min_duration=60)).reset_index()
 
         if season_info.empty:
             return [], pd.DataFrame()
 
-        season_info_cp = pd.DataFrame(season_info)
         # get season length depending on the redshift
-        season_info_cp['season'] = season_info_cp['season'].astype(int)
-        #season_info_cp = season_info_cp.droplevel('level_1', axis=1)
-
-        """
-        dur_z = season_info_cp.groupby('season').apply(
+        dur_z = season_info.groupby(['season']).apply(
             lambda x: self.duration_z(x)).reset_index()
-        """
-        dur_z = season_info.groupby('season').apply(
-            lambda x: self.nsn_expected_z(x)).reset_index()
+
         return season_info['season'].to_list(), dur_z
 
-    def step_lc(self, obs, gen_par, x1=-2.0, color=0.2):
+    def step_lc(self, obs, gen_par):
         """
         Method to generate lc
 
@@ -570,10 +498,6 @@ class SNNSNYMetric(BaseMetric):
           observations
         gen_par: array
           simulation parameters
-        x1: float, opt
-           stretch value (default: -2.0)
-        color: float, opt
-          color value (default: 0.2)
 
         Returns
         ----------
@@ -581,7 +505,7 @@ class SNNSNYMetric(BaseMetric):
 
         """
         lc = obs.groupby(['season']).apply(
-            lambda x: self.genLC(x, gen_par, x1, color))
+            lambda x: self.genLC(x, gen_par))
 
         # plot figs for movie
         if self.ploteffi and self.fig_for_movie and len(lc) > 0:
@@ -695,7 +619,6 @@ class SNNSNYMetric(BaseMetric):
         df['MJD_min'] = grp[self.mjdCol].min()
         df['MJD_max'] = grp[self.mjdCol].max()
         df['season_length'] = df['MJD_max']-df['MJD_min']
-        """
         df['cadence'] = 0.
 
         if len(grp) > 5:
@@ -704,9 +627,8 @@ class SNNSNYMetric(BaseMetric):
             nights = np.sort(grp['night'].unique())
             diff = np.asarray(nights[1:]-nights[:-1])
             df['cadence'] = np.median(diff).item()
-        """
-        # select seasons of at least 30 days
 
+            # select seasons of at least 30 days
         idx = df['season_length'] >= min_duration
 
         return df[idx]
@@ -735,19 +657,15 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
-        # daymin = grp['MJD_min'].values
-        # daymax = grp['MJD_max'].values
-        dur_z = pd.DataFrame(grp)
-        """
-        dur_z['T0_min'] = dur_z['MJD_min'] - \
-            (1.+dur_z['z'])*self.min_rf_phase_qual
-        dur_z['T0_max'] = dur_z['MJD_max'] - \
-            (1.+dur_z['z'])*self.max_rf_phase_qual
+        daymin = grp['MJD_min'].values
+        daymax = grp['MJD_max'].values
+        dur_z = pd.DataFrame(self.zrange, columns=['z'])
+        dur_z['T0_min'] = daymin-(1.+dur_z['z'])*self.min_rf_phase_qual
+        dur_z['T0_max'] = daymax-(1.+dur_z['z'])*self.max_rf_phase_qual
         dur_z['season_length'] = dur_z['T0_max']-dur_z['T0_min']
-        print('dur_z', grp.name, dur_z)
-        """
+        # dur_z['season_length_orig'] = daymax-daymin
+        # dur_z['season_length_orig'] = [daymax-daymin]*len(self.zrange)
         nsn = self.nsn_from_rate(dur_z)
-        print('nsn expected', nsn)
         if self.verbose:
             print('dur_z', dur_z)
             print('nsn expected', nsn)
@@ -757,48 +675,9 @@ class SNNSNYMetric(BaseMetric):
         sel = dur_z[idx]
         if len(sel) < 2:
             return pd.DataFrame()
-
-        return sel
-
-    def nsn_expected_z(self, grp):
-        """
-        Method to estimate the season length vs redshift
-        This is necessary to take into account boundary effects
-        when estimating the number of SN that can be detected
-
-        daymin, daymax = min and max MJD of a season
-        T0_min(z) =  daymin-(1+z)*min_rf_phase_qual
-        T0_max(z) =  daymax-(1+z)*max_rf_phase_qual
-        season_length(z) = T0_max(z)-T0_min(z)
-
-        Parameters
-        --------------
-        grp: pandas df group
-          data to process: season infos
-        min_duration: float, opt
-          min season length for a season to be processed (deafult: 60 days)
-
-        Returns
-        ----------
-        pandas df with season_length, z, T0_min and T0_max cols
-
-        """
-
-        nsn = self.nsn_from_rate(grp)
-
-        print('nsn expected', nsn)
-        if self.verbose:
-            print('nsn expected', nsn)
-
-        dur_z = pd.DataFrame(grp)
-        dur_z = dur_z.merge(nsn, left_on=['z'], right_on=['z'])
-
-        if 'season' in dur_z.columns:
-            dur_z = dur_z.drop(columns=['season'])
-
         return dur_z
 
-    def calcDaymax(self, grp, daymaxStep):
+    def calcDaymax(self, grp):
         """
         Method to estimate T0 (daymax) values for simulation.
 
@@ -808,8 +687,6 @@ class SNNSNYMetric(BaseMetric):
          group of data to process with the following cols:
            T0_min: T0 min value (per season)
            T0_max: T0 max value (per season)
-        daymaxStep: float
-          step for T0 simulation
 
         Returns
         ----------
@@ -820,7 +697,7 @@ class SNNSNYMetric(BaseMetric):
         if self.T0s == 'all':
             T0_max = grp['T0_max'].values
             T0_min = grp['T0_min'].values
-            num = (T0_max-T0_min)/daymaxStep
+            num = (T0_max-T0_min)/self.daymaxStep
             if T0_max-T0_min > 10:
                 df = pd.DataFrame(np.linspace(
                     T0_min, T0_max, int(num)), columns=['daymax'])
@@ -834,7 +711,7 @@ class SNNSNYMetric(BaseMetric):
 
         return df
 
-    def genLC_deprecated(self, grp, gen_par_orig):
+    def genLC(self, grp, gen_par_orig):
         """
         Method to generate light curves from observations
 
@@ -868,48 +745,6 @@ class SNNSNYMetric(BaseMetric):
             lc['sntype'] = sntype[key]
             res = pd.concat((res, lc))
             # break
-        return res
-
-    def genLC(self, grp, gen_par_orig, x1, color):
-        """
-        Method to generate light curves from observations
-
-        Parameters
-        ---------------
-        grp: pandas group
-          observations to process
-        gen_par_orig: pandas df
-          simulation parameters
-        x1: float
-          SN stretch
-        color: float
-          SN color
-
-        Returns
-        ----------
-        light curves as pandas df
-
-        """
-        season = grp.name
-        idx = gen_par_orig['season'] == season
-        gen_par = gen_par_orig[idx].to_records(index=False)
-
-        sntype = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
-        res = pd.DataFrame()
-        key = (np.round(x1, 1), np.round(color, 1))
-        vals = self.lcFast[key]
-
-        gen_par_cp = gen_par.copy()
-        if key == (-2.0, 0.2):
-            idx = gen_par_cp['z'] < 0.9
-            gen_par_cp = gen_par_cp[idx]
-        lc = vals(grp.to_records(index=False),
-                  0.0, gen_par_cp, bands='grizy')
-        lc['x1'] = key[0]
-        lc['color'] = key[1]
-        lc['sntype'] = sntype[key]
-        res = pd.concat((res, lc))
-
         return res
 
     def plot_for_movie(self, obs, lc, gen_par):
@@ -1153,7 +988,6 @@ class SNNSNYMetric(BaseMetric):
 
 
         """
-
         seleffi = effi[effi['sntype'] == sntype]
         seleffi = seleffi.sort_values(by=['z'])
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
@@ -1170,140 +1004,7 @@ class SNNSNYMetric(BaseMetric):
 
         return np.round(res, 6)
 
-    def zlim(self, grp, snType='faint'):
-        """
-        Method to estimate the metric zcomp
-
-        Parameters
-        ---------------
-        grp: pandas group
-        snType: str, opt
-          type of SN to estimate zlim (default: faint)
-
-        Returns
-        ------------
-        pandas df with the metric as cols
-        """
-        zcomp = -1
-        if grp['effi'].mean() > 0.02:
-            zcomp = self.zlim_or_nsn(grp, snType, -1)
-
-        if self.ploteffi:
-            from sn_metrics.sn_plot_live import plot_zlim, plot_nsn
-            plot_zlim(grp, snType, self.zmin,
-                      self.zmax, self.zlim_coeff)
-
-        return pd.DataFrame({'zcomp': [zcomp]})
-
-    def nsn(self, grp, snType='medium'):
-        """
-        Method to estimate the metric nsn up to zlim
-
-        Parameters
-        ---------------
-        grp: pandas group
-        snType: str, opt
-          type of SN to estimate zlim (default: medium)
-
-        Returns
-        ------------
-        pandas df with the metric as cols
-        """
-        nsn = -1
-
-        if grp['effi'].mean() > 0.02:
-            nsn = self.zlim_or_nsn(grp, snType, grp['zcomp'].mean())
-
-        if self.ploteffi:
-            from sn_metrics.sn_plot_live import plot_zlim, plot_nsn
-            plot_nsn(grp, snType, self.zmin, self.zmax, zlim)
-
-        return pd.DataFrame({'nsn': [nsn]})
-
-    def metric(self, dataSlice, zseason, x1=-2.0, color=0.2,  zlim=-1, metric='zlim'):
-
-        snType = 'medium'
-        if np.abs(x1+2.0) <= 1.e-5:
-            snType = 'faint'
-
-        # get the season durations
-        seasons, dur_z = self.season_length(self.season, dataSlice, zseason)
-
-        if not seasons or dur_z.empty:
-            df = self.resError(self.status['season_length'])
-            return df
-
-        # get simulation parameters
-        gen_par = dur_z.groupby(['z', 'season']).apply(
-            lambda x: self.calcDaymax(x, self.daymaxStep)).reset_index()
-
-        if gen_par.empty:
-            df = self.resError(self.status['simu_parameters'])
-            return df
-
-        # select observations corresponding to seasons
-        obs = pd.DataFrame(np.copy(dataSlice))
-        obs = obs[obs['season'].isin(seasons)]
-
-        # metric values in a DataFrame
-        metricValues = pd.DataFrame()
-
-        # generate LC here
-        lc = self.step_lc(obs, gen_par, x1=x1, color=color)
-
-        if self.verbose:
-            print(lc['daymax'].unique())
-
-        if len(lc) == 0:
-            df = self.resError(self.status['nosn'])
-            return df
-
-        # get observing efficiencies and build sn for metric
-        lc.index = lc.index.droplevel()
-
-        # get infos on lc (cadence, gap)
-
-        if snType == 'faint' and self.slower:
-            obs_alloc = pd.DataFrame(np.copy(dataSlice)).groupby(['season']).apply(
-                lambda x: self.filter_allocation(x)).reset_index()
-            # get infos on obs: cadence, max gap
-            cad_gap = self.add_infos(
-                obs_alloc, obs, grpCol='season', cadCol='cadence', gapCol='gap_max')
-
-            goodFilters = obs[self.filterCol].isin(['g', 'r', 'i'])
-            obs_gri = obs[goodFilters]
-
-            cad_gap = self.add_infos(
-                cad_gap, obs_gri, grpCol='season', cadCol='cadence_gri', gapCol='gap_max_gri')
-            cad_gap_lc_all = lc.groupby(['season', 'daymax', 'z']).apply(
-                lambda x: self.cadence_gap(x, 'cadence_sn', 'gap_max_sn'))
-            cad_gap_lc = cad_gap_lc_all.groupby(
-                ['season']).mean().reset_index()
-            # print(cad_gap_lc)
-            cad_gap = cad_gap.merge(cad_gap_lc, left_on=[
-                'season'], right_on=['season'])
-
-        # estimate efficiencies
-        sn_effis = self.step_efficiencies(lc)
-        # estimate nsn
-        sn = self.step_nsn(sn_effis, dur_z)
-        # estimate redshift completeness
-        if metric == 'zlim':
-            metricValues = sn.groupby(['season']).apply(
-                lambda x: self.zlim(x)).reset_index()
-
-        if metric == 'nsn':
-            sn = sn.merge(zlim, left_on=['season'], right_on=['season'])
-            metricValues = sn.groupby(['season']).apply(
-                lambda x: self.nsn(x)).reset_index()
-
-        if snType == 'faint' and self.slower:
-            metricValues = metricValues.merge(
-                cad_gap, left_on=['season'], right_on=['season'])
-
-        return metricValues
-
-    def metric_deprecated(self, grp):
+    def metric(self, grp):
         """
         Method to estimate the metric(zcomp, nsn)
 
@@ -1345,15 +1046,9 @@ class SNNSNYMetric(BaseMetric):
         """
         durinterp_z = interp1d(grp['z'], grp['season_length'], kind='linear',
                                bounds_error=False, fill_value=0)
-        zmin = np.round(grp['z'].min(), 2)
-        zmax = np.round(grp['z'].max(), 2)
-        grp = grp.sort_values(by=['z'])
-        zstep = np.round(np.median(np.diff(grp['z'])), 2)
-
-        #zmin, zmax, zstep = self.zmin, self.zmax, self.zstep
-        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
-                                                       zmax=zmax+zstep,
-                                                       dz=zstep,
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=self.zmin,
+                                                       zmax=self.zmax,
+                                                       dz=self.zstep,
                                                        duration_z=durinterp_z,
                                                        # duration=self.duration_ref,
                                                        survey_area=self.pixArea,
@@ -1362,6 +1057,7 @@ class SNNSNYMetric(BaseMetric):
         nsn_expected = interp1d(zz, nsn, kind='linear',
                                 bounds_error=False, fill_value=0)
         nsn_res = nsn_expected(grp['z'])
+
         return pd.DataFrame({'nsn_expected': nsn_res, 'z': grp['z'].to_list()})
 
     def resError(self, istatus):
@@ -1383,7 +1079,7 @@ class SNNSNYMetric(BaseMetric):
         df['pixDec'] = self.pixDec
 
         cols = ['season', 'zcomp', 'nsn', 'cadence', 'gap_max', 'frac_u', 'frac_g',
-                'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length', 'cadence_gri', 'gap_max_gri']
+                'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length']
 
         for col in cols:
             df[col] = -1
@@ -1391,42 +1087,3 @@ class SNNSNYMetric(BaseMetric):
         df['status'] = istatus
 
         return df
-
-    def get_season_info(self, dfa, zseason, min_duration=60.):
-        """
-        method to get season infos vs z
-
-        Parameters
-        --------------
-        dfa: pandas df
-          dat to process
-        zseason: pandas df
-          redshift infos per season
-        min_duration: float, opt
-          min season length to be accepted (default: 60 days)
-
-        Returns
-        ----------
-        pandas df with season length infos
-
-        """
-
-        season_info = dfa.groupby('season').apply(
-            lambda x: self.seasonInfo(x, min_duration=min_duration)).reset_index()
-
-        #season_info.index = season_info.index.droplevel()
-        season_info = season_info.drop(columns=['level_1'])
-
-        season_info = season_info.merge(
-            zseason, left_on=['season'], right_on=['season'])
-
-        season_info['T0_min'] = season_info['MJD_min'] - \
-            (1.+season_info['z'])*self.min_rf_phase_qual
-        season_info['T0_max'] = season_info['MJD_max'] - \
-            (1.+season_info['z'])*self.max_rf_phase_qual
-        season_info['season_length'] = season_info['T0_max'] - \
-            season_info['T0_min']
-
-        idx = season_info['season_length'] >= min_duration
-
-        return pd.DataFrame(season_info[idx])
