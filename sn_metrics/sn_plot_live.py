@@ -938,23 +938,32 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
     seleffi = effi[effi['sntype'] == sntype]
     seleffi = seleffi.sort_values(by=['z'])
     nsn_cum = np.cumsum(seleffi['nsn'].to_list())
-    zlim = interp1d(nsn_cum/nsn_cum[-1], seleffi['z'], kind='linear',
+    norm = nsn_cum[-1]
+    seleffi['nsn_cum'] = nsn_cum/norm
+    index = seleffi[seleffi['nsn_cum'] < 1].index
+    seleffib = seleffi[:index[-1]+2]
+    zlim = interp1d(seleffib['nsn_cum'], seleffib['z'], kind='linear',
                     bounds_error=False, fill_value=0)
     zlimit = zlim(zlim_coeff)
-    ax.plot(seleffi['z'], nsn_cum/nsn_cum[-1])
+    #ax.plot(seleffi['nsn_cum'], seleffi['z'], marker='o')
+    ax.plot(seleffi['z'], seleffi['nsn_cum'])
+    """
     axb = ax.twinx()
     norm = np.max(seleffi['nsn'])
-    axb.plot(seleffi['z'], seleffi['nsn']/norm)
+    axb.plot(seleffi['z'], seleffi['nsn']/norm) 
+    axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
+    """
+
     ax.plot([zlimit]*2, [0., zlim_coeff], ls='dashed', color='k')
     ax.plot([zmin, zmax], [zlim_coeff]
             * 2, ls='dashed', color='k')
     ax.grid()
     ax.set_xlabel('z')
     ax.set_ylabel('Cumulative N$_{SN}(z<)$')
-    axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
     ax.set_xlim(zmin, zmax)
     zstr = '$z_{complete}$'
     ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
+
     plt.show()
 
 
