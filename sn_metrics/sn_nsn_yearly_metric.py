@@ -231,6 +231,9 @@ class SNNSNYMetric(BaseMetric):
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
                                            templateLC=templateLC, dbName=dbName)
 
+        # count the number of simulated sn
+        self.nsimu = 0
+
     def run(self, dataSlice,  slicePoint=None):
         """
         Run method of the metric
@@ -297,7 +300,7 @@ class SNNSNYMetric(BaseMetric):
         metricValues = self.metric(
             dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1, metric='zlim')
 
-        zseason = metricValues[['season', 'zcomp']]
+        zseason = pd.DataFrame(metricValues[['season', 'zcomp']])
         zseason.loc[:, 'zmin'] = 0.01
         zseason.loc[:, 'zstep'] = self.zstep
         zseason = zseason.rename(columns={"zcomp": "zmax"})
@@ -311,20 +314,22 @@ class SNNSNYMetric(BaseMetric):
             nsn_zcomp, left_on=['season'], right_on=['season'])
 
         # add ID parameters here
-        metricValues['healpixID'] = self.healpixID
-        metricValues['pixRA'] = self.pixRA
-        metricValues['pixDec'] = self.pixDec
+        metricValues.loc[:, 'healpixID'] = self.healpixID
+        metricValues.loc[:, 'pixRA'] = self.pixRA
+        metricValues.loc[:, 'pixDec'] = self.pixDec
         # merge with all parameters
-        metricValues['status'] = self.status['ok']
-        metricValues['timeproc'] = time.time()-time_ref
+        metricValues.loc[:, 'status'] = self.status['ok']
+        metricValues.loc[:, 'timeproc'] = time.time()-time_ref
+        metricValues['nsimu'] = self.nsimu
 
         # clean the metric: remove columns with level*
         metricValues = metricValues.loc[:, ~
                                         metricValues.columns.str.startswith('level')]
 
         if self.verbose:
+            # print('metricValues', metricValues[['healpixID','season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc', 'nsn_corr']])
             print('metricValues', metricValues[['healpixID',
-                                                'season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc']])
+                                                'season', 'zcomp', 'nsn', 'dnsn', 'timeproc', 'nsimu']])
             print('columns', metricValues.columns)
 
         if self.timeIt:
@@ -481,12 +486,13 @@ class SNNSNYMetric(BaseMetric):
         season_info_cp = pd.DataFrame(season_info)
         # get season length depending on the redshift
         season_info_cp['season'] = season_info_cp['season'].astype(int)
-        #season_info_cp = season_info_cp.droplevel('level_1', axis=1)
+        # season_info_cp = season_info_cp.droplevel('level_1', axis=1)
 
         """
         dur_z = season_info_cp.groupby('season').apply(
             lambda x: self.duration_z(x)).reset_index()
         """
+
         dur_z = season_info.groupby('season').apply(
             lambda x: self.nsn_expected_z(x)).reset_index()
         return season_info['season'].to_list(), dur_z
@@ -513,6 +519,9 @@ class SNNSNYMetric(BaseMetric):
         """
         lc = obs.groupby(['season']).apply(
             lambda x: self.genLC(x, gen_par, x1, color))
+
+        # count number of sn
+        self.nsimu += len(gen_par)
 
         # plot figs for movie
         if self.ploteffi and self.fig_for_movie and len(lc) > 0:
@@ -717,7 +726,11 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
-        nsn = self.nsn_from_rate(grp)
+        if len(grp) < 2:
+            nsn = pd.DataFrame(grp['z'].to_list(), columns=['z'])
+            nsn.loc[:, 'nsn_expected'] = 0
+        else:
+            nsn = self.nsn_from_rate(grp)
 
         if self.verbose:
             print('nsn expected', nsn)
@@ -1095,11 +1108,11 @@ class SNNSNYMetric(BaseMetric):
         res = -999
         if zlim < 0:
             df = pd.DataFrame(seleffi).reset_index()
-            df['nsn_cum'] = nsn_cum/nsn_cum[-1]
-            df['nsn_cum_m'] = nsn_cum_m/nsn_cum_m[-1]
+            df.loc[:, 'nsn_cum'] = nsn_cum/nsn_cum[-1]
+            df.loc[:, 'nsn_cum_m'] = nsn_cum_m/nsn_cum_m[-1]
             index = df[df['nsn_cum'] < 1].index
-            dfb = df[:index[-1]+2]
-            zz = df['z'][:index[-1]+2]
+            dfb = df[: index[-1]+2]
+            zz = df['z'][: index[-1]+2]
             zlim = interp1d(dfb['nsn_cum'], dfb['z'], kind='linear',
                             bounds_error=False, fill_value=0)
             zlim_m = interp1d(dfb['nsn_cum_m'], dfb['z'], kind='linear',
@@ -1107,10 +1120,19 @@ class SNNSNYMetric(BaseMetric):
             resa = zlim(self.zlim_coeff)
             resb = zlim_m(self.zlim_coeff)
         else:
+            effi = interp1d(seleffi['z'], seleffi['effi'], kind='linear',
+                            bounds_error=False, fill_value=0)
+            durinterp_z = interp1d(seleffi['z'], seleffi['season_length'], kind='linear',
+                                   bounds_error=False, fill_value=0)
+            zmin, zstep = 0.1, 0.001
+            resa = self.get_nsn(effi, durinterp_z, zmin, zlim, zstep)
+            resb = self.get_nsn(effi, durinterp_z, zmin, zlim-dzlim, zstep)
+            """
             nsn = interp1d(seleffi['z'], nsn_cum, kind='linear',
                            bounds_error=False, fill_value=0)
-            resa = nsn(zlim)
-            resb = nsn(zlim-dzlim)
+            resb = nsn(zlim)
+            """
+            # resb = nsn(zlim-dzlim)
 
         return np.round(resa, 6), np.round(resa-resb, 6)
 
@@ -1130,7 +1152,7 @@ class SNNSNYMetric(BaseMetric):
         """
         zcomp = -1
         dzcomp = -1.
-        if grp['effi'].mean() > 0.02:
+        if grp['effi'].mean() > 0.02 and len(grp['effi']) >= 2:
             zcomp, dzcomp = self.zlim_or_nsn(grp, snType, -1)
 
         if self.ploteffi:
@@ -1232,8 +1254,10 @@ class SNNSNYMetric(BaseMetric):
 
         # estimate efficiencies
         sn_effis = self.step_efficiencies(lc)
+
         # estimate nsn
         sn = self.step_nsn(sn_effis, dur_z)
+
         # estimate redshift completeness
         if metric == 'zlim':
             metricValues = sn.groupby(['season']).apply(
@@ -1297,7 +1321,7 @@ class SNNSNYMetric(BaseMetric):
         grp = grp.sort_values(by=['z'])
         zstep = np.round(np.median(np.diff(grp['z'])), 3)
 
-        #zmin, zmax, zstep = self.zmin, self.zmax, self.zstep
+        # zmin, zmax, zstep = self.zmin, self.zmax, self.zstep
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
                                                        zmax=zmax+zstep,
                                                        dz=zstep,
@@ -1329,7 +1353,8 @@ class SNNSNYMetric(BaseMetric):
         df['pixRA'] = self.pixRA
         df['pixDec'] = self.pixDec
 
-        cols = ['season', 'zcomp', 'nsn', 'cadence', 'timeproc']
+        cols = ['season', 'zcomp', 'dzcomp',
+                'nsn', 'dsn', 'cadence', 'timeproc', 'nsimu']
         if self.slower:
             cols += ['gap_max', 'frac_u', 'frac_g',
                      'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length', 'cadence_gri', 'gap_max_gri']
@@ -1363,7 +1388,7 @@ class SNNSNYMetric(BaseMetric):
         season_info = dfa.groupby('season').apply(
             lambda x: self.seasonInfo(x, min_duration=min_duration)).reset_index()
 
-        #season_info.index = season_info.index.droplevel()
+        # season_info.index = season_info.index.droplevel()
         season_info = season_info.drop(columns=['level_1'])
 
         season_info = season_info.merge(
@@ -1379,3 +1404,40 @@ class SNNSNYMetric(BaseMetric):
         idx = season_info['season_length'] >= min_duration
 
         return pd.DataFrame(season_info[idx])
+
+    def nsn_correction(self, zmin, zmax, zstep):
+
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
+                                                       zmax=zmax+zstep,
+                                                       dz=zstep,
+                                                       # duration_z=durinterp_z,
+                                                       duration=180.,
+                                                       survey_area=9.6,
+                                                       account_for_edges=True)
+
+        nsn_tot = np.cumsum(nsn)[-1]
+
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
+                                                       zmax=zmax+zstep,
+                                                       dz=0.005,
+                                                       # duration_z=durinterp_z,
+                                                       duration=180.,
+                                                       survey_area=9.6,
+                                                       account_for_edges=True)
+        nsn_tot_ref = np.cumsum(nsn)[-1]
+
+        return nsn_tot_ref/nsn_tot
+
+    def get_nsn(self, effi, durinterp_z, zmin, zmax, zstep):
+
+        zrange = np.arange(zmin, zmax+zstep, zstep)
+        zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
+                                                       zmax=zmax+zstep,
+                                                       dz=zstep,
+                                                       duration_z=durinterp_z,
+                                                       # duration=180.,
+                                                       survey_area=self.pixArea,
+                                                       account_for_edges=False)
+        res = np.cumsum(effi(zrange)*nsn)[-1]
+
+        return res
