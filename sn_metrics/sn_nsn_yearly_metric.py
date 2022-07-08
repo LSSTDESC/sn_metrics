@@ -234,7 +234,7 @@ class SNNSNYMetric(BaseMetric):
         # count the number of simulated sn
         self.nsimu = 0
 
-    def run(self, dataSlice,  slicePoint=None):
+    def run(self, dataSlice,  slicePoint=None, imulti=0):
         """
         Run method of the metric
 
@@ -258,7 +258,7 @@ class SNNSNYMetric(BaseMetric):
             zlimsdf = pd.DataFrame()
             return zlimsdf
 
-        print('processing pixel', np.unique(dataSlice['healpixID']))
+        print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
 
         self.pixRA = np.mean(dataSlice['pixRA'])
         self.pixDec = np.mean(dataSlice['pixDec'])
@@ -1106,11 +1106,15 @@ class SNNSNYMetric(BaseMetric):
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
         nsn_cum_m = np.cumsum((seleffi['nsn']-seleffi['nsn_err']).to_list())
         res = -999
+        resa = -1.0
+        resb = -1.0
         if zlim < 0:
             df = pd.DataFrame(seleffi).reset_index()
             df.loc[:, 'nsn_cum'] = nsn_cum/nsn_cum[-1]
             df.loc[:, 'nsn_cum_m'] = nsn_cum_m/nsn_cum_m[-1]
             index = df[df['nsn_cum'] < 1].index
+            if len(index) == 0:
+                return resa, resb
             dfb = df[:index[-1]+2]
             zz = df['z'][:index[-1]+2]
             zlim = interp1d(dfb['nsn_cum'], dfb['z'], kind='linear',
