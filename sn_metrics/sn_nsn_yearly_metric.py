@@ -1111,8 +1111,8 @@ class SNNSNYMetric(BaseMetric):
             df.loc[:, 'nsn_cum'] = nsn_cum/nsn_cum[-1]
             df.loc[:, 'nsn_cum_m'] = nsn_cum_m/nsn_cum_m[-1]
             index = df[df['nsn_cum'] < 1].index
-            dfb = df[: index[-1]+2]
-            zz = df['z'][: index[-1]+2]
+            dfb = df[:index[-1]+2]
+            zz = df['z'][:index[-1]+2]
             zlim = interp1d(dfb['nsn_cum'], dfb['z'], kind='linear',
                             bounds_error=False, fill_value=0)
             zlim_m = interp1d(dfb['nsn_cum_m'], dfb['z'], kind='linear',
