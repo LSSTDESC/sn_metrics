@@ -1434,7 +1434,6 @@ class SNNSNYMetric(BaseMetric):
 
     def get_nsn(self, effi, durinterp_z, zmin, zmax, zstep):
 
-        zrange = np.arange(zmin, zmax+zstep, zstep)
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
                                                        zmax=zmax+zstep,
                                                        dz=zstep,
@@ -1442,6 +1441,7 @@ class SNNSNYMetric(BaseMetric):
                                                        # duration=180.,
                                                        survey_area=self.pixArea,
                                                        account_for_edges=False)
-        res = np.cumsum(effi(zrange)*nsn)[-1]
+
+        res = np.cumsum(effi(zz)*nsn)[-1]
 
         return res
