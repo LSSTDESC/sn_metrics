@@ -934,26 +934,42 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
 
     """
     from scipy.interpolate import interp1d
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 8))
     seleffi = effi[effi['sntype'] == sntype]
     seleffi = seleffi.sort_values(by=['z'])
+    seleffi['nsn_m'] = seleffi['nsn']-seleffi['nsn_err']
+    seleffi['nsn_p'] = seleffi['nsn']+seleffi['nsn_err']
+    print('allll', seleffi.columns)
     nsn_cum = np.cumsum(seleffi['nsn'].to_list())
     norm = nsn_cum[-1]
     seleffi['nsn_cum'] = nsn_cum/norm
+
+    nsn_cum_m = np.cumsum(seleffi['nsn_m'].to_list())
+    norm_m = nsn_cum_m[-1]
+    seleffi['nsn_cum_m'] = nsn_cum_m/norm_m
+
+    nsn_cum_p = np.cumsum(seleffi['nsn_p'].to_list())
+    norm_p = nsn_cum_p[-1]
+    seleffi['nsn_cum_p'] = nsn_cum_p/norm_p
+
     index = seleffi[seleffi['nsn_cum'] < 1].index
     seleffib = seleffi[:index[-1]+2]
     zlim = interp1d(seleffib['nsn_cum'], seleffib['z'], kind='linear',
                     bounds_error=False, fill_value=0)
     zlimit = zlim(zlim_coeff)
     #ax.plot(seleffi['nsn_cum'], seleffi['z'], marker='o')
-    ax.plot(seleffi['z'], seleffi['nsn_cum'])
+    ax.plot(seleffi['z'], seleffi['nsn_cum'], color='k')
+    ax.fill_between(seleffi['z'], seleffi['nsn_cum_m'],
+                    seleffi['nsn_cum_p'], color='yellow')
     """
     axb = ax.twinx()
-    norm = np.max(seleffi['nsn'])
-    axb.plot(seleffi['z'], seleffi['nsn']/norm) 
-    axb.set_ylabel('N$_{SN}$/N$_{SN}^{max}$')
+    axb.plot(seleffi['z'], seleffi['nsn'])
+    axb.set_ylabel('N$_{SN}$')
     """
 
+    zlim_m = interp1d(seleffib['nsn_cum_m'], seleffib['z'], kind='linear',
+                      bounds_error=False, fill_value=0)
+    zlimit_m = zlim_m(zlim_coeff)
     ax.plot([zlimit]*2, [0., zlim_coeff], ls='dashed', color='k')
     ax.plot([zmin, zmax], [zlim_coeff]
             * 2, ls='dashed', color='k')
@@ -962,8 +978,11 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
     ax.set_ylabel('Cumulative N$_{SN}(z<)$')
     ax.set_xlim(zmin, zmax)
     zstr = '$z_{complete}$'
-    ax.text(zlimit-0.1, 0.5, '{} = {}'.format(zstr, np.round(zlimit, 2)))
-
+    dz = zlimit-zlimit_m
+    ax.text(0.30, 0.5, '{} = {} $\pm$ {}'.format(
+        zstr, np.round(zlimit, 3), np.round(dz, 3)))
+    ax.set_ylim([0., 1.05])
+    ax.text(0.15, 0.97, '95th percentile')
     plt.show()
 
 
