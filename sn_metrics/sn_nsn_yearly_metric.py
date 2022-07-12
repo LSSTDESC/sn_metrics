@@ -105,7 +105,7 @@ class SNNSNYMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=True, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -331,8 +331,13 @@ class SNNSNYMetric(BaseMetric):
 
         if self.verbose:
             # print('metricValues', metricValues[['healpixID','season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc', 'nsn_corr']])
-            print('metricValues', metricValues[['healpixID',
-                                                'season', 'zcomp', 'nsn', 'dnsn', 'timeproc', 'nsimu']])
+            toprint = ['healpixID', 'season', 'zcomp',
+                       'nsn', 'dnsn', 'timeproc', 'nsimu']
+            if self.slower:
+                toprint += ['cadence_gri', 'gap_max_gri', 'cadence']
+            print('metricValues', metricValues[toprint])
+            tt = ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
+            print(metricValues[tt])
             print('columns', metricValues.columns)
 
         if self.timeIt:
