@@ -199,7 +199,7 @@ class SNNSNYMetric(BaseMetric):
 
         # status of the pixel after processing
         self.status = dict(
-            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters', 'low_effi'], [1, -1, -2, -3, -4, -5]))
+            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters', 'low_effi', 'noobs'], [1, -1, -2, -3, -4, -5, -6]))
 
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
@@ -287,6 +287,9 @@ class SNNSNYMetric(BaseMetric):
             # obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
             dataSlice = self.stacker._run(dataSlice)
 
+        if len(dataSlice) <= 10:
+            df = self.resError(self.status['noobs'])
+            return df
         dataSlice.sort(order=self.mjdCol)
         if self.verbose:
             print('Observations')
