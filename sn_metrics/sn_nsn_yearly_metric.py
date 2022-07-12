@@ -282,6 +282,9 @@ class SNNSNYMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
+        if len(dataSlice) <= 10:
+            df = self.resError(self.status['noobs'])
+            return df
         # coaddition per night and per band (if requested by the user)
         if self.stacker is not None:
             # obs = pd.DataFrame(self.stacker._run(obs.to_records(index=False)))
