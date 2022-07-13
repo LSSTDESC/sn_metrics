@@ -913,7 +913,7 @@ class SNNSNYMetric(BaseMetric):
         deltaT = lcarr['daymax']-T0s[:, np.newaxis]
 
         flag = np.abs(deltaT) < 1.e-5
-        #flag_idx = np.argwhere(flag)
+        # flag_idx = np.argwhere(flag)
 
         resdf = pd.DataFrame(T0s, columns=['daymax'])
 
@@ -1015,7 +1015,7 @@ class SNNSNYMetric(BaseMetric):
         Big_Diag = []
 
         for iv in range(size):
-            #Fisher_Matrix = np.zeros((npar, npar))
+            # Fisher_Matrix = np.zeros((npar, npar))
             for ia, vala in enumerate(self.params):
                 for jb, valb in enumerate(self.params):
                     if jb >= ia:
@@ -1113,7 +1113,7 @@ class SNNSNYMetric(BaseMetric):
         seleffi = seleffi.sort_values(by=['z'])
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
         nsn_cum_m = np.cumsum((seleffi['nsn']-seleffi['nsn_err']).to_list())
-        #res = -999
+        # res = -999
         resa = -1.0
         resb = -1.0
         if zlim < 0:
@@ -1124,7 +1124,7 @@ class SNNSNYMetric(BaseMetric):
             if len(index) == 0:
                 return resa, resb
             dfb = df[:index[-1]+2]
-            #zz = df['z'][:index[-1]+2]
+            # zz = df['z'][:index[-1]+2]
             zlim = interp1d(dfb['nsn_cum'], dfb['z'], kind='linear',
                             bounds_error=False, fill_value=0)
             zlim_m = interp1d(dfb['nsn_cum_m'], dfb['z'], kind='linear',
@@ -1441,7 +1441,28 @@ class SNNSNYMetric(BaseMetric):
         return nsn_tot_ref/nsn_tot
 
     def get_nsn(self, effi, durinterp_z, zmin, zmax, zstep):
+        """
+        Method to estimate to total number of SN: NSN = Sum(effi(z)*rate(z))
 
+        Parameters
+        ---------------
+        effi: 1D interpolator
+          efficiencies vs z
+        durinterp_z: 1D interpolator
+         duration vs z
+        zmin: float
+          redshift min
+        zmax: float
+          redshift max
+        zstep: float
+          redshift step
+
+       Returns
+       ----------
+        total number of SN up to zmax
+
+
+        """
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
                                                        zmax=zmax+zstep,
                                                        dz=zstep,
