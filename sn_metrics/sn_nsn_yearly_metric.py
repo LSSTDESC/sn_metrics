@@ -249,13 +249,13 @@ class SNNSNYMetric(BaseMetric):
 
         time_ref = time.time()
 
+        print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
+
         healpixID = np.unique(dataSlice['healpixID']).tolist()
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
             return zlimsdf
-
-        print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
 
         self.pixRA = np.mean(dataSlice['pixRA'])
         self.pixDec = np.mean(dataSlice['pixDec'])
