@@ -102,7 +102,7 @@ class SNNSNYMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=True, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -222,7 +222,7 @@ class SNNSNYMetric(BaseMetric):
                             ''.join(sorted('{}{}{}'.format(ba, bb, bc))))
             """
         self.plotter = None
-        if self.ploteffi and self.fig_for_movie:
+        if self.ploteffi or self.fig_for_movie:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
@@ -279,6 +279,11 @@ class SNNSNYMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
+        """
+        idx = np.abs(dataSlice[self.exptimeCol]-.)<1.e-5
+        dataSlice = dataSlice[idx]
+        """
+        
         if len(dataSlice) <= 10:
             df = self.resError(self.status['noobs'])
             return df
@@ -335,9 +340,8 @@ class SNNSNYMetric(BaseMetric):
                        'nsn', 'dnsn', 'timeproc', 'nsimu']
             if self.slower:
                 toprint += ['cadence_gri', 'gap_max_gri', 'cadence']
+                toprint +=  ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
             print('metricValues', metricValues[toprint])
-            tt = ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
-            print(metricValues[tt])
             print('columns', metricValues.columns)
 
         if self.timeIt:
@@ -532,7 +536,8 @@ class SNNSNYMetric(BaseMetric):
         self.nsimu += len(gen_par)
 
         # plot figs for movie
-        if self.ploteffi and self.fig_for_movie and len(lc) > 0:
+        print('fig for movie?',self.fig_for_movie,len(lc))
+        if self.fig_for_movie and len(lc) > 0 and x1 <0.:
             self.plot_for_movie(obs, lc, gen_par)
 
         return lc
@@ -879,7 +884,7 @@ class SNNSNYMetric(BaseMetric):
           simulation parameters for SN
 
         """
-
+        print('plotting here')
         for season in obs['season'].unique():
             idxa = obs['season'] == season
             idxb = lc['season'] == season
