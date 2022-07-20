@@ -231,6 +231,11 @@ class SNNSNYMetric(BaseMetric):
         # count the number of simulated sn
         self.nsimu = 0
 
+        # remove short exposure (twilight) to avoid artificial season length
+        self.twilight = False
+        if 'twilight' in dbName:
+            self.twilight = True
+
     def run(self, dataSlice,  slicePoint=None, imulti=0):
         """
         Run method of the metric
@@ -279,11 +284,10 @@ class SNNSNYMetric(BaseMetric):
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
-        """
-        idx = np.abs(dataSlice[self.exptimeCol]-.)<1.e-5
-        dataSlice = dataSlice[idx]
-        """
-        
+        if self.twilight:
+            idx = dataSlice[self.exptimeCol] >= 10.
+            dataSlice = dataSlice[idx]
+
         if len(dataSlice) <= 10:
             df = self.resError(self.status['noobs'])
             return df
@@ -340,7 +344,7 @@ class SNNSNYMetric(BaseMetric):
                        'nsn', 'dnsn', 'timeproc', 'nsimu']
             if self.slower:
                 toprint += ['cadence_gri', 'gap_max_gri', 'cadence']
-                toprint +=  ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
+                toprint += ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
             print('metricValues', metricValues[toprint])
             print('columns', metricValues.columns)
 
@@ -536,8 +540,7 @@ class SNNSNYMetric(BaseMetric):
         self.nsimu += len(gen_par)
 
         # plot figs for movie
-        print('fig for movie?',self.fig_for_movie,len(lc))
-        if self.fig_for_movie and len(lc) > 0 and x1 <0.:
+        if self.fig_for_movie and len(lc) > 0 and x1 < 0.:
             self.plot_for_movie(obs, lc, gen_par)
 
         return lc
@@ -1468,6 +1471,9 @@ class SNNSNYMetric(BaseMetric):
 
 
         """
+        if zmin >= zmax:
+            zmin = 0.01
+
         zz, rate, err_rate, nsn, err_nsn = self.rateSN(zmin=zmin,
                                                        zmax=zmax+zstep,
                                                        dz=zstep,
