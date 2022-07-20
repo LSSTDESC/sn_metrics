@@ -915,7 +915,7 @@ class Plot_Saturation_Metric:
             ax.legend()
 
 
-def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
+def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85, season=1):
     """
     Method to illustrate how zlim is estimated
 
@@ -934,15 +934,18 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
 
     """
     from scipy.interpolate import interp1d
-    fig, ax = plt.subplots(figsize=(10, 8))
+
     seleffi = effi[effi['sntype'] == sntype]
+    seleffi = seleffi.reset_index()
     seleffi = seleffi.sort_values(by=['z'])
     seleffi['nsn_m'] = seleffi['nsn']-seleffi['nsn_err']
     seleffi['nsn_p'] = seleffi['nsn']+seleffi['nsn_err']
-    print('allll', seleffi.columns)
+
     nsn_cum = np.cumsum(seleffi['nsn'].to_list())
     norm = nsn_cum[-1]
     seleffi['nsn_cum'] = nsn_cum/norm
+
+    #print('allll', seleffi['nsn_cum'], seleffi['z'])
 
     nsn_cum_m = np.cumsum(seleffi['nsn_m'].to_list())
     norm_m = nsn_cum_m[-1]
@@ -953,12 +956,20 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85):
     seleffi['nsn_cum_p'] = nsn_cum_p/norm_p
 
     index = seleffi[seleffi['nsn_cum'] < 1].index
+    if len(index) == 0:
+        return -1
+
+    # ther a plot can be made
+    fig, ax = plt.subplots(figsize=(10, 8))
+    fig.suptitle('season {}'.format(season))
+
     seleffib = seleffi[:index[-1]+2]
     zlim = interp1d(seleffib['nsn_cum'], seleffib['z'], kind='linear',
                     bounds_error=False, fill_value=0)
+    #print(seleffib['z'], seleffib['nsn_cum'], index)
     zlimit = zlim(zlim_coeff)
     #ax.plot(seleffi['nsn_cum'], seleffi['z'], marker='o')
-    ax.plot(seleffi['z'], seleffi['nsn_cum'], color='k')
+    ax.plot(seleffib['z'], seleffib['nsn_cum'], color='k')
     ax.fill_between(seleffi['z'], seleffi['nsn_cum_m'],
                     seleffi['nsn_cum_p'], color='yellow')
     """

@@ -1118,6 +1118,7 @@ class SNNSNYMetric(BaseMetric):
         """
 
         seleffi = effi[effi['sntype'] == sntype]
+        seleffi = seleffi.reset_index()
         seleffi = seleffi.sort_values(by=['z'])
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
         nsn_cum_m = np.cumsum((seleffi['nsn']-seleffi['nsn_err']).to_list())
@@ -1175,10 +1176,11 @@ class SNNSNYMetric(BaseMetric):
         if grp['effi'].mean() > 0.02 and len(grp['effi']) >= 2:
             zcomp, dzcomp = self.zlim_or_nsn(grp, snType, -1)
 
+        season = grp.name
         if self.ploteffi:
             from sn_metrics.sn_plot_live import plot_zlim
             plot_zlim(grp, snType, self.zmin,
-                      self.zmax, self.zlim_coeff)
+                      self.zmax, self.zlim_coeff, season)
 
         return pd.DataFrame({'zcomp': [zcomp], 'dzcomp': [dzcomp]})
 
