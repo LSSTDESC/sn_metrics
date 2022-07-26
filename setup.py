@@ -1,14 +1,14 @@
 from setuptools import setup
 
 # get the version here
-pkg_vars  = {}
+pkg_vars = {}
 
 with open("version.py") as fp:
     exec(fp.read(), pkg_vars)
 
 setup(
     name='sn_metrics',
-    version= pkg_vars['__version__'],
+    version=pkg_vars['__version__'],
     description='Metrics for supernovae',
     url='http://github.com/lsstdesc/sn_metrics',
     author='Philippe Gris',
@@ -19,6 +19,7 @@ setup(
     zip_safe=False,
     install_requires=[
         'sn_tools>=0.1',
-        'sn_stackers>=0.1'
+        'sn_stackers>=0.1',
+        'sn_fit_lc>=0.1'
     ],
 )
