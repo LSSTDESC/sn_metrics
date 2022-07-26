@@ -1,5 +1,5 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf

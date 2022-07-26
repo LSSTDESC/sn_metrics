@@ -1,11 +1,12 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 import healpy as hp
 from sn_stackers.coadd_stacker import CoaddStacker
 import time
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
+
 
 class SLSNMetric(BaseMetric):
     def __init__(self, metricName='SLSNMetric',
