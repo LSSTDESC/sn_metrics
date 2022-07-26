@@ -1,5 +1,5 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import multiprocessing
 import yaml
@@ -560,7 +560,7 @@ class SNSNRTIMEMetric(BaseMetric):
 
     def load_downtimes_tel_observatory(self):
         # get mjdmin and down time from simulation
-        from lsst.sims.featureScheduler.modelObservatory import Model_observatory
+        from rubin_sim.scheduler.modelObservatory import Model_observatory
         #import itertools
         mo = Model_observatory()
 

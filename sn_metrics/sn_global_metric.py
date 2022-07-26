@@ -1,5 +1,5 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 import itertools
 from sn_tools.sn_obs import LSSTPointing
 from shapely.ops import unary_union

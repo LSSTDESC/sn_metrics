@@ -1,5 +1,5 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import pandas as pd
 import time
@@ -8,6 +8,7 @@ from sn_tools.sn_obs import getPix
 import numpy.lib.recfunctions as rf
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
+
 
 class SNCadenceMetric(BaseMetric):
     """
@@ -152,8 +153,6 @@ class SNCadenceMetric(BaseMetric):
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [pixDec]*len(dataSlice), usemask=False)
 
-
-          
         # get ebvofMW for this pixel
         pixRA = np.unique(dataSlice['pixRA']).item()
         pixDec = np.unique(dataSlice['pixDec']).item()
@@ -170,8 +169,7 @@ class SNCadenceMetric(BaseMetric):
         ebvofMW = sfd(coords)
 
         if ebvofMW >= 0.25:
-            return None 
-        
+            return None
 
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)

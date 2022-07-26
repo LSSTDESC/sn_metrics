@@ -1,5 +1,5 @@
 import numpy as np
-from lsst.sims.maf.metrics import BaseMetric
+from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
@@ -13,6 +13,7 @@ import pandas as pd
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 from sn_tools.sn_obs import season as seasonCalc
+
 
 class SNSNRMetric(BaseMetric):
     """
@@ -174,11 +175,12 @@ class SNSNRMetric(BaseMetric):
 
         if len(dataSlice) == 0:
             return None
-        
+
         # get pixRA and pixDec if necessary
         if 'pixRA' not in dataSlice.dtype.names:
             healpixID, pixRA, pixDec = getPix(dataSlicef.nside,
-                                              np.mean(dataSlice[dataSlicef.RACol]),
+                                              np.mean(
+                                                  dataSlice[dataSlicef.RACol]),
                                               np.mean(dataSlice[dataSlicef.DecCol]))
 
             dataSlice = rf.append_fields(dataSlice, 'healpixID', [
@@ -188,7 +190,6 @@ class SNSNRMetric(BaseMetric):
             dataSlice = rf.append_fields(
                 dataSlice, 'pixDec', [pixDec]*len(dataSlice))
 
-        
         # get ebvofMW for this pixel
         pixRA = np.unique(dataSlice['pixRA']).item()
         pixDec = np.unique(dataSlice['pixDec']).item()
@@ -205,13 +206,12 @@ class SNSNRMetric(BaseMetric):
         ebvofMW = sfd(coords)
 
         if ebvofMW >= 0.25:
-            return None 
-        
+            return None
 
         # stack the data if requested
         if self.stacker is not None:
             dataSlice = self.stacker._run(dataSlice)
- 
+
         # get seasons
         if 'season' in dataSlice.dtype.names:
             dataSlice = rf.drop_fields(dataSlice, ['season'])
@@ -224,17 +224,17 @@ class SNSNRMetric(BaseMetric):
 
         # get infos on seasons
         self.info_season = self.seasonInfo(dataSlice, seasons)
-    
+
         if self.info_season is None:
             return None
 
         seasons = self.info_season['season']
 
         if self.verbose:
-            print('info seasons',self.info_season)
+            print('info seasons', self.info_season)
 
         snr_obs = self.snrSeason(dataSlice, seasons)  # SNR for observations
-        
+
         if snr_obs is None:
             return pd.DataFrame()
 
@@ -258,12 +258,12 @@ class SNSNRMetric(BaseMetric):
         detect_frac = np.asarray(detect_frac)
         """
         # return {'snr_obs': snr_obs, 'snr_fakes': snr_fakes, 'detec_frac': detect_frac}
-      
 
         res = pd.DataFrame(np.copy(detect_frac))
 
         if self.verbose:
-            print('processed', detect_frac,res[['healpixID','season','band','frac_obs_SNCosmo']])
+            print('processed', detect_frac,
+                  res[['healpixID', 'season', 'band', 'frac_obs_SNCosmo']])
 
         return res
 
@@ -309,13 +309,13 @@ class SNSNRMetric(BaseMetric):
         """
 
         # check whether we do have data for the considered season for this dataSlice
-        
+
         sel = None
         for season in seasons:
             idx = dataSlice[self.seasonCol] == season
             tt = np.copy(dataSlice[idx])
             if sel is None:
-                sel =tt
+                sel = tt
             else:
                 sel = np.concatenate((sel, tt))
 
@@ -323,7 +323,7 @@ class SNSNRMetric(BaseMetric):
             return None
 
         if self.verbose:
-            print('data OS',sel.dtype,sel)
+            print('data OS', sel.dtype, sel)
 
         # Get few infos: RA, Dec, Nvisits, m5, exptime
         fieldRA = np.mean(sel[self.RACol])
@@ -352,13 +352,13 @@ class SNSNRMetric(BaseMetric):
                     dates = dd
                 else:
                     dates = np.concatenate((dates, dd))
-                 
+
         if self.verbose:
-            print('dates',dates)
+            print('dates', dates)
 
         if dates is None:
             return None
-            
+
         # SN  DayMax: dates-shift where shift is chosen in the input yaml file
         T0_lc = dates-self.shift
 
@@ -376,19 +376,19 @@ class SNSNRMetric(BaseMetric):
         m5_vals = np.tile(sel[self.m5Col], (len(time_for_lc), 1))
         mjd_vals = np.tile(sel[self.mjdCol], (len(time_for_lc), 1))
         season_vals = np.tile(sel[self.seasonCol], (len(time_for_lc), 1))
-        
+
         if self.verbose:
-            print('m5',m5_vals)
-            print('mjd',mjd_vals)
-            print('season',season_vals)
+            print('m5', m5_vals)
+            print('mjd', mjd_vals)
+            print('season', season_vals)
 
         # estimate fluxes and snr in SNR function
         fluxes_tot, snr = self.SNR(
             time_for_lc, m5_vals, flag, season_vals, T0_lc)
 
         if self.verbose:
-            print('fluxes',fluxes_tot)
-            print('snr',snr)
+            print('fluxes', fluxes_tot)
+            print('snr', snr)
 
         # now save the results in a record array
         snr_nomask = np.ma.copy(snr)
@@ -412,7 +412,6 @@ class SNSNRMetric(BaseMetric):
         snr = rf.append_fields(
             snr, names, [global_info[name] for name in names])
 
-    
        # Display LC and SNR at the same time
         if self.display:
             self.plot(fluxes_tot, mjd_vals, flag, snr, T0_lc, dates)
@@ -456,14 +455,14 @@ class SNSNRMetric(BaseMetric):
                        mjd_min, mjd_max, Nvisits))
 
         info_season = None
-        
+
         if len(rv) > 0:
             info_season = np.rec.fromrecords(
                 rv, names=['season', 'cadence', 'season_length', 'MJD_min', 'MJD_max', 'Nvisits'])
 
         return info_season
 
-    def SNR(self, time_lc, m5_vals, flag, season_vals,T0_lc):
+    def SNR(self, time_lc, m5_vals, flag, season_vals, T0_lc):
         """
         Estimate SNR vs time
 
@@ -490,11 +489,9 @@ class SNSNRMetric(BaseMetric):
           season(float): season num.
         """
 
-
         seasons = np.ma.array(season_vals, mask=~flag)
-        
 
-        #print(seasons)
+        # print(seasons)
         fluxes_tot = {}
         snr_tab = None
 
@@ -514,7 +511,7 @@ class SNSNRMetric(BaseMetric):
             else:
                 snr_tab = rf.append_fields(
                     snr_tab, 'SNR_'+name, np.copy(snr_season))
-        
+
         snr_tab = rf.append_fields(snr_tab, 'season', np.mean(seasons, axis=1))
         snr_tab = rf.append_fields(snr_tab, 'T0', T0_lc)
 
@@ -589,7 +586,6 @@ class SNSNRMetric(BaseMetric):
 
         snr_fakes = self.snrSeason(
             np.copy(fake_obs[fake_obs['filter'] == band]), seasons=seasons)
-        
 
         return snr_fakes
 
@@ -642,7 +638,7 @@ class SNSNRMetric(BaseMetric):
         f = open(self.fakeFile, 'r')
         config_fake = yaml.load(f, Loader=yaml.FullLoader)
         f.close()
-        #print('hello',config_fake)
+        # print('hello',config_fake)
         config_fake['RA'] = fieldRA
         config_fake['Dec'] = fieldDec
         config_fake['bands'] = [band]
@@ -822,5 +818,4 @@ class SNSNRMetric(BaseMetric):
                 names += ['frac_obs_'+sim]
             rtot.append(tuple(r))
 
-        
         return np.rec.fromrecords(rtot, names=names)
