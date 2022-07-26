@@ -1,2 +1,0 @@
-#### git packages
-git+https://github.com/lsstdesc/sn_fit_lc.git@dev#egg=sn_fit_lc
