@@ -1233,6 +1233,11 @@ class SNNSNYMetric(BaseMetric):
         if not seasons or dur_z.empty:
             df = self.resError(self.status['season_length'])
             return df
+        dur_z = self.check_dur_z(dur_z)
+        
+        if not seasons or dur_z.empty:
+            df = self.resError(self.status['season_length'])
+            return df
 
         # get simulation parameters
         gen_par = dur_z.groupby(['z', 'season']).apply(
@@ -1497,3 +1502,27 @@ class SNNSNYMetric(BaseMetric):
         res = np.cumsum(effi(zz)*nsn)[-1]
 
         return res
+
+    def check_dur_z(self, dur_z, nmin=2):
+        """"
+        Method to remove seasons with a poor redshift range due to too low season length
+
+        Parameters
+        ----------------
+        dur_z: pandas df
+          data to process
+        nmin: int, opt
+          minimal number of redshift points per season (default: 2)
+
+        Returns
+        -----------
+        pandas df with seasons having at least nmin points in redshift
+
+        """
+        
+
+        dur_z['size'] = dur_z.groupby(['season'])['z'].transform('size')
+
+        idx = dur_z['size'] >= nmin
+
+        return pd.DataFrame(dur_z[idx])
