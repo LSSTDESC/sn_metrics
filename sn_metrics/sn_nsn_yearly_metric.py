@@ -319,6 +319,10 @@ class SNNSNYMetric(BaseMetric):
         zseason['zmax'] += self.zstep
         zseason_allz = self.z_season_allz(zseason)
 
+        if zseason_allz.empty:
+            df = self.resError(self.status['low_effi'])
+            return df
+            
         nsn_zcomp = self.metric(
             dataSlice, zseason_allz, x1=0.0, color=0.0, zlim=metricValues[['season', 'zcomp', 'dzcomp']], metric='nsn')
 
@@ -499,18 +503,22 @@ class SNNSNYMetric(BaseMetric):
         if season_info.empty:
             return [], pd.DataFrame()
 
-        season_info_cp = pd.DataFrame(season_info)
+        #season_info_cp = pd.DataFrame(season_info)
         # get season length depending on the redshift
-        season_info_cp['season'] = season_info_cp['season'].astype(int)
+        #season_info_cp['season'] = season_info_cp['season'].astype(int)
         # season_info_cp = season_info_cp.droplevel('level_1', axis=1)
 
         """
         dur_z = season_info_cp.groupby('season').apply(
             lambda x: self.duration_z(x)).reset_index()
         """
+        season_info = season_info.reset_index()
+        season_info['season'] = season_info['season'].astype(int)
 
+        if self.verbose:
+            print('season_info',season_info)
         dur_z = season_info.groupby('season').apply(
-            lambda x: self.nsn_expected_z(x)).reset_index()
+            lambda x: self.nsn_expected_z(x)).reset_index(drop=True)
         return season_info['season'].to_list(), dur_z
 
     def step_lc(self, obs, gen_par, x1=-2.0, color=0.2):
@@ -741,7 +749,7 @@ class SNNSNYMetric(BaseMetric):
         pandas df with season_length, z, T0_min and T0_max cols
 
         """
-
+        
         if len(grp) < 2:
             nsn = pd.DataFrame(grp['z'].to_list(), columns=['z'])
             nsn.loc[:, 'nsn_expected'] = 0
@@ -749,13 +757,15 @@ class SNNSNYMetric(BaseMetric):
             nsn = self.nsn_from_rate(grp)
 
         if self.verbose:
+            print('dur_z',grp)
             print('nsn expected', nsn)
 
         dur_z = pd.DataFrame(grp)
+        dur_z = dur_z.reset_index()
         dur_z = dur_z.merge(nsn, left_on=['z'], right_on=['z'])
 
-        if 'season' in dur_z.columns:
-            dur_z = dur_z.drop(columns=['season'])
+        #if 'season' in dur_z.columns:
+        #    dur_z = dur_z.drop(columns=['season'])
 
         return dur_z
 
@@ -1118,7 +1128,7 @@ class SNNSNYMetric(BaseMetric):
         """
 
         seleffi = effi[effi['sntype'] == sntype]
-        seleffi = seleffi.reset_index()
+        seleffi = seleffi.reset_index(drop=True)
         seleffi = seleffi.sort_values(by=['z'])
         nsn_cum = np.cumsum(seleffi['nsn'].to_list())
         nsn_cum_m = np.cumsum((seleffi['nsn']-seleffi['nsn_err']).to_list())
@@ -1126,7 +1136,7 @@ class SNNSNYMetric(BaseMetric):
         resa = -1.0
         resb = -1.0
         if zlim < 0:
-            df = pd.DataFrame(seleffi).reset_index()
+            df = pd.DataFrame(seleffi).reset_index(drop=True)
             df.loc[:, 'nsn_cum'] = nsn_cum/nsn_cum[-1]
             df.loc[:, 'nsn_cum_m'] = nsn_cum_m/nsn_cum_m[-1]
             index = df[df['nsn_cum'] < 1].index
@@ -1243,7 +1253,7 @@ class SNNSNYMetric(BaseMetric):
         lc = self.step_lc(obs, gen_par, x1=x1, color=color)
 
         if self.verbose:
-            print(lc['daymax'].unique())
+            print('daymax',lc['daymax'].unique())
 
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])

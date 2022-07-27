@@ -344,7 +344,7 @@ class Plot_NSN_metric:
           label for plot (default: None)
         """
 
-        if erry is not '':
+        if erry != '':
             ax.errorbar(tab[varx], tab[vary],
                         yerr=tab[erry], color=color, marker='o', label=label)
         else:
@@ -491,7 +491,7 @@ def plotNSN_effi(effi, vary, erry=None, legy='', ls='None'):
         if erry is not None:
             yerr = grp[erry]
         ax.errorbar(grp['z'], grp[vary], yerr=yerr,
-                    marker='o', label='(x1,color)=({},{})'.format(x1, color), lineStyle=ls)
+                    marker='o', label='(x1,color)=({},{})'.format(x1, color), ls=ls)
 
     ax.set_xlabel('z')
     ax.set_ylabel(legy)
@@ -902,7 +902,7 @@ class Plot_Saturation_Metric:
           label for plot (default: None)
         """
 
-        if erry is not '':
+        if erry != '':
             ax.errorbar(tab[varx], tab[vary],
                         yerr=tab[erry], color=color, marker='o', label=label)
         else:
@@ -936,7 +936,7 @@ def plot_zlim(effi, sntype='faint', zmin=0.1, zmax=0.5, zlim_coeff=0.85, season=
     from scipy.interpolate import interp1d
 
     seleffi = effi[effi['sntype'] == sntype]
-    seleffi = seleffi.reset_index()
+    seleffi = seleffi.reset_index(drop=True)
     seleffi = seleffi.sort_values(by=['z'])
     seleffi['nsn_m'] = seleffi['nsn']-seleffi['nsn_err']
     seleffi['nsn_p'] = seleffi['nsn']+seleffi['nsn_err']
