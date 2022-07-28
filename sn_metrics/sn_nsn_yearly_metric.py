@@ -2,7 +2,7 @@ import numpy as np
 from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 from sn_tools.sn_calcFast import LCfast
-from sn_tools.sn_telescope import Telescope
+#from sn_tools.sn_telescope import Telescope
 import time
 import pandas as pd
 from scipy.interpolate import interp1d
@@ -102,7 +102,10 @@ class SNNSNYMetric(BaseMetric):
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False, **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False,
+                 zp={'u': 27.009, 'g': 28.399, 'r': 28.177,
+                     'i': 27.879, 'z': 27.482, 'y': 26.687},
+                 mean_wavelength={'u': 366.92, 'g': 479.78, 'r': 623.03, 'i': 754.16, 'z': 869.07, 'y': 973.81}, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -116,7 +119,9 @@ class SNNSNYMetric(BaseMetric):
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
         self.seeingCol = seeingCol
-        self.pixArea = pixArea
+        # self.pixArea = pixArea
+        import healpy as hp
+        self.pixArea = hp.nside2pixarea(16, degrees=True)
         self.ploteffi = ploteffi
         self.x1_color_dist = x1_color_dist
         self.T0s = T0s
@@ -146,7 +151,8 @@ class SNNSNYMetric(BaseMetric):
 
         self.season = season
 
-        telescope = Telescope(airmass=1.2)
+        #telescope = Telescope(airmass=1.2)
+        telescope = None
 
         # LC selection parameters
         self.n_bef = n_bef  # nb points before peak
@@ -167,7 +173,7 @@ class SNNSNYMetric(BaseMetric):
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
-                                      self.snr_min, lightOutput=lightOutput)
+                                      self.snr_min, lightOutput=lightOutput, zp=zp, mean_wavelength=mean_wavelength)
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
@@ -252,6 +258,8 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
+        #dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
+
         time_ref = time.time()
 
         print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
@@ -322,7 +330,7 @@ class SNNSNYMetric(BaseMetric):
         if zseason_allz.empty:
             df = self.resError(self.status['low_effi'])
             return df
-            
+
         nsn_zcomp = self.metric(
             dataSlice, zseason_allz, x1=0.0, color=0.0, zlim=metricValues[['season', 'zcomp', 'dzcomp']], metric='nsn')
 
@@ -351,6 +359,13 @@ class SNNSNYMetric(BaseMetric):
                 toprint += ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
             print('metricValues', metricValues[toprint])
             print('columns', metricValues.columns)
+            idx = metricValues["zcomp"] > 0.0
+            selmet = metricValues[idx]
+
+            if len(selmet) > 0:
+                zcomp = selmet["zcomp"].median()
+                nSN = selmet["nsn"].sum()
+                print('summary', zcomp, nSN)
 
         if self.timeIt:
             print('processing time', self.healpixID, time.time()-time_ref)
@@ -503,9 +518,9 @@ class SNNSNYMetric(BaseMetric):
         if season_info.empty:
             return [], pd.DataFrame()
 
-        #season_info_cp = pd.DataFrame(season_info)
+        # season_info_cp = pd.DataFrame(season_info)
         # get season length depending on the redshift
-        #season_info_cp['season'] = season_info_cp['season'].astype(int)
+        # season_info_cp['season'] = season_info_cp['season'].astype(int)
         # season_info_cp = season_info_cp.droplevel('level_1', axis=1)
 
         """
@@ -516,7 +531,7 @@ class SNNSNYMetric(BaseMetric):
         season_info['season'] = season_info['season'].astype(int)
 
         if self.verbose:
-            print('season_info',season_info)
+            print('season_info', season_info)
         dur_z = season_info.groupby('season').apply(
             lambda x: self.nsn_expected_z(x)).reset_index(drop=True)
         return season_info['season'].to_list(), dur_z
@@ -577,13 +592,15 @@ class SNNSNYMetric(BaseMetric):
         sn_effis['effi_err'] = np.sqrt(
             sn_effis['nsel']*(1.-sn_effis['effi']))/sn_effis['ntot']
 
-        if self.ploteffi:
-            from sn_metrics.sn_plot_live import plotNSN_effi
+        if self.verbose:
             for season in sn_effis['season'].unique():
                 idx = sn_effis['season'] == season
                 print('effis', sn_effis[idx])
-                plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
-                             'Observing Efficiencies', ls='-')
+
+        if self.ploteffi:
+            from sn_metrics.sn_plot_live import plotNSN_effi
+            plotNSN_effi(sn_effis[idx], 'effi', 'effi_err',
+                         'Observing Efficiencies', ls='-')
 
         return sn_effis
 
@@ -749,7 +766,7 @@ class SNNSNYMetric(BaseMetric):
         pandas df with season_length, z, T0_min and T0_max cols
 
         """
-        
+
         if len(grp) < 2:
             nsn = pd.DataFrame(grp['z'].to_list(), columns=['z'])
             nsn.loc[:, 'nsn_expected'] = 0
@@ -757,14 +774,14 @@ class SNNSNYMetric(BaseMetric):
             nsn = self.nsn_from_rate(grp)
 
         if self.verbose:
-            print('dur_z',grp)
+            print('dur_z', grp)
             print('nsn expected', nsn)
 
         dur_z = pd.DataFrame(grp)
         dur_z = dur_z.reset_index()
         dur_z = dur_z.merge(nsn, left_on=['z'], right_on=['z'])
 
-        #if 'season' in dur_z.columns:
+        # if 'season' in dur_z.columns:
         #    dur_z = dur_z.drop(columns=['season'])
 
         return dur_z
@@ -919,6 +936,9 @@ class SNNSNYMetric(BaseMetric):
         pandas df of sn efficiencies vs z
         """
 
+        if self.verbose:
+            print('effi for', lc.name)
+
         lcarr = lc.to_records(index=False)
 
         idx = lcarr['snr_m5'] >= self.snr_min
@@ -1062,6 +1082,10 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
+        if self.verbose:
+            print('selection params', self.n_phase_min,
+                  self.n_phase_max, self.n_bef, self.n_aft)
+            print(dfo)
         df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
@@ -1082,6 +1106,13 @@ class SNNSNYMetric(BaseMetric):
         allSN = pd.concat((goodSN, badSN))
         allSN['select'] &= allSN['Cov_colorcolor'] <= self.sigmaC**2
         idx = allSN['select'] == 1
+
+        if self.verbose:
+            if len(goodSN) > 0:
+                print('good SN', len(goodSN),
+                      goodSN[['daymax', 'Cov_colorcolor']])
+            else:
+                print('no good SN')
 
         return pd.DataFrame({'ntot': [len(allSN)], 'nsel': [len(allSN[idx])]})
 
@@ -1234,7 +1265,7 @@ class SNNSNYMetric(BaseMetric):
             df = self.resError(self.status['season_length'])
             return df
         dur_z = self.check_dur_z(dur_z)
-        
+
         if not seasons or dur_z.empty:
             df = self.resError(self.status['season_length'])
             return df
@@ -1258,7 +1289,9 @@ class SNNSNYMetric(BaseMetric):
         lc = self.step_lc(obs, gen_par, x1=x1, color=color)
 
         if self.verbose:
-            print('daymax',lc['daymax'].unique())
+            print('daymax', lc['daymax'].unique(), len(lc['daymax'].unique()))
+            print(
+                lc[['daymax', 'z', 'flux', 'fluxerr_photo', 'flux_e_sec', 'flux_5', self.m5Col]])
 
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])
@@ -1519,7 +1552,6 @@ class SNNSNYMetric(BaseMetric):
         pandas df with seasons having at least nmin points in redshift
 
         """
-        
 
         dur_z['size'] = dur_z.groupby(['season'])['z'].transform('size')
 
