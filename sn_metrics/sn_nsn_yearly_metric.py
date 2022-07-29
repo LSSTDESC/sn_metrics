@@ -2,12 +2,10 @@ import numpy as np
 from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 from sn_tools.sn_calcFast import LCfast
-#from sn_tools.sn_telescope import Telescope
 import time
 import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
-# from functools import wraps
 from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
@@ -42,7 +40,11 @@ class SNNSNYMetric(BaseMetric):
     nexpCol : str,opt
       number of exposure column name (default : numExposures)
      vistimeCol : str,opt
-        visit time column name (default : visitTime)
+        visit time column name (default : visitTime)  
+    seeingCol : str,opt
+         seeing column name (default: seeingFwhmEff)
+    noteCol: str, opt
+         note column name (default: note)
     season : list,opt
        list of seasons to process (float)(default: -1 = all seasons)
     coadd : bool,opt
@@ -53,14 +55,10 @@ class SNNSNYMetric(BaseMetric):
        max redshift for the study (default: 1.2)
     pixArea: float, opt
        pixel area (default: 9.6)
-    outputType: str, opt
-      output type requested (defauls: zlims)
     verbose: bool,opt
       verbose mode (default: False)
     ploteffi: bool, opt
       display efficiencies during processing (default:False)
-    proxy_level: int, opt
-     proxy level for the processing (default: 0)
     n_bef: int, opt
       number of LC points LC before T0 (default:5)
     n_aft: int, opt
@@ -91,21 +89,42 @@ class SNNSNYMetric(BaseMetric):
       to save figures to make a movie showing how the metric is estimated
     timeIt: bool, opt
       to estimate processing time per pixel (default: False)
+    telescope_params: dict
+      telescope parameters (zp and mean wave lenghts per band)
+    DD_list: list(str), opt
+      list of DD runs in simu db
+    fieldType: str, opt
+      type of field to process (WFD or DD)(default: WFD)
     """
 
-    def __init__(self, lc_reference, dustcorr,
+    def __init__(self,
+                 lc_reference,
+                 dustcorr,
                  metricName='SNNSNYMetric',
-                 mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
-                 filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
-                 nightCol='night', obsidCol='observationId', nexpCol='numExposures',
-                 vistimeCol='visitTime', seeingCol='seeingFwhmEff', season=[-1], coadd=True, zmin=0.0, zmax=1.2, zStep=0.03,
-                 daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
+                 mjdCol='observationStartMJD',
+                 RACol='fieldRA',
+                 DecCol='fieldDec',
+                 filterCol='filter',
+                 m5Col='fiveSigmaDepth',
+                 exptimeCol='visitExposureTime',
+                 nightCol='night',
+                 obsidCol='observationId',
+                 nexpCol='numExposures',
+                 vistimeCol='visitTime',
+                 seeingCol='seeingFwhmEff',
+                 noteCol='note',
+                 season=[-1],
+                 coadd=True,
+                 zmin=0.0, zmax=1.2, zStep=0.03,
+                 daymaxStep=4., pixArea=9.6,
+                 verbose=False, timer=False, ploteffi=False,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False,
-                 zp={'u': 27.009, 'g': 28.399, 'r': 28.177,
-                     'i': 27.879, 'z': 27.482, 'y': 26.687},
-                 mean_wavelength={'u': 366.92, 'g': 479.78, 'r': 623.03, 'i': 754.16, 'z': 869.07, 'y': 973.81}, **kwargs):
+                 telescope_params={'zp': {'u': 27.009, 'g': 28.399, 'r': 28.177, 'i': 27.879, 'z': 27.482, 'y': 26.687},
+                                   'mean_wavelength': {'u': 366.92, 'g': 479.78, 'r': 623.03, 'i': 754.16, 'z': 869.07, 'y': 973.81}},
+                 DD_list=['DD:COSMOS', 'DD:ECDFS', 'DD:EDFS, a', 'DD:EDFS, b', 'DD:ELAISS1',
+                          'DD:XMM-LSS'], fieldType='WFD', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -119,9 +138,10 @@ class SNNSNYMetric(BaseMetric):
         self.nexpCol = nexpCol
         self.vistimeCol = vistimeCol
         self.seeingCol = seeingCol
-        # self.pixArea = pixArea
-        import healpy as hp
-        self.pixArea = hp.nside2pixarea(16, degrees=True)
+        self.noteCol = noteCol
+        self.pixArea = pixArea
+        #import healpy as hp
+        #self.pixArea = hp.nside2pixarea(16, degrees=True)
         self.ploteffi = ploteffi
         self.x1_color_dist = x1_color_dist
         self.T0s = T0s
@@ -131,9 +151,11 @@ class SNNSNYMetric(BaseMetric):
         self.fig_for_movie = fig_for_movie
         self.timeIt = timeIt
         self.slower = slower
+        self.DD_list = DD_list
+        self.fieldType = fieldType
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
+                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.noteCol]
 
         self.stacker = None
         if coadd:
@@ -173,7 +195,7 @@ class SNNSNYMetric(BaseMetric):
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
-                                      self.snr_min, lightOutput=lightOutput, zp=zp, mean_wavelength=mean_wavelength)
+                                      self.snr_min, lightOutput=lightOutput, telescope_params=telescope_params)
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
@@ -206,10 +228,6 @@ class SNNSNYMetric(BaseMetric):
 
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
-
-        # output type and proxy level
-        self.outputType = outputType  # this is to choose the output: lc, sn, effi, zlims
-        self.proxy_level = proxy_level  # proxy level chosen by the user: 0, 1, 2
 
         self.obsstat = obsstat
         self.bandstat = None
@@ -258,8 +276,22 @@ class SNNSNYMetric(BaseMetric):
 
         """
 
+        if self.verbose:
+            print('Observations')
+            print(dataSlice[[self.mjdCol, self.exptimeCol,
+                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
+
+        # remove or keep DD runs depending on run type
+        DDobs = np.in1d(dataSlice[self.noteCol], self.DD_list)
+
+        if self.fieldType == 'DD':
+            dataSlice = dataSlice[DDobs]
+        else:
+            dataSlice = dataSlice[~DDobs]
+
         #dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
 
+        #self.plotData(dataSlice, self.mjdCol, self.m5Col)
         time_ref = time.time()
 
         print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
@@ -311,8 +343,8 @@ class SNNSNYMetric(BaseMetric):
         if self.verbose:
             print('Observations')
             print(dataSlice[[self.mjdCol, self.exptimeCol,
-                  self.filterCol, self.nightCol, self.nexpCol]])
-
+                             self.filterCol, self.nightCol, self.nexpCol]])
+            #self.plotData(dataSlice, self.mjdCol, self.m5Col)
         # get redshift values per season
         zseason = self.z_season(self.season, dataSlice)
         zseason_allz = self.z_season_allz(zseason)
@@ -693,7 +725,7 @@ class SNNSNYMetric(BaseMetric):
 
         return df[idx]
 
-    def duration_z(self, grp, min_duration=60.):
+    def duration_z_deprecated(self, grp, min_duration=60.):
         """
         Method to estimate the season length vs redshift
         This is necessary to take into account boundary effects
@@ -943,6 +975,17 @@ class SNNSNYMetric(BaseMetric):
 
         idx = lcarr['snr_m5'] >= self.snr_min
 
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        daymaxref = 60251.090563
+        daymaxref = 60251.086699
+        ii = (lcarr['daymax']-daymaxref) < 1.e-5
+        sellc = lcarr[ii]
+        ax.plot(sellc['phase'], sellc['flux_e_sec'], 'ko')
+        ax.plot([daymaxref]*2, [0., 2000.], color='r')
+        plt.show()
+        """
         lcarr = np.copy(lcarr[idx])
 
         T0s = np.unique(lcarr['daymax'])
@@ -967,6 +1010,9 @@ class SNNSNYMetric(BaseMetric):
         resdf['nepochs_aft'] = self.get_epochs(nights, flag, flagph)
         flagph = phases <= 0.
         resdf['nepochs_bef'] = self.get_epochs(nights, flag, flagph)
+
+        # replace NaN by 0
+        resdf = resdf.fillna(0)
 
         # get selection efficiencies
         effis = self.efficiencies(resdf)
@@ -1086,6 +1132,7 @@ class SNNSNYMetric(BaseMetric):
             print('selection params', self.n_phase_min,
                   self.n_phase_max, self.n_bef, self.n_aft)
             print(dfo)
+
         df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
@@ -1264,9 +1311,10 @@ class SNNSNYMetric(BaseMetric):
         if not seasons or dur_z.empty:
             df = self.resError(self.status['season_length'])
             return df
+
         dur_z = self.check_dur_z(dur_z)
 
-        if not seasons or dur_z.empty:
+        if dur_z.empty:
             df = self.resError(self.status['season_length'])
             return df
 
@@ -1291,7 +1339,7 @@ class SNNSNYMetric(BaseMetric):
         if self.verbose:
             print('daymax', lc['daymax'].unique(), len(lc['daymax'].unique()))
             print(
-                lc[['daymax', 'z', 'flux', 'fluxerr_photo', 'flux_e_sec', 'flux_5', self.m5Col]])
+                lc[['daymax', 'z', 'flux', 'fluxerr_photo', 'flux_e_sec', 'flux_5']])
 
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])
@@ -1558,3 +1606,11 @@ class SNNSNYMetric(BaseMetric):
         idx = dur_z['size'] >= nmin
 
         return pd.DataFrame(dur_z[idx])
+
+    def plotData(self, data, colx, coly):
+
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.plot(data[colx], data[coly], 'ko')
+
+        plt.show()
