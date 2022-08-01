@@ -89,8 +89,6 @@ class SNNSNYMetric(BaseMetric):
       to save figures to make a movie showing how the metric is estimated
     timeIt: bool, opt
       to estimate processing time per pixel (default: False)
-    telescope_params: dict
-      telescope parameters (zp and mean wave lenghts per band)
     DD_list: list(str), opt
       list of DD runs in simu db
     fieldType: str, opt
@@ -121,8 +119,6 @@ class SNNSNYMetric(BaseMetric):
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False,
-                 telescope_params={'zp': {'u': 27.009, 'g': 28.399, 'r': 28.177, 'i': 27.879, 'z': 27.482, 'y': 26.687},
-                                   'mean_wavelength': {'u': 366.92, 'g': 479.78, 'r': 623.03, 'i': 754.16, 'z': 869.07, 'y': 973.81}},
                  DD_list=['DD:COSMOS', 'DD:ECDFS', 'DD:EDFS, a', 'DD:EDFS, b', 'DD:ELAISS1',
                           'DD:XMM-LSS'], fieldType='WFD', **kwargs):
 
@@ -195,7 +191,7 @@ class SNNSNYMetric(BaseMetric):
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
-                                      self.snr_min, lightOutput=lightOutput, telescope_params=telescope_params)
+                                      self.snr_min, lightOutput=lightOutput)
         # loading parameters
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
