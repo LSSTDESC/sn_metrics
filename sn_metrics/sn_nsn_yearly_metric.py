@@ -273,7 +273,7 @@ class SNNSNYMetric(BaseMetric):
         """
 
         if self.verbose:
-            print('Observations')
+            print('Observations', len(dataSlice))
             print(dataSlice[[self.mjdCol, self.exptimeCol,
                              self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
 
@@ -1610,3 +1610,62 @@ class SNNSNYMetric(BaseMetric):
         ax.plot(data[colx], data[coly], 'ko')
 
         plt.show()
+
+    def getseason(self, obs, season_gap=80.0, mjdCol="observationStartMJD"):
+        """
+        Method to estimate seasons
+
+        Parameters
+        ------------
+        obs: `np.ndarray`
+            array of observations
+        season_gap: `float`, optional
+            minimal gap required to define a season (default: 80 days)
+        mjdCol: `str`, optional
+            col name for MJD infos (default: observationStartMJD)
+
+        Returns
+        ---------
+        obs : `np.ndarray`
+            original numpy array with seasonnumber appended
+        """
+        import numpy.lib.recfunctions as nlr
+        # check whether season has already been estimated
+        obs.sort(order=mjdCol)
+
+        seasoncalc = np.ones(obs.size, dtype=int)
+
+        if len(obs) > 1:
+            diff = np.diff(obs[mjdCol])
+            flag = np.where(diff > season_gap)[0]
+
+            if len(flag) > 0:
+                for i, indx in enumerate(flag):
+                    seasoncalc[indx + 1:] = i + 2
+
+        obs = nlr.append_fields(obs, "season", seasoncalc)
+
+        return obs
+
+    def dummy_data(self):
+
+        simdata = {}
+        with pd.HDFStore('test_simData.hdf') as f:
+            keys = f.keys()
+            for k in keys:
+                newkey = k.lstrip("/")
+                simdata[newkey] = f.get(k).to_records()
+
+        dataSlice = simdata['dense_pointing']
+        if 'season' not in dataSlice.dtype.names:
+            dataSlice = self.getseason(dataSlice, mjdCol=self.mjdCol)
+        import numpy.lib.recfunctions as rf
+        #dataSlice = rf.append_fields(dataSlice, 'season', [1]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'healpixID', [0]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'pixRA', [0.]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'pixDec', [0.]*len(dataSlice))
+
+        return dataSlice
