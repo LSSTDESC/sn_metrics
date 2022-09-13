@@ -106,7 +106,12 @@ class SNSNRTIMEMetric(BaseMetric):
                  pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', **kwargs):
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='',
+                 downtimes_tel=True,
+                 downtimes_telcloud=True,
+                 recovery=3,
+                 z_tracker=0.7,
+                 recovery_threshold=38., **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -237,6 +242,26 @@ class SNSNRTIMEMetric(BaseMetric):
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
                                            templateLC=templateLC, dbName=dbName)
 
+        self.downtimes_tel = downtimes_tel
+        self.downtimes_telcloud = downtimes_telcloud
+        self.recovery = recovery
+        self.z_tracker = z_tracker
+        self.recovery_threshold = recovery_threshold
+
+        baseName = 'snrtime_gaps'
+        obsName = 'obs_gaps'
+        if self.recovery > 0:
+            baseName += '_recovery_{}'.format(self.recovery)
+            obsName += '_recovery_{}'.format(self.recovery)
+        if not self.downtimes_tel and not self.downtimes_telcloud:
+            baseName = 'snrtime_nogaps'
+            obsName = 'obs_nogaps'
+        baseName += '_z_tracker_{}.hdf5'.format(np.round(self.z_tracker, 2))
+        obsName += '_z_tracker_{}.npy'.format(np.round(self.z_tracker, 2))
+
+        self.outName = baseName
+        self.outobsName = obsName
+
     def run(self, dataSlice,  slicePoint=None):
         """
         Run method of the metric
@@ -283,15 +308,14 @@ class SNSNRTIMEMetric(BaseMetric):
         # plt.plot(res['MJD_obs'], res['SNR_z'], 'r*')
         plt.show()
         """
-        print('there man')
-        self.sequence_autogen(template_obs, int(cadence_obs),
-                              downtimes_tel=True, downtimes_telcloud=True, recovery=2, recovery_threshold=61.)
-        print(test)
 
+        self.sequence_autogen(template_obs, int(cadence_obs),
+                              downtimes_tel=self.downtimes_tel, downtimes_telcloud=self.downtimes_telcloud, recovery=self.recovery, recovery_threshold=self.recovery_threshold)
+        print(test)
         obs = pd.DataFrame(np.copy(dataSlice))
         # obs = obs[obs['season'].isin(seasons)]
         sn = self.simul_sn(obs)
-        print('simulation', sn)
+
         autogen = True
         frac = 0.5
         self.cadence_obs = self.cadence(dataSlice)
@@ -358,7 +382,7 @@ class SNSNRTIMEMetric(BaseMetric):
         if autogen:
             dataSlice = obs_gen
         sn = self.simul_sn(dataSlice)
-        print('simulation new', sn)
+
         import matplotlib.pyplot as plt
         band = 'z'
         fig, ax = plt.subplots()
@@ -697,7 +721,7 @@ class SNSNRTIMEMetric(BaseMetric):
         if not dur_z.empty:
             gen_par = dur_z.groupby(['z', 'season']).apply(
                 lambda x: self.calcDaymax(x)).reset_index()
-            print('hello', gen_par)
+
             lc = self.step_lc(data, gen_par)
             if not lc.empty:
                 lc.index = lc.index.droplevel()
@@ -953,7 +977,7 @@ class SNSNRTIMEMetric(BaseMetric):
         mjd_min, df_downtimes = self.load_downtimes(
             downtimes_tel, downtimes_telcloud)
         # analysis downtimes here
-        self.gaps_downtimes(mjd_min, df_downtimes, plot=True)
+        #self.gaps_downtimes(mjd_min, df_downtimes, plot=False)
 
         mjd_min_survey = mjd_min
 
@@ -991,14 +1015,15 @@ class SNSNRTIMEMetric(BaseMetric):
             mjd += 1
             nnight += 1
             inight = int(night_min+nnight)
-            #print('running', mjd, inight, night_min)
             isdowntime = False
             if not df_downtimes.empty:
                 idow = df_downtimes['night'].isin([inight])
                 isdowntime = not df_downtimes[idow].empty
             if inight > night_min:
-                df_time = self.get_SNRTime_one_lc_new(mjd, obs)
+                df_time = self.get_SNRTime_one_lc_new(
+                    mjd, obs, zref=self.z_tracker)
                 df_res = pd.concat((df_res, df_time))
+
             if obs.empty and not isdowntime:
                 # first mjd, first obs
                 obs = self.add_obs(obs, inight, mjd, template_obs)
@@ -1010,7 +1035,7 @@ class SNSNRTIMEMetric(BaseMetric):
                     Nobs = len(np.unique(obs['night']))
                     Nexp = int((mjd-mjd_min)/cadence)+1
                     diff_night = Nexp-Nobs
-                    print('dd', mjd, diff_night, Nexp, Nobs)
+                    #print('dd', mjd, diff_night, Nexp, Nobs)
                     if recovery == 3 and diff_night >= 1 and inight >= 10 and not isdowntime:
                         obs = self.add_obs(
                             obs, inight, mjd, template_obs, 1)
@@ -1052,10 +1077,11 @@ class SNSNRTIMEMetric(BaseMetric):
         print('number of obs', nnight_expected, len(np.unique(obs['night'])), np.median(
             np.diff(obs[iii]['observationStartMJD'])))
         # display the results
-        df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
-        np.save('obs_test.npy', obs.to_records(index=False))
+        #df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
+        df_res.to_hdf(self.outName, key='sn_wfd')
+        np.save(self.outobsName, obs.to_records(index=False))
 
-        self.plot_resu(df_res, obs)
+        #self.plot_resu(df_res, obs)
 
     def plot_resu(self, df_res, obs):
 
@@ -1572,6 +1598,7 @@ class SNSNRTIMEMetric(BaseMetric):
             lc['sntype'] = sntype[key]
             res = pd.concat((res, lc))
             # break
+
         return res
 
     def plot_for_movie(self, obs, lc, gen_par):
