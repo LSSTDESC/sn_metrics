@@ -107,11 +107,7 @@ class SNSNRTIMEMetric(BaseMetric):
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='',
-                 downtimes_tel=True,
-                 downtimes_telcloud=True,
-                 recovery=3,
-                 z_tracker=0.7,
-                 recovery_threshold=38., **kwargs):
+                 z_tracker=0.7, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -242,25 +238,42 @@ class SNSNRTIMEMetric(BaseMetric):
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
                                            templateLC=templateLC, dbName=dbName)
 
-        self.downtimes_tel = downtimes_tel
-        self.downtimes_telcloud = downtimes_telcloud
-        self.recovery = recovery
         self.z_tracker = z_tracker
-        self.recovery_threshold = recovery_threshold
 
-        baseName = 'snrtime_gaps'
-        obsName = 'obs_gaps'
-        if self.recovery > 0:
-            baseName += '_recovery_{}'.format(self.recovery)
-            obsName += '_recovery_{}'.format(self.recovery)
-        if not self.downtimes_tel and not self.downtimes_telcloud:
-            baseName = 'snrtime_nogaps'
-            obsName = 'obs_nogaps'
-        baseName += '_z_tracker_{}.hdf5'.format(np.round(self.z_tracker, 2))
-        obsName += '_z_tracker_{}.npy'.format(np.round(self.z_tracker, 2))
+    def fichName(self, downtimes_tel, downtimes_telcloud, recovery, z_tracker, baseName='snrtime', baseExtens='hdf5'):
+        """
+        Method to estimate output file Names
 
-        self.outName = baseName
-        self.outobsName = obsName
+        Parameters
+        --------------
+        downtime_tel: bool
+          to include telescope downtime or not
+        downtime_telcloud: bool
+          to include cloud downtime or not
+        recovery: int
+          recovery number scenario
+        z_tracker: float
+           redshift for the gap tracker metric
+        baseName: str, opt
+          prefix for output name (default: snrtime)
+        baseExtens: str, opt
+          extension of the output file (default: hdf5)
+
+        Returns
+        ----------
+        the output fileName (str)
+
+        """
+
+        bName = baseName+'_gaps'
+        if recovery > 0:
+            bName += '_recovery_{}'.format(recovery)
+        if not downtimes_tel and not downtimes_telcloud:
+            bName = '{}_nogaps'.format(baseName)
+        bName += '_z_tracker_{}.{}'.format(
+            np.round(self.z_tracker, 2), baseExtens)
+
+        return bName
 
     def run(self, dataSlice,  slicePoint=None):
         """
@@ -309,8 +322,27 @@ class SNSNRTIMEMetric(BaseMetric):
         plt.show()
         """
 
-        self.sequence_autogen(template_obs, int(cadence_obs),
-                              downtimes_tel=self.downtimes_tel, downtimes_telcloud=self.downtimes_telcloud, recovery=self.recovery, recovery_threshold=self.recovery_threshold)
+        scenarios = [(0, 0, 0),  # no gaps
+                     (1, 1, 0),  # gaps no recovery
+                     (1, 1, 1),  # gaps recovery 1
+                     (1, 1, 2),  # gaps recovery 2
+                     (1, 1, 3),  # gaps recovery 3
+                     ]
+
+        recovery_threshold = 0.0
+        for io, scen in enumerate(scenarios):
+            snrName = self.fichName(scen[0], scen[1], scen[2], self.z_tracker)
+            obsName = self.fichName(scen[0], scen[1], scen[2], self.z_tracker,
+                                    baseName='obs', baseExtens='npy')
+            print('iooo', io, recovery_threshold)
+            mean_snr_z = self.sequence_autogen(template_obs, int(cadence_obs),
+                                               downtimes_tel=scen[0],
+                                               downtimes_telcloud=scen[1],
+                                               recovery=scen[2],
+                                               recovery_threshold=recovery_threshold,
+                                               snrName=snrName, obsName=obsName)
+            if io == 0:
+                recovery_threshold = mean_snr_z-1.
         print(test)
         obs = pd.DataFrame(np.copy(dataSlice))
         # obs = obs[obs['season'].isin(seasons)]
@@ -971,7 +1003,7 @@ class SNSNRTIMEMetric(BaseMetric):
     def sequence_autogen(self, template_obs, cadence,
                          mjd_min=-1., season_length=180.,
                          downtimes_tel=False, downtimes_telcloud=False,
-                         recovery=0, recovery_threshold=65.):
+                         recovery=0, recovery_threshold=65., snrName='', obsName=''):
 
         # get mjd_min from survey
         mjd_min, df_downtimes = self.load_downtimes(
@@ -1078,10 +1110,16 @@ class SNSNRTIMEMetric(BaseMetric):
             np.diff(obs[iii]['observationStartMJD'])))
         # display the results
         #df_res.to_hdf('testrecovery.hdf5', key='sn_wfd')
-        df_res.to_hdf(self.outName, key='sn_wfd')
-        np.save(self.outobsName, obs.to_records(index=False))
+        df_res.to_hdf(snrName, key='sn_wfd')
+        np.save(obsName, obs.to_records(index=False))
+
+        print(df_res.columns)
+
+        idx = df_res['MJD_obs'] >= 60400
+        idx = df_res['MJD_obs'] <= 60450
 
         #self.plot_resu(df_res, obs)
+        return np.mean(df_res[idx]['SNR_z'])
 
     def plot_resu(self, df_res, obs):
 
