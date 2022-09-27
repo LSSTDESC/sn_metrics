@@ -169,9 +169,6 @@ class SNNSNYMetric(BaseMetric):
 
         self.season = season
 
-        #telescope = Telescope(airmass=1.2)
-        telescope = None
-
         # LC selection parameters
         self.n_bef = n_bef  # nb points before peak
         self.n_aft = n_aft  # nb points after peak
@@ -187,7 +184,7 @@ class SNNSNYMetric(BaseMetric):
 
         # loading reference LC files
         for key, vals in lc_reference.items():
-            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
+            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1],
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
