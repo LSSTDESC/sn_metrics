@@ -119,8 +119,8 @@ class SNNSNYMetric(BaseMetric):
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False,
-                 DD_list=['DD:COSMOS', 'DD:ECDFS', 'DD:EDFS, a', 'DD:EDFS, b', 'DD:ELAISS1',
-                          'DD:XMM-LSS'], fieldType='WFD', **kwargs):
+                 DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
+                          'XMM-LSS'], fieldType='WFD', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -273,7 +273,7 @@ class SNNSNYMetric(BaseMetric):
         """
 
         if self.verbose:
-            print('Observations', len(dataSlice))
+            print('Observations', len(dataSlice), dataSlice[self.noteCol])
             print(dataSlice[[self.mjdCol, self.exptimeCol,
                              self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
 
@@ -345,8 +345,14 @@ class SNNSNYMetric(BaseMetric):
         zseason = self.z_season(self.season, dataSlice)
         zseason_allz = self.z_season_allz(zseason)
 
+        if self.verbose:
+            print('Estimating zcomplete')
+
         metricValues = self.metric(
             dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1, metric='zlim')
+
+        if self.verbose:
+            print('metric zcomplete', metricValues)
 
         zseason = pd.DataFrame(metricValues[['season', 'zcomp']])
         zseason.loc[:, 'zmin'] = 0.01
@@ -911,7 +917,6 @@ class SNNSNYMetric(BaseMetric):
         gen_par = gen_par_orig[idx].to_records(index=False)
 
         sntype = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
-        res = pd.DataFrame()
         key = (np.round(x1, 1), np.round(color, 1))
         vals = self.lcFast[key]
 
@@ -924,9 +929,8 @@ class SNNSNYMetric(BaseMetric):
         lc['x1'] = key[0]
         lc['color'] = key[1]
         lc['sntype'] = sntype[key]
-        res = pd.concat((res, lc))
 
-        return res
+        return lc
 
     def plot_for_movie(self, obs, lc, gen_par):
         """
