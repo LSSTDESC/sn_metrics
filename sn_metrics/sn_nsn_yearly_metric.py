@@ -117,7 +117,7 @@ class SNNSNYMetric:
                  lightOutput=True, T0s='all', zlim_coeff=0.95,
                  ebvofMW=-1., bands='grizy', fig_for_movie=False, templateLC={}, OSName='', timeIt=False, slower=False,
                  DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
-                          'XMM-LSS'], fieldType='WFD', fieldName='COSMOS', **kwargs):
+                          'XMM-LSS'], fieldType='WFD', fieldName='COSMOS', select_epochs=True, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -146,6 +146,7 @@ class SNNSNYMetric:
         self.DD_list = DD_list
         self.fieldType = fieldType
         self.fieldName = fieldName
+        self.select_epochs = select_epochs
 
         season = list(seasons.split(','))
         if season[0] == '-':
@@ -271,11 +272,14 @@ class SNNSNYMetric:
         ----------
 
         """
+        # select observations filter
+        goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
+        dataSlice = dataSlice[goodFilters]
 
         if self.verbose:
-            print('Observations', len(dataSlice), dataSlice[self.noteCol])
-            print(dataSlice[[self.mjdCol, self.exptimeCol,
-                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
+            print('Observations before coadd',
+                  len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
+                                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
 
         # remove or keep DD runs depending on run type
         if self.fieldType == 'WFD':
@@ -317,10 +321,6 @@ class SNNSNYMetric:
         """
         # print(obs_alloc)
 
-        # select observations filter
-        goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
-        dataSlice = dataSlice[goodFilters]
-
         if self.twilight:
             idx = dataSlice[self.exptimeCol] >= 10.
             dataSlice = dataSlice[idx]
@@ -338,9 +338,9 @@ class SNNSNYMetric:
             return df
         dataSlice.sort(order=self.mjdCol)
         if self.verbose:
-            print('Observations')
-            print(dataSlice[[self.mjdCol, self.exptimeCol,
-                             self.filterCol, self.nightCol, self.nexpCol]])
+            print('Observations - after coadd',
+                  len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
+                                             self.filterCol, self.nightCol, self.nexpCol]])
             #self.plotData(dataSlice, self.mjdCol, self.m5Col)
         # get redshift values per season
         zseason = self.z_season(self.season, dataSlice)
@@ -591,6 +591,9 @@ class SNNSNYMetric:
         SN light curves (astropy table)
 
         """
+        if self.verbose:
+            print('generator parameters', gen_par, len(gen_par))
+
         lc = obs.groupby(['season']).apply(
             lambda x: self.genLC(x, gen_par, x1, color))
 
@@ -1001,7 +1004,7 @@ class SNNSNYMetric:
 
         # get n_phase_min, n_phase_max
         for vv in ['n_phmin', 'n_phmax', 'F_x0x0', 'F_x0x1', 'F_x0daymax', 'F_x0color', 'F_x1x1', 'F_x1daymax',
-                   'F_x1color', 'F_daymaxdaymax', 'F_daymaxcolor', 'F_colorcolor']:
+                   'F_x1color', 'F_daymaxdaymax', 'F_daymaxcolor', 'F_colorcolor', 'n_bef', 'n_aft']:
             resdf[vv] = self.get_sum(lcarr, vv, len(deltaT), flag)
 
         nights = np.tile(lcarr['night'], (len(deltaT), 1))
@@ -1132,13 +1135,18 @@ class SNNSNYMetric:
         if self.verbose:
             print('selection params', self.n_phase_min,
                   self.n_phase_max, self.n_bef, self.n_aft)
-            print(dfo)
+            print(dfo[['daymax', 'n_phmin', 'n_phmax',
+                       'F_colorcolor', 'nepochs_aft', 'nepochs_bef', 'n_bef', 'n_aft']])
 
         df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
-        df['select'] &= df['nepochs_bef'] >= self.n_bef
-        df['select'] &= df['nepochs_aft'] >= self.n_aft
+        if self.select_epochs:
+            df['select'] &= df['nepochs_bef'] >= self.n_bef
+            df['select'] &= df['nepochs_aft'] >= self.n_aft
+        else:
+            df['select'] &= df['n_bef'] >= self.n_bef
+            df['select'] &= df['n_aft'] >= self.n_aft
         df['select'] = df['select'].astype(int)
         df['Cov_colorcolor'] = 100.
 

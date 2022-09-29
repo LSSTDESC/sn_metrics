@@ -36,3 +36,4 @@ fig_for_movie 0 int #to produce png to make a movie
 slower 0 int #to estimate additionnal parameters (cadence,..)
 DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
 fieldName COSMOS str #fieldName - for DD only
+select_epochs 1 int #to select LC based on epochs
