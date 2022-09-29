@@ -1,0 +1,38 @@
+## SNY metric parameters
+metric NSNY str #metric name
+OSName alt_sched str #OS to process
+seasons -1 str #seasons to process
+fieldType DD str #field type DD or WFD
+nside 64 int #healpix nside
+coadd 1 int #nightly coaddition
+RAmin 0.0 float #RA min for obs area - for WDF only
+RAmax 360. float #RA max for obs area - for WDF only
+Decmin -1.0 float #Dec min for obs area - for WDF only
+Decmax -1.0 float #Dec max for obs area - for WDF only
+zmin 0.1 float #z min for simu
+zmax 0.5 float #z max for simu
+zStep 0.02 float #z step for simu
+daymaxStep 2 int #daymax step for simu
+zlim_coeff 0.95 float #zlim_coeff for metric estimation
+T0s all str #T0 values to consider
+outDir MetricOutput str #output dir
+bluecutoff 380.0 float #blue cutoff value
+redcutoff 800.0 float #red cutoff value
+error_model 0 int #error model use
+ebvofMW -1.0 float #E(B-V) of MW
+ploteffi 0 int #plot efficiencies for the metric
+npixels -1 int #number of pixels to process
+gamma_file gamma_DDF.hdf5 str #gamma file to use for fast-simulation
+bands grizy str #filters for simulation
+n_bef 4 int #nepochs before max
+n_aft 10 int #nepochs after max
+snr_min 1. float #min SNR LC points
+n_phase_min 1 int #nlc points with phase <= -10
+n_phase_max 1 int #nlc points with phase >= 20
+ploteffi 0 int #plot efficiencies for the metric
+verbose 0 int #verbose mode for the metric
+lightOutput 0 int #LC fast output
+fig_for_movie 0 int #to produce png to make a movie
+slower 0 int #to estimate additionnal parameters (cadence,..)
+DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
+fieldName COSMOS str #fieldName - for DD only
