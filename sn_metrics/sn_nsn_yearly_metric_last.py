@@ -1,4 +1,5 @@
 import numpy as np
+#from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 from sn_tools.sn_calcFast import LCfast
 import time
@@ -10,6 +11,7 @@ from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
 
 
+# class SNNSNYMetric(BaseMetric):
 class SNNSNYMetric:
     """
     Measure zlim of type Ia supernovae.
@@ -68,6 +70,8 @@ class SNNSNYMetric:
        number of LC points with phase<= -5(default:1)
     n_phase_max: int, opt
       number of LC points with phase>= 20 (default: 1)
+    x1_color_dist: ,opt
+     (x1,color) distribution (default: None)
     lightOutput: bool, opt
       output level of information (light or more) (default:True)
     T0s: str,opt
@@ -108,16 +112,16 @@ class SNNSNYMetric:
                  vistimeCol='visitTime',
                  seeingCol='seeingFwhmEff',
                  noteCol='note',
-                 seasons='-1',
+                 season=[-1],
                  coadd=True,
                  zmin=0.0, zmax=1.2, zStep=0.03,
                  daymaxStep=4., pixArea=9.6,
-                 verbose=False, ploteffi=False,
+                 verbose=False, timer=False, ploteffi=False,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
-                 lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., bands='grizy', fig_for_movie=False, templateLC={}, OSName='', timeIt=False, slower=False,
+                 x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
+                 ebvofMW=-1., obsstat=True, bands='grizy', fig_for_movie=False, templateLC={}, dbName='', timeIt=False, slower=False,
                  DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
-                          'XMM-LSS'], fieldType='WFD', fieldName='COSMOS', **kwargs):
+                          'XMM-LSS'], fieldType='WFD', **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -136,6 +140,7 @@ class SNNSNYMetric:
         #import healpy as hp
         #self.pixArea = hp.nside2pixarea(16, degrees=True)
         self.ploteffi = ploteffi
+        self.x1_color_dist = x1_color_dist
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
         self.ebvofMW = ebvofMW
@@ -145,13 +150,6 @@ class SNNSNYMetric:
         self.slower = slower
         self.DD_list = DD_list
         self.fieldType = fieldType
-        self.fieldName = fieldName
-
-        season = list(seasons.split(','))
-        if season[0] == '-':
-            season = -1
-        else:
-            season = list(map(int, season))
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.noteCol]
@@ -216,6 +214,7 @@ class SNNSNYMetric:
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
+        self.timer = timer
 
         # status of the pixel after processing
         self.status = dict(
@@ -224,13 +223,12 @@ class SNNSNYMetric:
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
 
-        """
         self.obsstat = obsstat
         self.bandstat = None
         if self.obsstat:
             self.bandstat = ['u', 'g', 'r', 'i', 'z', 'y', 'gr',
                              'gi', 'gz', 'iz', 'uu', 'gg', 'rr', 'ii', 'zz', 'yy']
-           
+            """
             bands = 'grizy'
             for ba in bands:
                 self.bandstat.append(ba)
@@ -246,14 +244,14 @@ class SNNSNYMetric:
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
-                                           templateLC=templateLC, dbName=OSName)
+                                           templateLC=templateLC, dbName=dbName)
 
         # count the number of simulated sn
         self.nsimu = 0
 
         # remove short exposure (twilight) to avoid artificial season length
         self.twilight = False
-        if 'twilight' in OSName:
+        if 'twilight' in dbName:
             self.twilight = True
 
     def run(self, dataSlice,  slicePoint=None, imulti=0):
@@ -278,20 +276,19 @@ class SNNSNYMetric:
                              self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
 
         # remove or keep DD runs depending on run type
-        if self.fieldType == 'WFD':
-            DDobs = np.in1d(dataSlice[self.noteCol], self.DD_list)
-            dataSlice = dataSlice[~DDobs]
+        DDobs = np.in1d(dataSlice[self.noteCol], self.DD_list)
+
         if self.fieldType == 'DD':
-            DDobs = dataSlice[self.noteCol] == self.fieldName
             dataSlice = dataSlice[DDobs]
+        else:
+            dataSlice = dataSlice[~DDobs]
 
         #dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
 
         #self.plotData(dataSlice, self.mjdCol, self.m5Col)
         time_ref = time.time()
 
-        print('processing pixel', imulti, self.fieldName,
-              np.unique(dataSlice['healpixID']))
+        print('processing pixel', imulti, np.unique(dataSlice['healpixID']))
 
         healpixID = np.unique(dataSlice['healpixID']).tolist()
 
