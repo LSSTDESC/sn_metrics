@@ -1,5 +1,5 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
+#from rubin_sim.maf.metrics import BaseMetric
 from sn_stackers.coadd_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
@@ -62,7 +62,8 @@ def verbose_this(arg):
     return verbose
 
 
-class SNNSNMetric(BaseMetric):
+# class SNNSNMetric(BaseMetric):
+class SNNSNMetric:
     """
     Measure zlim of type Ia supernovae.
 
@@ -145,7 +146,7 @@ class SNNSNMetric(BaseMetric):
                  mjdCol='observationStartMJD', RACol='fieldRA', DecCol='fieldDec',
                  filterCol='filter', m5Col='fiveSigmaDepth', exptimeCol='visitExposureTime',
                  nightCol='night', obsidCol='observationId', nexpCol='numExposures', seeingCol='seeingFwhmEff',
-                 vistimeCol='visitTime', season=[-1], coadd=True, zmin=0.0, zmax=1.2, zStep=0.03,
+                 vistimeCol='visitTime', seasons='-1', coadd=True, zmin=0.0, zmax=1.2, zStep=0.03,
                  daymaxStep=4., pixArea=9.6, outputType='zlims', verbose=False, timer=False, ploteffi=False, proxy_level=0,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1,
                  x1_color_dist=None, lightOutput=True, T0s='all', zlim_coeff=0.95,
@@ -173,6 +174,12 @@ class SNNSNMetric(BaseMetric):
         self.fig_for_movie = fig_for_movie
         self.timeIt = timeIt
 
+        season = list(seasons.split(','))
+        if season[0] == '-':
+            season = -1
+        else:
+            season = list(map(int, season))
+
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol]
 
@@ -187,12 +194,11 @@ class SNNSNMetric(BaseMetric):
                                         col_group=[
                                             self.filterCol, self.nightCol],
                                         col_coadd=[self.m5Col, 'visitExposureTime'])
+        """
         super(SNNSNMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
-
+        """
         self.season = season
-
-        telescope = Telescope(airmass=1.2)
 
         # LC selection parameters
         self.n_bef = n_bef  # nb points before peak
@@ -208,7 +214,7 @@ class SNNSNMetric(BaseMetric):
 
         # loading reference LC files
         for key, vals in lc_reference.items():
-            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1], telescope,
+            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1],
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
@@ -271,7 +277,7 @@ class SNNSNMetric(BaseMetric):
             self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
                                            self.n_phase_min, self.n_phase_max, self.errmodrel,
                                            self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
-                                           templateLC=templateLC, dbName=dbName)
+                                           templateLC=templateLC, dbName=OSName)
 
         # get reference time for LC night
         """
@@ -282,7 +288,7 @@ class SNNSNMetric(BaseMetric):
         """
         self.mjd_LSST_Start = mjd_LSST_Start
 
-    def run(self, dataSlice,  slicePoint=None):
+    def run(self, dataSlice,  imulti=0, slicePoint=None):
         """
         Run method of the metric
 
