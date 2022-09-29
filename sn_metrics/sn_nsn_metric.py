@@ -333,14 +333,13 @@ class SNNSNMetric:
 
         if self.verbose:
             print('Observations')
-            print(dataSlice[[self.mjdCol, self.exptimeCol,
+            print(len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
                   self.filterCol, self.nightCol, self.nexpCol]])
         dataSlice = self.stacker._run(dataSlice)
 
         if self.verbose:
-            print('Observations - after coadd')
-            print(dataSlice[[self.mjdCol, self.exptimeCol,
-                             self.filterCol, self.nightCol, self.nexpCol]])
+            print('Observations - after coadd', len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
+                                                                           self.filterCol, self.nightCol, self.nexpCol]])
 
         if not healpixID:
             zlimsdf = pd.DataFrame()
@@ -610,6 +609,7 @@ class SNNSNMetric:
         if self.verbose:
             print("LC generation")
 
+        """
         sn = pd.DataFrame()
         sn_infos = pd.DataFrame()
         if ebvofMW < 0.25:
@@ -626,7 +626,7 @@ class SNNSNMetric:
                 sel = sel.sort_values(by=['z', 'daymax'])
                 print('sn and lc', len(sn),
                       sel[['x1', 'color', 'z', 'daymax', 'Cov_colorcolor', 'n_bef', 'n_aft']])
-
+        """
         # estimate m5 median and gaps
         m5_med, gap_max, gap_med = self.getInfos_obs(obs)
 
@@ -684,11 +684,13 @@ class SNNSNMetric:
                     sel[["x1", "color", "z", "daymax",
                          "Cov_colorcolor", "n_bef", "n_aft"]],
                 )
-                print('effidf', self.effidf(
-                    sel, verbose=self.verbose, timer=self.timer))
+                # print('effidf', self.effidf(
+                #   sel, verbose=self.verbose, timer=self.timer))
 
             effi_seasondf = self.effidf(
                 sn, verbose=self.verbose, timer=self.timer)
+            if self.verbose:
+                print('efficiencies', effi_seasondf)
 
             # zlims can only be estimated if efficiencies are ok
             idx = effi_seasondf['z'] <= 0.2
@@ -1911,8 +1913,8 @@ class SNNSNMetric:
             tab = self.select_error_model(tab)
 
         if self.verbose:
-            print('after sel errmodel', len(tab))
-            print(tab[['band', 'snr_m5',
+            print('after sel errmodel', len(tab), self.errmodrel)
+            print(tab[['daymax', 'band', 'snr_m5',
                   'fluxerr_photo']])
 
         # select LC points with min snr
@@ -1934,16 +1936,17 @@ class SNNSNMetric:
             for jb, valb in enumerate(self.params):
                 if jb >= ia:
                     tosum.append('F_'+vala+valb)
-        # tosum += ['n_aft', 'n_bef', 'n_phmin', 'n_phmax']
-        tosum += ['n_phmin', 'n_phmax']
+        tosum += ['n_aft', 'n_bef', 'n_phmin', 'n_phmax']
         # apply the sum on the group
-        # sums = groups[tosum].sum().reset_index()
+        sums = groups[tosum].sum().reset_index()
 
-        sums = groups.apply(
-            lambda x: self.sumIt(x, tosum)).reset_index()
+        #tosum += ['n_phmin', 'n_phmax']
+        # sums = groups.apply(
+        #    lambda x: self.sumIt(x, tosum)).reset_index()
 
         if self.verbose:
-            print('jjj', sums)
+            print('jjj', sums[['daymax', 'season', 'n_phmin',
+                  'n_phmax', 'F_colorcolor', 'n_bef', 'n_aft']])
             idx = np.abs(sums['daymax']-60881.94101) < 1.e-5
             print('for sel', sums[idx])
         # select LC according to the number of points bef/aft peak
@@ -2164,12 +2167,16 @@ class SNNSNMetric:
                 gen_par_cp = gen_par_cp[idx]
 
             lc = vals(obs, ebvofMW, gen_par_cp, bands='grizy')
-            """
-            if key == (-2.0, 0.2):
-                obs.sort(order=self.mjdCol)
-                print('obs', obs[[self.mjdCol, self.filterCol]])
-                self.plotLC_debug(lc, daymax=61016.17090)
-            """
+            if self.verbose:
+                if key == (-2.0, 0.2):
+                    obs.sort(order=self.mjdCol)
+                    #print('obs', obs[[self.mjdCol, self.filterCol]])
+                    print('daymax', lc['daymax'].unique(),
+                          len(lc['daymax'].unique()))
+                    print(
+                        lc[['daymax', 'z', 'flux', 'fluxerr_photo', 'flux_e_sec', 'flux_5']])
+                    #self.plotLC_debug(lc, daymax=61016.17090)
+
             tt = lc.groupby(['z', 'daymax']).apply(
                 lambda x: self.sn_cad_gap(x)).reset_index()
             sn_info = tt.groupby(['z']).apply(

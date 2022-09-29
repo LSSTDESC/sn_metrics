@@ -38,6 +38,6 @@ DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
 fieldName COSMOS str #fieldName - for DD only
 obsstat 0 int #to estimate cadence infos
 mjd_LSST_Start 60218.83514 float #to get the first night
-errmodrel 0.1 float #accepted error model for LC simu
+errmodrel 0.0 float #accepted error model for LC simu
 proxy_level 0 int # proxy level for running
 x1_color_dist '' str #x1color distribution
