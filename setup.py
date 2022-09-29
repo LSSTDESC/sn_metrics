@@ -15,6 +15,8 @@ setup(
     author_email='philippe.gris@clermont.in2p3.fr',
     license='BSD',
     packages=['sn_metrics', 'sn_metrics_input'],
+    # All files from folder sn_metrics_input
+    package_data={'sn_metrics_input': ['*.txt']},
     python_requires='>=3.5',
     zip_safe=False,
     install_requires=[
