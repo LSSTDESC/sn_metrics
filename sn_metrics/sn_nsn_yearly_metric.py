@@ -6,7 +6,6 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from sn_tools.sn_rate import SN_Rate
 from astropy.coordinates import SkyCoord
-from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
 
 
@@ -681,6 +680,7 @@ class SNNSNYMetric:
         """
         # in that case ebvofMW value is taken from a map
         coords = SkyCoord(self.pixRA, self.pixDec, unit='deg')
+        from dustmaps.sfd import SFDQuery
         try:
             sfd = SFDQuery()
         except Exception:
