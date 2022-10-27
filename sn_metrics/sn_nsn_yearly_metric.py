@@ -38,7 +38,7 @@ class SNNSNYMetric:
     nexpCol : str,opt
       number of exposure column name (default : numExposures)
      vistimeCol : str,opt
-        visit time column name (default : visitTime)  
+        visit time column name (default : visitTime)
     seeingCol : str,opt
          seeing column name (default: seeingFwhmEff)
     noteCol: str, opt
@@ -132,8 +132,8 @@ class SNNSNYMetric:
         self.seeingCol = seeingCol
         self.noteCol = noteCol
         self.pixArea = pixArea
-        #import healpy as hp
-        #self.pixArea = hp.nside2pixarea(16, degrees=True)
+        # import healpy as hp
+        # self.pixArea = hp.nside2pixarea(16, degrees=True)
         self.ploteffi = ploteffi
         self.T0s = T0s
         self.zlim_coeff = zlim_coeff
@@ -230,7 +230,7 @@ class SNNSNYMetric:
         if self.obsstat:
             self.bandstat = ['u', 'g', 'r', 'i', 'z', 'y', 'gr',
                              'gi', 'gz', 'iz', 'uu', 'gg', 'rr', 'ii', 'zz', 'yy']
-           
+
             bands = 'grizy'
             for ba in bands:
                 self.bandstat.append(ba)
@@ -278,7 +278,11 @@ class SNNSNYMetric:
         if self.verbose:
             print('Observations before coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
-                                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol]])
+                                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol, self.m5Col]])
+            idx = dataSlice[self.filterCol] == 'z'
+            sel = dataSlice[idx]
+            print(sel[[self.mjdCol, self.exptimeCol,
+                       self.filterCol, self.nightCol, self.nexpCol, self.noteCol, self.m5Col]])
 
         # remove or keep DD runs depending on run type
         if self.fieldType == 'WFD':
@@ -288,9 +292,9 @@ class SNNSNYMetric:
             DDobs = dataSlice[self.noteCol] == self.fieldName
             dataSlice = dataSlice[DDobs]
 
-        #dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
+        # dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
 
-        #self.plotData(dataSlice, self.mjdCol, self.m5Col)
+        # self.plotData(dataSlice, self.mjdCol, self.m5Col)
         time_ref = time.time()
 
         print('processing pixel', imulti, self.fieldName,
@@ -339,8 +343,9 @@ class SNNSNYMetric:
         if self.verbose:
             print('Observations - after coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
-                                             self.filterCol, self.nightCol, self.nexpCol]])
-            #self.plotData(dataSlice, self.mjdCol, self.m5Col)
+                                             self.filterCol, self.nightCol, self.nexpCol, self.m5Col]])
+
+            # self.plotData(dataSlice, self.mjdCol, self.m5Col)
         # get redshift values per season
         zseason = self.z_season(self.season, dataSlice)
         zseason_allz = self.z_season_allz(zseason)
@@ -1348,7 +1353,8 @@ class SNNSNYMetric:
         if self.verbose:
             print('daymax', lc['daymax'].unique(), len(lc['daymax'].unique()))
             print(
-                lc[['daymax', 'z', 'flux', 'fluxerr_photo', 'flux_e_sec', 'flux_5']])
+                lc[['daymax', 'phase', 'band', 'z', 'flux', 'snr_m5', 'flux_e_sec', 'flux_5']])
+            # self.plotLC(lc)
 
         if len(lc) == 0:
             df = self.resError(self.status['nosn'])
@@ -1400,6 +1406,45 @@ class SNNSNYMetric:
                 cad_gap, left_on=['season'], right_on=['season'])
 
         return metricValues
+
+    def plotLC(self, lc):
+
+        import matplotlib.pyplot as plt
+        import sncosmo
+        from astropy.table import Table
+
+        from sn_tools.sn_telescope import Telescope
+        from astropy import units as u
+
+        telescope = Telescope(airmass=1.2)
+        prefix = 'LSST::'
+
+        for band in 'grizy':
+            name_filter = prefix+band
+            if telescope.airmass > 0:
+                bandpass = sncosmo.Bandpass(
+                    telescope.atmosphere[band].wavelen,
+                    telescope.atmosphere[band].sb,
+                    name=name_filter,
+                    wave_unit=u.nm)
+            else:
+                bandpass = sncosmo.Bandpass(
+                    telescope.system[band].wavelen,
+                    telescope.system[band].sb,
+                    name=name_filter,
+                    wave_unit=u.nm)
+            # print('registering',name_filter)
+            sncosmo.registry.register(bandpass, force=True)
+
+        for daymax in np.unique(lc['daymax']):
+            idx = np.abs(lc['daymax']-daymax) < 1.e-5
+            sel_lc = lc[idx]
+            print(type(sel_lc), np.unique(sel_lc['band']))
+            sncosmo.plot_lc(Table.from_pandas(sel_lc))
+            for b in np.unique(sel_lc['band']):
+                iao = sel_lc['band'] == b
+                print(b, len(sel_lc[iao]))
+            plt.show()
 
     def metric_deprecated(self, grp):
         """
@@ -1673,7 +1718,7 @@ class SNNSNYMetric:
         if 'season' not in dataSlice.dtype.names:
             dataSlice = self.getseason(dataSlice, mjdCol=self.mjdCol)
         import numpy.lib.recfunctions as rf
-        #dataSlice = rf.append_fields(dataSlice, 'season', [1]*len(dataSlice))
+        # dataSlice = rf.append_fields(dataSlice, 'season', [1]*len(dataSlice))
         dataSlice = rf.append_fields(
             dataSlice, 'healpixID', [0]*len(dataSlice))
         dataSlice = rf.append_fields(
