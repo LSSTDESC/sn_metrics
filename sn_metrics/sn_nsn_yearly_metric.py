@@ -196,6 +196,7 @@ class SNNSNYMetric:
         self.zmin = zmin  # zmin for the study
         self.zmax = zmax  # zmax for the study
         self.zstep = zStep  # zstep
+
         # get redshift range for processing
         zrange = list(np.arange(self.zmin, self.zmax, self.zstep))
         if zrange[0] < 1.e-6:
@@ -271,6 +272,9 @@ class SNNSNYMetric:
         ----------
 
         """
+
+        #dataSlice = self.dummy_data_2('dataTest.npy')
+
         # select observations filter
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
@@ -292,6 +296,7 @@ class SNNSNYMetric:
             DDobs = dataSlice[self.noteCol] == self.fieldName
             dataSlice = dataSlice[DDobs]
 
+        #dataSlice = self.dummy_data_2('dataTest.npy')
         # dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
 
         # self.plotData(dataSlice, self.mjdCol, self.m5Col)
@@ -1726,4 +1731,19 @@ class SNNSNYMetric:
         dataSlice = rf.append_fields(
             dataSlice, 'pixDec', [0.]*len(dataSlice))
 
+        return dataSlice
+
+    def dummy_data_2(self, fichname):
+
+        import numpy.lib.recfunctions as rf
+        dataSlice = np.load(fichname, allow_pickle=True)
+        # dataSlice = rf.append_fields(dataSlice, 'season', [1]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'healpixID', [100]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'pixRA', [0.]*len(dataSlice))
+        dataSlice = rf.append_fields(
+            dataSlice, 'pixDec', [0.]*len(dataSlice))
+
+        dataSlice = self.getseason(dataSlice, mjdCol=self.mjdCol)
         return dataSlice
