@@ -1,12 +1,14 @@
-import numpy as np
-from sn_stackers.coadd_stacker import CoaddStacker
-from sn_tools.sn_calcFast import LCfast
-import time
-import pandas as pd
-from scipy.interpolate import interp1d
-from sn_tools.sn_rate import SN_Rate
-from astropy.coordinates import SkyCoord
 from sn_metrics.sn_plot_live import Plot_NSN_metric
+from astropy.coordinates import SkyCoord
+from sn_tools.sn_rate import SN_Rate
+from scipy.interpolate import interp1d
+import pandas as pd
+import time
+from sn_tools.sn_calcFast import LCfast
+from sn_stackers.coadd_stacker import CoaddStacker
+import numpy as np
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 class SNNSNYMetric:
