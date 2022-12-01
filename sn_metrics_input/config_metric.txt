@@ -13,3 +13,8 @@ pixelmap_dir '' str #dir where to find pixel maps
 nclusters 0 int #number of clusters in data (DD only)
 radius 4.0 float #radius around clusters (DD and Fakes)
 healpixIDs '' str #list of healpixIds to process
+RAmin 0.0 float #RA min for obs area - for WDF only
+RAmax 360. float #RA max for obs area - for WDF only
+Decmin -1.0 float #Dec min for obs area - for WDF only
+Decmax -1.0 float #Dec max for obs area - for WDF only
+npixels -1 int #number of pixels to process

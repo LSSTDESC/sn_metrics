@@ -5,10 +5,6 @@ seasons -1 str #seasons to process
 fieldType DD str #field type DD or WFD
 nside 64 int #healpix nside
 coadd 1 int #nightly coaddition
-RAmin 0.0 float #RA min for obs area - for WDF only
-RAmax 360. float #RA max for obs area - for WDF only
-Decmin -1.0 float #Dec min for obs area - for WDF only
-Decmax -1.0 float #Dec max for obs area - for WDF only
 zmin 0.1 float #z min for simu
 zmax 0.5 float #z max for simu
 zStep 0.02 float #z step for simu
@@ -21,7 +17,6 @@ redcutoff 800.0 float #red cutoff value
 error_model 0 int #error model use
 ebvofMW -1.0 float #E(B-V) of MW
 ploteffi 0 int #plot efficiencies for the metric
-npixels -1 int #number of pixels to process
 gamma_file gamma_DDF.hdf5 str #gamma file to use for fast-simulation
 bands grizy str #filters for simulation
 n_bef 4 int #nepochs before max
@@ -37,3 +32,6 @@ slower 0 int #to estimate additionnal parameters (cadence,..)
 DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
 fieldName COSMOS str #fieldName - for DD only
 select_epochs 1 int #to select LC based on epochs
+VRO_FP circular str #VRO Focal Plane
+project_FP gnomonic str #type of projection in FP
+telrot 0 int #telescope rotation angle
