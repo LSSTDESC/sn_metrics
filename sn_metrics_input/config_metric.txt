@@ -9,7 +9,7 @@ simuType 0 int #flag for new simulations
 saveData 0 int #flag to dump data on disk
 dirRefs reference_files str #dir of reference files for the metric
 dirFake input/Fake_cadence str #dir of fake files for the metric
-pixelmap_dir '' str #dir where to find pixel maps
+pixelmap_dir None str #dir where to find pixel maps
 nclusters 0 int #number of clusters in data (DD only)
 radius 4.0 float #radius around clusters (DD and Fakes)
 pixelList None str #list of healpixIds to process
