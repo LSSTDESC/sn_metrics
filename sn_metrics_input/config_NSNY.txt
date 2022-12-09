@@ -32,6 +32,3 @@ slower 0 int #to estimate additionnal parameters (cadence,..)
 DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
 fieldName COSMOS str #fieldName - for DD only
 select_epochs 1 int #to select LC based on epochs
-VRO_FP circular str #VRO Focal Plane
-project_FP gnomonic str #type of projection in FP
-telrot 0 int #telescope rotation angle
