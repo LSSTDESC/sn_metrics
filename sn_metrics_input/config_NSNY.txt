@@ -2,8 +2,6 @@
 metric NSNY str #metric name
 OSName alt_sched str #OS to process
 seasons -1 str #seasons to process
-fieldType DD str #field type DD or WFD
-nside 64 int #healpix nside
 coadd 1 int #nightly coaddition
 zmin 0.1 float #z min for simu
 zmax 0.5 float #z max for simu
@@ -29,6 +27,4 @@ verbose 0 int #verbose mode for the metric
 lightOutput 0 int #LC fast output
 fig_for_movie 0 int #to produce png to make a movie
 slower 0 int #to estimate additionnal parameters (cadence,..)
-DD_list COSMOS,CDFS,EDFSa,EDFSb,ELAISS1,XMM-LSS str #list of DDFs
-fieldName COSMOS str #fieldName - for DD only
 select_epochs 1 int #to select LC based on epochs
