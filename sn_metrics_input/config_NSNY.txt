@@ -26,5 +26,6 @@ ploteffi 0 int #plot efficiencies for the metric
 verbose 0 int #verbose mode for the metric
 lightOutput 0 int #LC fast output
 fig_for_movie 0 int #to produce png to make a movie
-slower 0 int #to estimate additionnal parameters (cadence,..)
+slower 0 int #to estimate additionnal LC parameters (cadence,..)
+addInfo 0 int #to estimate additionnal global obs params (cadence,season length)
 select_epochs 1 int #to select LC based on epochs

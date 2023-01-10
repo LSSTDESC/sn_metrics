@@ -116,7 +116,7 @@ class SNNSNYMetric:
                  verbose=False, ploteffi=False,
                  n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
                  lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., bands='grizy', fig_for_movie=False, templateLC={}, OSName='', timeIt=False, slower=False,
+                 ebvofMW=-1., bands='grizy', fig_for_movie=False, templateLC={}, OSName='', timeIt=False, slower=False,addInfo=False,
                  DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
                           'XMM-LSS'], fieldType='WFD', fieldName='COSMOS', select_epochs=True, **kwargs):
 
@@ -148,6 +148,7 @@ class SNNSNYMetric:
         self.fieldType = fieldType
         self.fieldName = fieldName
         self.select_epochs = select_epochs
+        self.addInfo = addInfo
 
         season = list(seasons.split(','))
         if season[0] == '-':
@@ -226,6 +227,8 @@ class SNNSNYMetric:
 
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
+        
+        self.addInfoCol = ['cadence','gap_max','season_length']
 
         """
         self.obsstat = obsstat
@@ -330,6 +333,12 @@ class SNNSNYMetric:
             lambda x: self.filter_allocation(x)).reset_index()
         """
         # print(obs_alloc)
+        print('oo',dataSlice.dtype)
+        cadInfo = pd.DataFrame()
+        if self.addInfo:
+            tt = pd.DataFrame.from_records(dataSlice)
+            cadInfo = tt.groupby(['season']).apply(lambda x: self.cadence_gap(x)).reset_index()
+         
 
         if self.twilight:
             idx = dataSlice[self.exptimeCol] >= 10.
@@ -395,6 +404,9 @@ class SNNSNYMetric:
         # clean the metric: remove columns with level*
         metricValues = metricValues.loc[:, ~
                                         metricValues.columns.str.startswith('level')]
+        
+        if self.addInfo:
+            metricValues = metricValues.merge(cadInfo,left_on=['season'],right_on=['season'])
 
         if self.verbose:
             # print('metricValues', metricValues[['healpixID','season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc', 'nsn_corr']])
@@ -403,6 +415,8 @@ class SNNSNYMetric:
             if self.slower:
                 toprint += ['cadence_gri', 'gap_max_gri', 'cadence']
                 toprint += ['frac_g', 'frac_r', 'frac_i', 'frac_z', 'frac_y']
+            if self.addInfo:
+                toprint += self.addInfoCol
             print('metricValues', metricValues[toprint])
             print('columns', metricValues.columns)
             idx = metricValues["zcomp"] > 0.0
@@ -444,7 +458,7 @@ class SNNSNYMetric:
 
         return cad_gap_res
 
-    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max'):
+    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max',seaslengthName='season_length'):
         """
         Method to estimate the cadence and max gap for a set of observations
 
@@ -465,13 +479,17 @@ class SNNSNYMetric:
         grp = grp.sort_values(by=['night'])
         cadence = -1
         gap_max = -1
+        season_length = -1
 
         diff = np.diff(np.unique(grp['night']))
+        night_min = grp['night'].min()
+        night_max = grp['night'].max()
         if len(diff) >= 2:
             cadence = np.median(diff)
             gap_max = np.max(diff)
+            season_length = night_max-night_min
 
-        return pd.DataFrame({cadName: [cadence], gapName: [gap_max]})
+        return pd.DataFrame({cadName: [cadence], gapName: [gap_max], seaslengthName: [season_length]})
 
     def filter_allocation(self, grp):
         """
@@ -1153,6 +1171,7 @@ class SNNSNYMetric:
         df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
+        
         if self.select_epochs:
             df['select'] &= df['nepochs_bef'] >= self.n_bef
             df['select'] &= df['nepochs_aft'] >= self.n_aft
@@ -1538,6 +1557,9 @@ class SNNSNYMetric:
             cols += ['gap_max', 'frac_u', 'frac_g',
                      'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length', 'cadence_gri', 'gap_max_gri']
 
+        if self.addInfo:
+            cols += self.addInfoCol
+            
         for col in cols:
             df[col] = -1
 
