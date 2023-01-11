@@ -481,11 +481,12 @@ class SNNSNYMetric:
         gap_max = -1
         season_length = -1
 
-        diff = np.diff(np.unique(grp['night']))
+        nights = list(np.unique(grp['night']))
+        diff = np.diff(nights)
         night_min = grp['night'].min()
         night_max = grp['night'].max()
         if len(diff) >= 2:
-            cadence = np.median(diff)
+            cadence = np.mean(diff)
             gap_max = np.max(diff)
             season_length = night_max-night_min
 
