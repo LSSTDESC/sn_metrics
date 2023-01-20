@@ -18,7 +18,8 @@ class SNNSNYMetric:
     Parameters
     --------------
     lc_reference : dict
-       SN reference data (LC)(key: (x1,color); vals: sn_tools.sn_utils.GetReference
+       SN reference data (LC)(key: (x1,color); 
+                              vals: sn_tools.sn_utils.GetReference
     metricName : str, opt
       metric name (default : SNSNRMetric)
     mjdCol : str, opt
@@ -114,11 +115,17 @@ class SNNSNYMetric:
                  zmin=0.0, zmax=1.2, zStep=0.03,
                  daymaxStep=4., pixArea=9.6,
                  verbose=False, ploteffi=False,
-                 n_bef=5, n_aft=10, snr_min=5., n_phase_min=1, n_phase_max=1, errmodrel=0.1, sigmaC=0.04,
+                 n_bef=5, n_aft=10, snr_min=5.,
+                 n_phase_min=1, n_phase_max=1,
+                 errmodrel=0.1, sigmaC=0.04,
                  lightOutput=True, T0s='all', zlim_coeff=0.95,
-                 ebvofMW=-1., bands='grizy', fig_for_movie=False, templateLC={}, OSName='', timeIt=False, slower=False,addInfo=False,
+                 ebvofMW=-1., bands='grizy', fig_for_movie=False,
+                 templateLC={}, OSName='', timeIt=False,
+                 slower=False, addInfo=False,
                  DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
-                          'XMM-LSS'], fieldType='WFD', fieldName='COSMOS', select_epochs=True, **kwargs):
+                          'XMM-LSS'], fieldType='WFD',
+                 fieldName='COSMOS', select_epochs=True, zp_slope={},
+                 zp_intercept={}, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -156,20 +163,27 @@ class SNNSNYMetric:
         else:
             season = list(map(int, season))
 
-        cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol, self.obsidCol,
-                self.nexpCol, self.vistimeCol, self.exptimeCol, self.seasonCol, self.noteCol]
+        cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol,
+                self.obsidCol,
+                self.nexpCol, self.vistimeCol, self.exptimeCol,
+                self.seasonCol, self.noteCol]
 
         self.stacker = None
         if coadd:
             cols += ['coadd']
-            self.stacker = CoaddStacker(col_sum=[self.nexpCol, self.vistimeCol, 'visitExposureTime'],
-                                        col_mean=[self.mjdCol, self.RACol, self.DecCol,
-                                                  self.m5Col, 'pixRA', 'pixDec', 'healpixID', 'season'],
+            self.stacker = CoaddStacker(col_sum=[self.nexpCol, self.vistimeCol,
+                                                 'visitExposureTime'],
+                                        col_mean=[self.mjdCol, self.RACol,
+                                                  self.DecCol,
+                                                  self.m5Col, 'pixRA',
+                                                  'pixDec', 'healpixID',
+                                                  'season', 'airmass'],
                                         col_median=['airmass',
                                                     'sky', 'moonPhase'],
                                         col_group=[
                                             self.filterCol, self.nightCol],
-                                        col_coadd=[self.m5Col, 'visitExposureTime'])
+                                        col_coadd=[self.m5Col,
+                                                   'visitExposureTime'])
         # super(SNNSNYMetric, self).__init__(
         #    col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
@@ -190,10 +204,12 @@ class SNNSNYMetric:
 
         # loading reference LC files
         for key, vals in lc_reference.items():
-            self.lcFast[key] = LCfast(vals, dustcorr[key], key[0], key[1],
+            self.lcFast[key] = LCfast(vals, dustcorr[key], zp_slope,
+                                      zp_intercept, key[0], key[1],
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
-                                      self.m5Col, self.seasonCol, self.nexpCol, self.seeingCol,
+                                      self.m5Col, self.seasonCol, self.nexpCol,
+                                      self.seeingCol,
                                       self.snr_min, lightOutput=lightOutput)
         # loading parameters
         self.zmin = zmin  # zmin for the study
@@ -227,8 +243,8 @@ class SNNSNYMetric:
 
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
-        
-        self.addInfoCol = ['cadence','gap_max','season_length']
+
+        self.addInfoCol = ['cadence', 'gap_max', 'season_length']
 
         """
         self.obsstat = obsstat
@@ -333,12 +349,12 @@ class SNNSNYMetric:
             lambda x: self.filter_allocation(x)).reset_index()
         """
         # print(obs_alloc)
-        print('oo',dataSlice.dtype)
+        print('oo', dataSlice.dtype)
         cadInfo = pd.DataFrame()
         if self.addInfo:
             tt = pd.DataFrame.from_records(dataSlice)
-            cadInfo = tt.groupby(['season']).apply(lambda x: self.cadence_gap(x)).reset_index()
-         
+            cadInfo = tt.groupby(['season']).apply(
+                lambda x: self.cadence_gap(x)).reset_index()
 
         if self.twilight:
             idx = dataSlice[self.exptimeCol] >= 10.
@@ -404,9 +420,10 @@ class SNNSNYMetric:
         # clean the metric: remove columns with level*
         metricValues = metricValues.loc[:, ~
                                         metricValues.columns.str.startswith('level')]
-        
+
         if self.addInfo:
-            metricValues = metricValues.merge(cadInfo,left_on=['season'],right_on=['season'])
+            metricValues = metricValues.merge(
+                cadInfo, left_on=['season'], right_on=['season'])
 
         if self.verbose:
             # print('metricValues', metricValues[['healpixID','season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc', 'nsn_corr']])
@@ -458,7 +475,7 @@ class SNNSNYMetric:
 
         return cad_gap_res
 
-    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max',seaslengthName='season_length'):
+    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max', seaslengthName='season_length'):
         """
         Method to estimate the cadence and max gap for a set of observations
 
@@ -1172,7 +1189,7 @@ class SNNSNYMetric:
         df = pd.DataFrame(dfo)
         df['select'] = df['n_phmin'] >= self.n_phase_min
         df['select'] &= df['n_phmax'] >= self.n_phase_max
-        
+
         if self.select_epochs:
             df['select'] &= df['nepochs_bef'] >= self.n_bef
             df['select'] &= df['nepochs_aft'] >= self.n_aft
@@ -1380,7 +1397,8 @@ class SNNSNYMetric:
         if self.verbose:
             print('daymax', lc['daymax'].unique(), len(lc['daymax'].unique()))
             print(
-                lc[['daymax', 'phase', 'band', 'z', 'flux', 'snr_m5', 'flux_e_sec', 'flux_5']])
+                lc[['daymax', 'phase', 'band', 'z', 'flux', 'snr_m5',
+                    'flux_e_sec', 'flux_5']])
             # self.plotLC(lc)
 
         if len(lc) == 0:
@@ -1560,7 +1578,7 @@ class SNNSNYMetric:
 
         if self.addInfo:
             cols += self.addInfoCol
-            
+
         for col in cols:
             df[col] = -1
 

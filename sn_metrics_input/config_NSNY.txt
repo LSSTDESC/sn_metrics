@@ -29,3 +29,6 @@ fig_for_movie 0 int #to produce png to make a movie
 slower 0 int #to estimate additionnal LC parameters (cadence,..)
 addInfo 0 int #to estimate additionnal global obs params (cadence,season length)
 select_epochs 1 int #to select LC based on epochs
+WebPathSimu https://me.lsst.eu/gris/DESC_SN_pipeline str #web path for reference files
+zpDir reference_files str #dir for zp_airmass ref file
+zpFile zp_airmass.npy str #zp_airmass ref file
