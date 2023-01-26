@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 import pandas as pd
 import time
 from sn_tools.sn_calcFast import LCfast
-from sn_stackers.coadd_stacker import CoaddStacker
+from sn_tools.sn_stacker import CoaddStacker
 import numpy as np
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)

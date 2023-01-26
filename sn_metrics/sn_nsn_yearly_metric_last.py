@@ -1,6 +1,6 @@
 import numpy as np
 #from rubin_sim.maf.metrics import BaseMetric
-from sn_stackers.coadd_stacker import CoaddStacker
+from sn_tools.sn_stacker import CoaddStacker
 from sn_tools.sn_calcFast import LCfast
 import time
 import pandas as pd

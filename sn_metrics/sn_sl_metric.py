@@ -1,7 +1,7 @@
 import numpy as np
 from rubin_sim.maf.metrics import BaseMetric
 import healpy as hp
-from sn_stackers.coadd_stacker import CoaddStacker
+from sn_tools.sn_stacker import CoaddStacker
 import time
 import pandas as pd
 from astropy.coordinates import SkyCoord
