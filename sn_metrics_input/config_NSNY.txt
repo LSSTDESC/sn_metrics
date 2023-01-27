@@ -32,3 +32,5 @@ select_epochs 1 int #to select LC based on epochs
 WebPathSimu https://me.lsst.eu/gris/DESC_SN_pipeline str #web path for reference files
 zpDir reference_files str #dir for zp_airmass ref file
 zpFile zp_airmass.npy str #zp_airmass ref file
+sn_model salt3 str #model used to produce template LC
+sn_version 1.0 str # model version used to produce template LC
