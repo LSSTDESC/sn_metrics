@@ -349,7 +349,6 @@ class SNNSNYMetric:
             lambda x: self.filter_allocation(x)).reset_index()
         """
         # print(obs_alloc)
-        print('oo', dataSlice.dtype)
         cadInfo = pd.DataFrame()
         if self.addInfo:
             tt = pd.DataFrame.from_records(dataSlice)
