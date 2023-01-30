@@ -1457,29 +1457,6 @@ class SNNSNYMetric:
         import sncosmo
         from astropy.table import Table
 
-        from sn_tools.sn_telescope import Telescope
-        from astropy import units as u
-
-        telescope = Telescope(airmass=1.2)
-        prefix = 'LSST::'
-
-        for band in 'grizy':
-            name_filter = prefix+band
-            if telescope.airmass > 0:
-                bandpass = sncosmo.Bandpass(
-                    telescope.atmosphere[band].wavelen,
-                    telescope.atmosphere[band].sb,
-                    name=name_filter,
-                    wave_unit=u.nm)
-            else:
-                bandpass = sncosmo.Bandpass(
-                    telescope.system[band].wavelen,
-                    telescope.system[band].sb,
-                    name=name_filter,
-                    wave_unit=u.nm)
-            # print('registering',name_filter)
-            sncosmo.registry.register(bandpass, force=True)
-
         for daymax in np.unique(lc['daymax']):
             idx = np.abs(lc['daymax']-daymax) < 1.e-5
             sel_lc = lc[idx]

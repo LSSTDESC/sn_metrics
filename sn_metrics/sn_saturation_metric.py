@@ -7,7 +7,7 @@ import yaml
 from scipy import interpolate
 import os
 from sn_tools.sn_calcFast import LCfast, CovColor
-from sn_tools.sn_telescope import Telescope
+from sn_telmodel.sn_telescope import Telescope
 from sn_metrics.sn_plot_live import Plot_Saturation_Metric
 from astropy.table import Table, vstack, Column
 import time
@@ -896,7 +896,7 @@ class SNSaturationMetric(BaseMetric):
 
         import pylab as plt
         import sncosmo
-        from sn_tools.sn_telescope import Telescope
+        from sn_telmodel.sn_telescope import Telescope
         from astropy import units as u
 
         telescope = Telescope(airmass=1.2)

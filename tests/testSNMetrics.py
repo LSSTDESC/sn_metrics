@@ -6,7 +6,7 @@ from sn_metrics.sn_snr_metric import SNSNRMetric
 from sn_metrics.sn_cadence_metric import SNCadenceMetric
 from sn_metrics.sn_nsn_metric import SNNSNMetric
 from sn_tools.sn_utils import GetReference
-from sn_tools.sn_telescope import Telescope
+from sn_telmodel.sn_telescope import Telescope
 import matplotlib.pyplot as plt
 import yaml
 import lsst.utils.tests
@@ -26,7 +26,6 @@ main_repo = 'https://me.lsst.eu/gris'
 ref_dir = 'Reference_Files'
 db_dir = 'Scheduler_DB'
 
-def loadTemplates(templateDir, fname, gammaDir, gammaName, telescope,web_path, j=-1, output_q=None):
 
         lc_ref = GetReference(templateDir,
                               fname, gammaDir, gammaName, web_path, telescope)

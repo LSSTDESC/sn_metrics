@@ -5,7 +5,7 @@ import multiprocessing
 import yaml
 import os
 from sn_tools.sn_calcFast import LCfast, CovColor
-from sn_tools.sn_telescope import Telescope
+from sn_telmodel.sn_telescope import Telescope
 from astropy.table import Table, vstack, Column
 import time
 import pandas as pd
