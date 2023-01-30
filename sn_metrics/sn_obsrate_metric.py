@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
@@ -13,7 +12,7 @@ from sn_tools.sn_obs import season as seasonCalc
 from sn_tools.sn_obs import getPix
 
 
-class SNObsRateMetric(BaseMetric):
+class SNObsRateMetric:
     """
     Measure SN-Signal-to-Noise Ratio as a function of time.
     Extract the detection rate from these measurements
@@ -97,8 +96,6 @@ class SNObsRateMetric(BaseMetric):
                                         m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol,
                                         visitTimeCol=self.vistimeCol, visitExposureTimeCol=self.visitExposureTimeCol)
-        super(SNObsRateMetric, self).__init__(
-            col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         self.filterNames = np.array([b for b in bands])
         # self.config = config

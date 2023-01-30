@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 import itertools
 from sn_tools.sn_obs import LSSTPointing
 from shapely.ops import unary_union
@@ -63,9 +62,6 @@ class SNGlobalMetric(BaseMetric):
 
         cols = [self.nightCol, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol]
-
-        super(SNGlobalMetric, self).__init__(
-            col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
     def run(self, dataSlice, slicePoint=None):
         """

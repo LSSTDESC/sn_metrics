@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 import healpy as hp
 from sn_tools.sn_stacker import CoaddStacker
 import time
@@ -74,9 +73,6 @@ class SLSNMetric(BaseMetric):
 
         cols = [self.nightCol, self.filterCol, self.mjdCol, self.obsidCol,
                 self.nexpCol, self.vistimeCol, self.exptimeCol]
-
-        super(SLSNMetric, self).__init__(
-            col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         # get area of the pixels
         self.area = hp.nside2pixarea(self.nside, degrees=True)

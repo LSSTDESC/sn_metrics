@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
@@ -111,8 +110,10 @@ class SNSNRMetric(BaseMetric):
             self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime', seeingaCol=self.seeingaCol, seeingbCol=self.seeingbCol)
 
+        """
         super(SNSNRMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
+        """
 
         self.filterNames = np.array(['u', 'g', 'r', 'i', 'z', 'y'])
         # self.config = config

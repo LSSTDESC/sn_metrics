@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf
@@ -165,9 +164,10 @@ class SNSaturationMetric(BaseMetric):
             cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, seeingaCol=self.seeingCol, visitExposureTimeCol='visitExposureTime')
-        super(SNSaturationMetric, self).__init__(
+            """
+            super(SNSaturationMetric, self).__init__(
             col=cols, metricDtype='object', metricName=metricName, **kwargs)
-
+            """
         self.season = season
 
         telescope = Telescope(airmass=1.2)

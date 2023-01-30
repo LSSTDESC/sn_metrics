@@ -1,5 +1,4 @@
 import numpy as np
-#from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import healpy as hp
 import numpy.lib.recfunctions as rf

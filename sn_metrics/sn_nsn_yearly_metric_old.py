@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import yaml
 import os
@@ -16,7 +15,7 @@ from dustmaps.sfd import SFDQuery
 from sn_metrics.sn_plot_live import Plot_NSN_metric
 
 
-class SNNSNYMetric(BaseMetric):
+class SNNSNYMetric:
     """
     Measure zlim of type Ia supernovae.
 
@@ -143,8 +142,6 @@ class SNNSNYMetric(BaseMetric):
                                         col_group=[
                                             self.filterCol, self.nightCol],
                                         col_coadd=[self.m5Col, 'visitExposureTime'])
-        super(SNNSNYMetric, self).__init__(
-            col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         self.season = season
 

@@ -1,5 +1,4 @@
 import numpy as np
-from rubin_sim.maf.metrics import BaseMetric
 from sn_tools.sn_stacker import CoaddStacker
 import pandas as pd
 import time
@@ -10,7 +9,7 @@ from astropy.coordinates import SkyCoord
 from dustmaps.sfd import SFDQuery
 
 
-class SNCadenceMetric(BaseMetric):
+class SNCadenceMetric:
     """
     Measure mean m5, cadence per band and per season for SN depth measurements.
     SN depth estimations are done in sn_plotter/sn_cadencePlotters.py
@@ -86,9 +85,6 @@ class SNCadenceMetric(BaseMetric):
             cols += ['coadd']
             self.stacker = CoaddStacker(mjdCol=self.mjdCol, RACol=self.RACol, DecCol=self.DecCol, m5Col=self.m5Col, nightCol=self.nightCol,
                                         filterCol=self.filterCol, numExposuresCol=self.nexpCol, visitTimeCol=self.vistimeCol, visitExposureTimeCol='visitExposureTime')
-
-        super(SNCadenceMetric, self).__init__(
-            col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
         self.filterNames = np.array(['u', 'g', 'r', 'i', 'z', 'y'])
         # self.config = config
