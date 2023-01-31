@@ -1,5 +1,6 @@
 from .version import __version__
 
+"""
 import os
 
 # requested infos for throughputs
@@ -16,3 +17,4 @@ os.environ['RUBIN_SIM_DATA_DIR'] = os.getenv("PWD")
 
 print('Reading throughputs from',
       os.environ['LSST_THROUGHPUTS_BASELINE'], os.environ['THROUGHPUTS_DIR'])
+"""
