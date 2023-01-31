@@ -125,7 +125,7 @@ class SNNSNYMetric:
                  DD_list=['COSMOS', 'CDFS', 'EDFSa', 'EDFSb', 'ELAISS1',
                           'XMM-LSS'], fieldType='WFD',
                  fieldName='COSMOS', select_epochs=True, zp_slope={},
-                 zp_intercept={}, **kwargs):
+                 zp_intercept={}, mean_wavelength={}, **kwargs):
 
         self.mjdCol = mjdCol
         self.m5Col = m5Col
@@ -205,7 +205,8 @@ class SNNSNYMetric:
         # loading reference LC files
         for key, vals in lc_reference.items():
             self.lcFast[key] = LCfast(vals, dustcorr[key], zp_slope,
-                                      zp_intercept, key[0], key[1],
+                                      zp_intercept, mean_wavelength,
+                                      key[0], key[1],
                                       self.mjdCol, self.RACol, self.DecCol,
                                       self.filterCol, self.exptimeCol,
                                       self.m5Col, self.seasonCol, self.nexpCol,
@@ -239,7 +240,8 @@ class SNNSNYMetric:
 
         # status of the pixel after processing
         self.status = dict(
-            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters', 'low_effi', 'noobs'], [1, -1, -2, -3, -4, -5, -6]))
+            zip(['ok', 'effi', 'season_length', 'nosn', 'simu_parameters',
+                 'low_effi', 'noobs'], [1, -1, -2, -3, -4, -5, -6]))
 
         # supernovae parameters for fisher estimation
         self.params = ['x0', 'x1', 'daymax', 'color']
@@ -303,29 +305,34 @@ class SNNSNYMetric:
         if self.verbose:
             print('Observations before coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
-                                             self.filterCol, self.nightCol, self.nexpCol, self.noteCol, self.m5Col]])
+                                             self.filterCol, self.nightCol,
+                                             self.nexpCol, self.noteCol, self.m5Col]])
             idx = dataSlice[self.filterCol] == 'z'
             sel = dataSlice[idx]
             print(sel[[self.mjdCol, self.exptimeCol,
-                       self.filterCol, self.nightCol, self.nexpCol, self.noteCol, self.m5Col]])
+                       self.filterCol, self.nightCol,
+                       self.nexpCol, self.noteCol, self.m5Col]])
 
         # remove or keep DD runs depending on run type
+        """
         if self.fieldType == 'WFD':
             DDobs = np.in1d(dataSlice[self.noteCol], self.DD_list)
             dataSlice = dataSlice[~DDobs]
         if self.fieldType == 'DD':
             DDobs = dataSlice[self.noteCol] == self.fieldName
             dataSlice = dataSlice[DDobs]
-
-        #dataSlice = self.dummy_data_2('dataTest.npy')
+        """
+        # dataSlice = self.dummy_data_2('dataTest.npy')
         # dataSlice = np.load('../DB_Files/pixel_35935.npy', allow_pickle=True)
 
         # self.plotData(dataSlice, self.mjdCol, self.m5Col)
         time_ref = time.time()
 
-        print('processing pixel', imulti, self.fieldName,
-              np.unique(dataSlice['healpixID']))
-
+        """
+        print('processing pixel', imulti, np.unique(dataSlice['fieldName']),
+              np.unique(dataSlice['healpixID']),
+              np.unique(dataSlice[self.filterCol]))
+        """
         healpixID = np.unique(dataSlice['healpixID']).tolist()
 
         if not healpixID:
@@ -335,6 +342,7 @@ class SNNSNYMetric:
         self.pixRA = np.mean(dataSlice['pixRA'])
         self.pixDec = np.mean(dataSlice['pixDec'])
         self.healpixID = healpixID[0]
+        self.fieldName = np.unique(dataSlice['fieldName'])[0]
 
         # get ebvofMW
         ebvofMW = self.ebvofMW
@@ -383,6 +391,8 @@ class SNNSNYMetric:
 
         if self.verbose:
             print('Estimating zcomplete')
+            print(dataSlice.dtype,
+                  np.unique(dataSlice[self.filterCol]))
 
         metricValues = self.metric(
             dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1, metric='zlim')
@@ -411,6 +421,7 @@ class SNNSNYMetric:
         metricValues.loc[:, 'healpixID'] = self.healpixID
         metricValues.loc[:, 'pixRA'] = self.pixRA
         metricValues.loc[:, 'pixDec'] = self.pixDec
+        metricValues.loc[:, 'field'] = self.fieldName
         # merge with all parameters
         metricValues.loc[:, 'status'] = self.status['ok']
         metricValues.loc[:, 'timeproc'] = time.time()-time_ref
@@ -425,7 +436,9 @@ class SNNSNYMetric:
                 cadInfo, left_on=['season'], right_on=['season'])
 
         if self.verbose:
-            # print('metricValues', metricValues[['healpixID','season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status', 'timeproc', 'nsn_corr']])
+            # print('metricValues', metricValues[['healpixID',
+            # 'season', 'zcomp', 'dzcomp', 'nsn', 'dnsn', 'status',
+            # 'timeproc', 'nsn_corr']])
             toprint = ['healpixID', 'season', 'zcomp',
                        'nsn', 'dnsn', 'timeproc', 'nsimu']
             if self.slower:
@@ -970,13 +983,15 @@ class SNNSNYMetric:
         sntype = dict(zip([(-2.0, 0.2), (0.0, 0.0)], ['faint', 'medium']))
         key = (np.round(x1, 1), np.round(color, 1))
         vals = self.lcFast[key]
-
         gen_par_cp = gen_par.copy()
+
         if key == (-2.0, 0.2):
             idx = gen_par_cp['z'] < 0.9
             gen_par_cp = gen_par_cp[idx]
+
         lc = vals(grp.to_records(index=False),
                   0.0, gen_par_cp, bands='grizy')
+
         lc['x1'] = key[0]
         lc['color'] = key[1]
         lc['sntype'] = sntype[key]
@@ -1394,6 +1409,7 @@ class SNNSNYMetric:
         lc = self.step_lc(obs, gen_par, x1=x1, color=color)
 
         if self.verbose:
+            print('result lc', lc)
             print('daymax', lc['daymax'].unique(), len(lc['daymax'].unique()))
             print(
                 lc[['daymax', 'phase', 'band', 'z', 'flux', 'snr_m5',
