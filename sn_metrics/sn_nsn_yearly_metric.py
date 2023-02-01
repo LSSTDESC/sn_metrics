@@ -18,7 +18,7 @@ class SNNSNYMetric:
     Parameters
     --------------
     lc_reference : dict
-       SN reference data (LC)(key: (x1,color); 
+       SN reference data (LC)(key: (x1,color);
                               vals: sn_tools.sn_utils.GetReference
     metricName : str, opt
       metric name (default : SNSNRMetric)
@@ -157,11 +157,7 @@ class SNNSNYMetric:
         self.select_epochs = select_epochs
         self.addInfo = addInfo
 
-        season = list(seasons.split(','))
-        if season[0] == '-':
-            season = -1
-        else:
-            season = list(map(int, season))
+        season = self.load_season(seasons)
 
         cols = [self.nightCol, self.m5Col, self.filterCol, self.mjdCol,
                 self.obsidCol,
@@ -233,7 +229,8 @@ class SNNSNYMetric:
 
         # snrate
         self.rateSN = SN_Rate(H0=70., Om0=0.3,
-                              min_rf_phase=self.min_rf_phase_qual, max_rf_phase=self.max_rf_phase_qual)
+                              min_rf_phase=self.min_rf_phase_qual,
+                              max_rf_phase=self.max_rf_phase_qual)
 
         # verbose mode - useful for debug and code performance estimation
         self.verbose = verbose
@@ -253,7 +250,8 @@ class SNNSNYMetric:
         self.bandstat = None
         if self.obsstat:
             self.bandstat = ['u', 'g', 'r', 'i', 'z', 'y', 'gr',
-                             'gi', 'gz', 'iz', 'uu', 'gg', 'rr', 'ii', 'zz', 'yy']
+                             'gi', 'gz', 'iz', 'uu', 'gg', 'rr', 'ii',
+                             'zz', 'yy']
 
             bands = 'grizy'
             for ba in bands:
@@ -267,10 +265,15 @@ class SNNSNYMetric:
             """
         self.plotter = None
         if self.ploteffi or self.fig_for_movie:
-            self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef, self.n_aft,
-                                           self.n_phase_min, self.n_phase_max, self.errmodrel,
-                                           self.mjdCol, self.m5Col, self.filterCol, self.nightCol,
-                                           templateLC=templateLC, dbName=OSName)
+            self.plotter = Plot_NSN_metric(self.snr_min, self.n_bef,
+                                           self.n_aft,
+                                           self.n_phase_min, self.n_phase_max,
+                                           self.errmodrel,
+                                           self.mjdCol, self.m5Col,
+                                           self.filterCol,
+                                           self.nightCol,
+                                           templateLC=templateLC,
+                                           dbName=OSName)
 
         # count the number of simulated sn
         self.nsimu = 0
@@ -296,22 +299,40 @@ class SNNSNYMetric:
 
         """
 
-        #dataSlice = self.dummy_data_2('dataTest.npy')
+        # dataSlice = self.dummy_data_2('dataTest.npy')
 
         # select observations filter
         goodFilters = np.in1d(dataSlice[self.filterCol], list(self.bands))
         dataSlice = dataSlice[goodFilters]
 
+        healpixID = np.unique(dataSlice['healpixID']).tolist()
+
+        if not healpixID:
+            zlimsdf = pd.DataFrame()
+            return zlimsdf
+
+        self.pixRA = np.mean(dataSlice['pixRA'])
+        self.pixDec = np.mean(dataSlice['pixDec'])
+        self.healpixID = healpixID[0]
+        self.fieldName = np.unique(dataSlice['fieldName'])[0]
+
+        #print('processing pixel', imulti, self.fieldName, self.healpixID)
+
+        # if self.fieldName == 'EDFSa' and self.healpixID == 137312:
+        #    self.verbose = True
+
         if self.verbose:
             print('Observations before coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
                                              self.filterCol, self.nightCol,
-                                             self.nexpCol, self.noteCol, self.m5Col]])
+                                             self.nexpCol, self.noteCol,
+                                             self.m5Col]])
             idx = dataSlice[self.filterCol] == 'z'
             sel = dataSlice[idx]
             print(sel[[self.mjdCol, self.exptimeCol,
                        self.filterCol, self.nightCol,
-                       self.nexpCol, self.noteCol, self.m5Col]])
+                       self.nexpCol, self.noteCol, self.m5Col, 'season']])
+            print(np.unique(dataSlice['season']))
 
         # remove or keep DD runs depending on run type
         """
@@ -327,22 +348,6 @@ class SNNSNYMetric:
 
         # self.plotData(dataSlice, self.mjdCol, self.m5Col)
         time_ref = time.time()
-
-        """
-        print('processing pixel', imulti, np.unique(dataSlice['fieldName']),
-              np.unique(dataSlice['healpixID']),
-              np.unique(dataSlice[self.filterCol]))
-        """
-        healpixID = np.unique(dataSlice['healpixID']).tolist()
-
-        if not healpixID:
-            zlimsdf = pd.DataFrame()
-            return zlimsdf
-
-        self.pixRA = np.mean(dataSlice['pixRA'])
-        self.pixDec = np.mean(dataSlice['pixDec'])
-        self.healpixID = healpixID[0]
-        self.fieldName = np.unique(dataSlice['fieldName'])[0]
 
         # get ebvofMW
         ebvofMW = self.ebvofMW
@@ -367,8 +372,10 @@ class SNNSNYMetric:
             idx = dataSlice[self.exptimeCol] >= 10.
             dataSlice = dataSlice[idx]
 
+        season_obs = np.unique(dataSlice['season'])
         if len(dataSlice) <= 10:
-            df = self.resError(self.status['noobs'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'noobs')
+
             return df
         # coaddition per night and per band (if requested by the user)
         if self.stacker is not None:
@@ -376,13 +383,14 @@ class SNNSNYMetric:
             dataSlice = self.stacker._run(dataSlice)
 
         if len(dataSlice) <= 10:
-            df = self.resError(self.status['noobs'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'noobs')
             return df
         dataSlice.sort(order=self.mjdCol)
         if self.verbose:
             print('Observations - after coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
-                                             self.filterCol, self.nightCol, self.nexpCol, self.m5Col]])
+                                             self.filterCol, self.nightCol,
+                                             self.nexpCol, self.m5Col]])
 
             # self.plotData(dataSlice, self.mjdCol, self.m5Col)
         # get redshift values per season
@@ -391,14 +399,16 @@ class SNNSNYMetric:
 
         if self.verbose:
             print('Estimating zcomplete')
-            print(dataSlice.dtype,
-                  np.unique(dataSlice[self.filterCol]))
 
         metricValues = self.metric(
-            dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1, metric='zlim')
+            dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1,
+            metric='zlim', cadInfo=cadInfo)
 
         if self.verbose:
             print('metric zcomplete', metricValues)
+
+        if 'status' in metricValues.columns:
+            return metricValues
 
         zseason = pd.DataFrame(metricValues[['season', 'zcomp']])
         zseason.loc[:, 'zmin'] = 0.01
@@ -408,11 +418,16 @@ class SNNSNYMetric:
         zseason_allz = self.z_season_allz(zseason)
 
         if zseason_allz.empty:
-            df = self.resError(self.status['low_effi'])
-            return df
+            metricValues = self.merge(metricValues, cadInfo)
+            metricValues = self.resError(metricValues, 'low_effi')
+            if self.verbose:
+                print(metricValues)
+            return metricValues
 
         nsn_zcomp = self.metric(
-            dataSlice, zseason_allz, x1=0.0, color=0.0, zlim=metricValues[['season', 'zcomp', 'dzcomp']], metric='nsn')
+            dataSlice, zseason_allz, x1=0.0, color=0.0,
+            zlim=metricValues[['season', 'zcomp', 'dzcomp']],
+            metric='nsn', cadInfo=cadInfo)
 
         metricValues = metricValues.merge(
             nsn_zcomp, left_on=['season'], right_on=['season'])
@@ -460,6 +475,53 @@ class SNNSNYMetric:
             print('processing time', self.healpixID, time.time()-time_ref)
         return metricValues
 
+    def dferr(self, ll, col, cadInfo, what='noobs'):
+        """
+        Method to build a df output in case of anomaly
+
+        Parameters
+        ----------
+        cadInfo : pandas df
+            cadence infos.
+        what : str, optional
+            error code. The default is 'noobs'.
+
+        Returns
+        -------
+        None.
+
+        """
+        df = pd.DataFrame(ll, columns=[col])
+        df = self.resError(df, what)
+        df = self.merge(df, cadInfo)
+
+        return df
+
+    def merge(self, a, b, what='season'):
+        """
+
+
+         Parameters
+         ----------
+         a : pandas df
+             main df.
+         b : pandas df
+             df to merge.
+         what : str, optional
+             col for merging. The default is 'season'.
+
+         Returns
+         -------
+         Merged df
+
+         """
+
+        vv = a
+        if not b.empty:
+            vv = a.merge(b, left_on=[what], right_on=[what])
+
+        return vv
+
     def add_infos(self, infos, obs, grpCol='season', cadCol='cadence', gapCol='gap_max'):
         """
         Estimate cadence and gap max and update a df
@@ -487,7 +549,8 @@ class SNNSNYMetric:
 
         return cad_gap_res
 
-    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max', seaslengthName='season_length'):
+    def cadence_gap(self, grp, cadName='cadence', gapName='gap_max',
+                    seaslengthName='season_length'):
         """
         Method to estimate the cadence and max gap for a set of observations
 
@@ -775,6 +838,7 @@ class SNNSNYMetric:
         df['MJD_min'] = grp[self.mjdCol].min()
         df['MJD_max'] = grp[self.mjdCol].max()
         df['season_length'] = df['MJD_max']-df['MJD_min']
+
         """
         df['cadence'] = 0.
 
@@ -1371,7 +1435,8 @@ class SNNSNYMetric:
 
         return pd.DataFrame({'nsn': [nsn], 'dnsn': [dnsn]})
 
-    def metric(self, dataSlice, zseason, x1=-2.0, color=0.2,  zlim=-1, metric='zlim'):
+    def metric(self, dataSlice, zseason, x1=-2.0, color=0.2,  zlim=-1,
+               metric='zlim', cadInfo=pd.DataFrame()):
 
         snType = 'medium'
         if np.abs(x1+2.0) <= 1.e-5:
@@ -1380,14 +1445,16 @@ class SNNSNYMetric:
         # get the season durations
         seasons, dur_z = self.season_length(self.season, dataSlice, zseason)
 
+        season_obs = np.unique(dataSlice['season'])
+
         if not seasons or dur_z.empty:
-            df = self.resError(self.status['season_length'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'season_length')
             return df
 
         dur_z = self.check_dur_z(dur_z)
 
         if dur_z.empty:
-            df = self.resError(self.status['season_length'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'season_length')
             return df
 
         # get simulation parameters
@@ -1395,7 +1462,7 @@ class SNNSNYMetric:
             lambda x: self.calcDaymax(x, self.daymaxStep)).reset_index()
 
         if gen_par.empty:
-            df = self.resError(self.status['simu_parameters'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'simu_parameters')
             return df
 
         # select observations corresponding to seasons
@@ -1416,8 +1483,9 @@ class SNNSNYMetric:
                     'flux_e_sec', 'flux_5']])
             # self.plotLC(lc)
 
+        season_obs = obs['season'].unique()
         if len(lc) == 0:
-            df = self.resError(self.status['nosn'])
+            df = self.dferr(season_obs, 'season', cadInfo, 'nosn')
             return df
 
         # get observing efficiencies and build sn for metric
@@ -1544,37 +1612,43 @@ class SNNSNYMetric:
         nsn_res = nsn_expected(grp['z'])
         return pd.DataFrame({'nsn_expected': nsn_res, 'z': grp['z'].to_list()})
 
-    def resError(self, istatus):
+    def resError(self, df, status):
         """
         Method to return a dataframe corresponding to anomalous result
 
         Parameters
-        --------------
-        istatus: int
+        ----------
+        df : TYPE
+            pandas df.
+        status : str
+            status to add to df.
 
         Returns
-        ----------
-        pandas df with sn_status
+        -------
+        df : pandas df
+            result.
 
         """
 
-        df = pd.DataFrame([self.healpixID], columns=['healpixID'])
+        df['healpixID'] = self.healpixID
         df['pixRA'] = self.pixRA
         df['pixDec'] = self.pixDec
 
         cols = ['season', 'zcomp', 'dzcomp',
-                'nsn', 'dsn', 'cadence', 'timeproc', 'nsimu']
+                'nsn', 'dsn', 'timeproc', 'nsimu']
+
         if self.slower:
             cols += ['gap_max', 'frac_u', 'frac_g',
-                     'frac_r', 'frac_i', 'frac_z', 'frac_y', 'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn', 'gap_max_sn', 'season_length', 'cadence_gri', 'gap_max_gri']
-
-        if self.addInfo:
-            cols += self.addInfoCol
+                     'frac_r', 'frac_i', 'frac_z', 'frac_y',
+                     'Ng', 'Nr', 'Ni', 'Nz', 'Ny', 'cadence_sn',
+                     'gap_max_sn', 'season_length', 'cadence_gri',
+                     'gap_max_gri']
 
         for col in cols:
-            df[col] = -1
+            if col not in df.columns:
+                df[col] = -1
 
-        df['status'] = istatus
+        df['status'] = self.status[status]
 
         return df
 
@@ -1599,6 +1673,9 @@ class SNNSNYMetric:
 
         season_info = dfa.groupby('season').apply(
             lambda x: self.seasonInfo(x, min_duration=min_duration)).reset_index()
+
+        if season_info.empty:
+            return pd.DataFrame()
 
         # season_info.index = season_info.index.droplevel()
         season_info = season_info.drop(columns=['level_1'])
@@ -1782,3 +1859,28 @@ class SNNSNYMetric:
 
         dataSlice = self.getseason(dataSlice, mjdCol=self.mjdCol)
         return dataSlice
+
+    def load_season(self, seasons):
+        """
+        Method to get the list of seasons
+
+        Parameters
+        ----------
+        seasons : str
+               list of seasons.
+
+        Returns
+        -------
+        season : list(int)
+            list of seasons to process
+
+        """
+        if '-' not in seasons or seasons[0] == '-':
+            season = list(map(int, seasons.split(',')))
+        else:
+            seasl = seasons.split('-')
+            seasmin = int(seasl[0])
+            seasmax = int(seasl[1])
+            season = list(range(seasmin, seasmax+1))
+
+        return season
