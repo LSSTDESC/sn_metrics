@@ -316,12 +316,17 @@ class SNNSNYMetric:
         self.healpixID = healpixID[0]
         self.fieldName = np.unique(dataSlice['fieldName'])[0]
 
-        #print('processing pixel', imulti, self.fieldName, self.healpixID)
+        # print('processing pixel', imulti, self.fieldName,
+        #      self.healpixID, self.verbose)
 
         # if self.fieldName == 'EDFSa' and self.healpixID == 137312:
         #    self.verbose = True
 
+        if len(dataSlice) < 10:
+            return pd.DataFrame()
+
         if self.verbose:
+            print('ndata', len(dataSlice), dataSlice.dtype)
             print('Observations before coadd',
                   len(dataSlice), dataSlice[[self.mjdCol, self.exptimeCol,
                                              self.filterCol, self.nightCol,
