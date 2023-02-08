@@ -183,7 +183,7 @@ class SNNSNYMetric:
         # super(SNNSNYMetric, self).__init__(
         #    col=cols, metricDtype='object', metricName=metricName, **kwargs)
 
-        self.season = season
+        self.season = self.load_season(seasons)
 
         # LC selection parameters
         self.n_bef = n_bef  # nb points before peak
@@ -403,7 +403,7 @@ class SNNSNYMetric:
         zseason_allz = self.z_season_allz(zseason)
 
         if self.verbose:
-            print('Estimating zcomplete')
+            print('Estimating zcomplete', zseason_allz)
 
         metricValues = self.metric(
             dataSlice, zseason_allz, x1=-2.0, color=0.2, zlim=-1,
@@ -478,6 +478,7 @@ class SNNSNYMetric:
 
         if self.timeIt:
             print('processing time', self.healpixID, time.time()-time_ref)
+
         return metricValues
 
     def dferr(self, ll, col, cadInfo, what='noobs'):
@@ -1451,6 +1452,8 @@ class SNNSNYMetric:
         seasons, dur_z = self.season_length(self.season, dataSlice, zseason)
 
         season_obs = np.unique(dataSlice['season'])
+        season_obs = np.unique(dataSlice['season'])
+        season_obs = self.season
 
         if not seasons or dur_z.empty:
             df = self.dferr(season_obs, 'season', cadInfo, 'season_length')
