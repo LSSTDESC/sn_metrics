@@ -1,4 +1,4 @@
 ## sn obstrat pixels parameters
 outDir ../test_metric str # output directory
-outName test.hdf5 str # output name
+prodID test str # output name
 
