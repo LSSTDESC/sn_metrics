@@ -63,6 +63,8 @@ class SNObsStratPixel:
         None.
 
         """
+
+        fieldName = np.unique(dataSlice['target_name'])[0]
         # grab seasons
         obs = pd.DataFrame.from_records(season(dataSlice))
 
@@ -75,6 +77,7 @@ class SNObsStratPixel:
             lambda x: self.get_info(x)).reset_index()
         df_out_b = df_out_b.drop(['level_4'], axis=1)
         ddf = pd.concat((df_out_a, df_out_b), ignore_index=True)
+        ddf['field'] = fieldName
 
         self.outdf = pd.concat((self.outdf, ddf))
 
@@ -83,6 +86,20 @@ class SNObsStratPixel:
             self.outdf = pd.DataFrame()
 
     def get_info(self, grp):
+        """
+        Method to get infos
+
+        Parameters
+        ----------
+        grp : pandas df
+            data to process.
+
+        Returns
+        -------
+        ddf : pandas df
+            processed data.
+
+        """
 
         # sort data
         grp = grp.sort_values(by=[self.mjdCol])
@@ -100,8 +117,11 @@ class SNObsStratPixel:
 
         # cadence
         cad = -1.0
-        if len(grp) >= 3:
-            cad = grp[self.mjdCol].diff().median()
+        nnights = len(grp['night'].unique())
+        if nnights >= 3:
+            rr = grp.groupby(['night'])[self.mjdCol].mean().reset_index()
+            rr = rr.sort_values(by=['night'])
+            cad = rr[self.mjdCol].diff().mean()
 
         ddf['cadence'] = cad
 
@@ -112,8 +132,12 @@ class SNObsStratPixel:
             ddf['nvisits_{}'.format(b)] = len(sel)
             ddf['expTime_{}'.format(b)] = sel[self.expTimeCol].sum()
             cad = -1.0
-            if len(sel) >= 3:
-                cad = sel[self.mjdCol].diff().median()
+            nnights = len(sel['night'].unique())
+            if nnights >= 3:
+                rr = sel.groupby(['night'])[self.mjdCol].mean().reset_index()
+                rr = rr.sort_values(by=['night'])
+                cad = rr[self.mjdCol].diff().mean()
+
             ddf['cadence_{}'.format(b)] = cad
 
         return ddf
