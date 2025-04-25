@@ -66,7 +66,7 @@ class SNObsStratPixel:
 
         fieldName = np.unique(dataSlice['target_name'])[0]
         # grab seasons
-        obs = pd.DataFrame.from_records(season(dataSlice))
+        obs = pd.DataFrame.from_records(season(dataSlice, season_gap=80.))
 
         df_out_a = obs.groupby(['healpixID', 'pixRA', 'pixDec']).apply(
             lambda x: self.get_info(x)).reset_index()
