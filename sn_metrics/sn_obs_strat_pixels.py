@@ -15,16 +15,25 @@ from sn_tools.sn_obs import season
 class SNObsStratPixel:
     def __init__(self, outDir, prodID, filterCol='filter',
                  expTimeCol='visitExposureTime',
-                 mjdCol='observationStartMJD'):
+                 mjdCol='observationStartMJD',
+                 m5Col='fiveSigmaDepth'):
         """
-        class to estimate OS parameters
-
+        class to estimate OS parameters per pixel
+        
         Parameters
         ----------
         outDir : str
-            output directory path.
+            output directory.
         prodID : str
-            production id (output file name).
+            prod id (output file name).
+        filterCol : str, optional
+            filter column name. The default is 'filter'.
+        expTimeCol : str, optional
+            exposure time column. The default is 'visitExposureTime'.
+        mjdCol : str, optional
+            mjd column name. The default is 'observationStartMJD'.
+        m5Col : str, optional
+            m5 column name. The default is 'fiveSigmaDepth'.
 
         Returns
         -------
@@ -42,6 +51,7 @@ class SNObsStratPixel:
         self.filterCol = filterCol
         self.expTimeCol = expTimeCol
         self.mjdCol = mjdCol
+        self.m5Col = m5Col
 
         self.bands = 'ugrizy'
 
@@ -64,7 +74,7 @@ class SNObsStratPixel:
 
         """
 
-        fieldName = np.unique(dataSlice['target_name'])[0]
+        fieldName = np.unique(dataSlice['field'])[0]
         # grab seasons
         obs = pd.DataFrame.from_records(season(dataSlice, season_gap=80.))
 
@@ -129,15 +139,26 @@ class SNObsStratPixel:
         for b in self.bands:
             idx = grp[self.filterCol] == b
             sel = grp[idx]
-            ddf['nvisits_{}'.format(b)] = len(sel)
-            ddf['expTime_{}'.format(b)] = sel[self.expTimeCol].sum()
-            cad = -1.0
-            nnights = len(sel['night'].unique())
-            if nnights >= 3:
-                rr = sel.groupby(['night'])[self.mjdCol].mean().reset_index()
-                rr = rr.sort_values(by=['night'])
-                cad = rr[self.mjdCol].diff().mean()
+            cad = -1.
+            nvisits = -1.
+            exptime = 0.
+            m5 = -999
+            if len(sel) >0:
+                nvisits = len(sel)
+                exptime = sel[self.expTimeCol].sum()
+                #coadded m5
+                m5 = 1.25*np.log10(np.sum(10**(0.8*sel[self.m5Col])))
+                        
+                nnights = len(sel['night'].unique())
+                if nnights >= 3:
+                    rr = sel.groupby(['night'])[self.mjdCol].mean().reset_index()
+                    rr = rr.sort_values(by=['night'])
+                    cad = rr[self.mjdCol].diff().mean()
 
+
+            ddf['m5_{}'.format(b)] = m5
+            ddf['nvisits_{}'.format(b)] = nvisits
+            ddf['expTime_{}'.format(b)] = exptime
             ddf['cadence_{}'.format(b)] = cad
 
         return ddf
