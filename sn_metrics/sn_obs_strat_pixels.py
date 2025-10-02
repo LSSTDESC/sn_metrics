@@ -140,9 +140,9 @@ class SNObsStratPixel:
             idx = grp[self.filterCol] == b
             sel = grp[idx]
             cad = -1.
-            nvisits = -1.
+            nvisits = 0
             exptime = 0.
-            m5 = -999
+            m5 = -999.0
             if len(sel) >0:
                 nvisits = len(sel)
                 exptime = sel[self.expTimeCol].sum()
@@ -161,6 +161,10 @@ class SNObsStratPixel:
             ddf['expTime_{}'.format(b)] = exptime
             ddf['cadence_{}'.format(b)] = cad
 
+        """
+        print('**************************')
+        print(ddf.dtypes)
+        """
         return ddf
 
     def dump(self):
@@ -173,6 +177,7 @@ class SNObsStratPixel:
 
         """
 
+       
         self.outdf['healpixID'] = self.outdf['healpixID'].astype(int)
         self.outdf.to_hdf(self.outName, key='SN', append=True)
 
