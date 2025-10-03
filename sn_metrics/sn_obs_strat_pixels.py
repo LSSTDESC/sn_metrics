@@ -16,10 +16,11 @@ class SNObsStratPixel:
     def __init__(self, outDir, prodID, filterCol='filter',
                  expTimeCol='visitExposureTime',
                  mjdCol='observationStartMJD',
-                 m5Col='fiveSigmaDepth'):
+                 m5Col='fiveSigmaDepth',
+                 timescale='year'):
         """
         class to estimate OS parameters per pixel
-        
+
         Parameters
         ----------
         outDir : str
@@ -34,6 +35,8 @@ class SNObsStratPixel:
             mjd column name. The default is 'observationStartMJD'.
         m5Col : str, optional
             m5 column name. The default is 'fiveSigmaDepth'.
+        timescale: str, optional.
+            Time scale to use (year/season). The default is 'year'.
 
         Returns
         -------
@@ -52,6 +55,7 @@ class SNObsStratPixel:
         self.expTimeCol = expTimeCol
         self.mjdCol = mjdCol
         self.m5Col = m5Col
+        self.timescale = timescale
 
         self.bands = 'ugrizy'
 
@@ -76,14 +80,21 @@ class SNObsStratPixel:
 
         fieldName = np.unique(dataSlice['field'])[0]
         # grab seasons
-        obs = pd.DataFrame.from_records(season(dataSlice, season_gap=80.))
+        if self.timescale == 'season':
+            obs = pd.DataFrame.from_records(season(dataSlice, season_gap=80.))
+        else:
+            obs = pd.DataFrame.from_records(dataSlice)
+            obs['year'] = (obs['observationStartMJD'] -
+                           obs['lsst_start'])/365.+1
+            obs['year'] = obs['year'].astype(int)
 
         df_out_a = obs.groupby(['healpixID', 'pixRA', 'pixDec']).apply(
             lambda x: self.get_info(x)).reset_index()
-        df_out_a['season'] = -1
+        df_out_a[self.timescale] = -1
 
         df_out_a = df_out_a.drop(['level_3'], axis=1)
-        df_out_b = obs.groupby(['healpixID', 'pixRA', 'pixDec', 'season']).apply(
+        df_out_b = obs.groupby(['healpixID', 'pixRA', 'pixDec',
+                                self.timescale]).apply(
             lambda x: self.get_info(x)).reset_index()
         df_out_b = df_out_b.drop(['level_4'], axis=1)
         ddf = pd.concat((df_out_a, df_out_b), ignore_index=True)
@@ -143,18 +154,18 @@ class SNObsStratPixel:
             nvisits = 0
             exptime = 0.
             m5 = -999.0
-            if len(sel) >0:
+            if len(sel) > 0:
                 nvisits = len(sel)
                 exptime = sel[self.expTimeCol].sum()
-                #coadded m5
+                # coadded m5
                 m5 = 1.25*np.log10(np.sum(10**(0.8*sel[self.m5Col])))
-                        
+
                 nnights = len(sel['night'].unique())
                 if nnights >= 3:
-                    rr = sel.groupby(['night'])[self.mjdCol].mean().reset_index()
+                    rr = sel.groupby(['night'])[
+                        self.mjdCol].mean().reset_index()
                     rr = rr.sort_values(by=['night'])
                     cad = rr[self.mjdCol].diff().mean()
-
 
             ddf['m5_{}'.format(b)] = m5
             ddf['nvisits_{}'.format(b)] = nvisits
@@ -177,7 +188,6 @@ class SNObsStratPixel:
 
         """
 
-       
         self.outdf['healpixID'] = self.outdf['healpixID'].astype(int)
         self.outdf.to_hdf(self.outName, key='SN', append=True)
 
