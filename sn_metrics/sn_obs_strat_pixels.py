@@ -189,7 +189,7 @@ class SNObsStratPixel:
         """
         from time import sleep
         import random
-        vv = random.randint(1, 11)
+        vv = random.randint(1, 101)
         sleep(0.01*vv)
         self.outdf['healpixID'] = self.outdf['healpixID'].astype(int)
         self.outdf.to_hdf(self.outName, key='SN', append=True)
