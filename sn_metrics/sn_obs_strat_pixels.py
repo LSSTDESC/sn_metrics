@@ -189,10 +189,22 @@ class SNObsStratPixel:
         """
         from time import sleep
         import random
-        vv = random.randint(1, 101)
-        sleep(0.01*vv)
+
         self.outdf['healpixID'] = self.outdf['healpixID'].astype(int)
-        self.outdf.to_hdf(self.outName, key='SN', append=True)
+        excpt = True
+
+        while (excpt):
+            try:
+                """
+                vv = random.randint(1, 101)
+                print('waiting', 0.001*vv)
+                sleep(0.001*vv)
+                """
+                self.outdf.to_hdf(self.outName, key='SN', append=True)
+                excpt = False
+            except (RuntimeError, TypeError, NameError) as err:
+                print('err', err)
+                excpt = True
 
     def finish(self):
         """
