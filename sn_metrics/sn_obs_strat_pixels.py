@@ -84,9 +84,9 @@ class SNObsStratPixel:
             obs = pd.DataFrame.from_records(season(dataSlice, season_gap=80.))
         else:
             obs = pd.DataFrame.from_records(dataSlice)
-            obs['year'] = (obs['observationStartMJD'] -
-                           obs['lsst_start'])/365.+1
-            obs['year'] = obs['year'].astype(int)
+
+        obs['year'] = (obs['observationStartMJD'] - obs['lsst_start'])/365.+1
+        obs['year'] = obs['year'].astype(int)
 
         df_out_a = obs.groupby(['healpixID', 'pixRA', 'pixDec']).apply(
             lambda x: self.get_info(x)).reset_index()

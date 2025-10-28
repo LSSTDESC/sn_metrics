@@ -1,4 +1,4 @@
 ## sn obstrat pixels parameters
 outDir ../test_metric str # output directory
 prodID test str # output name
-
+timescale year str #timescale for processing
