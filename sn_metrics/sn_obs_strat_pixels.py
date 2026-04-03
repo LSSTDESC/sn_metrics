@@ -89,13 +89,13 @@ class SNObsStratPixel:
         obs['year'] = obs['year'].astype(int)
 
         df_out_a = obs.groupby(['healpixID', 'pixRA', 'pixDec']).apply(
-            lambda x: self.get_info(x)).reset_index()
+            lambda x: self.get_info(x),include_groups=False).reset_index()
         df_out_a[self.timescale] = -1
 
         df_out_a = df_out_a.drop(['level_3'], axis=1)
         df_out_b = obs.groupby(['healpixID', 'pixRA', 'pixDec',
                                 self.timescale]).apply(
-            lambda x: self.get_info(x)).reset_index()
+            lambda x: self.get_info(x),include_groups=False).reset_index()
         df_out_b = df_out_b.drop(['level_4'], axis=1)
         ddf = pd.concat((df_out_a, df_out_b), ignore_index=True)
         ddf['field'] = fieldName
