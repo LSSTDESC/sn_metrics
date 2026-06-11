@@ -13,7 +13,7 @@ from sn_tools.sn_obs import season
 
 
 class SNObsStratPixel:
-    def __init__(self, outDir, prodID, filterCol='filter',
+    def __init__(self, outDir, prodID, filterCol='band',
                  expTimeCol='visitExposureTime',
                  mjdCol='observationStartMJD',
                  m5Col='fiveSigmaDepth',
@@ -139,13 +139,30 @@ class SNObsStratPixel:
         # cadence
         cad = -1.0
         nnights = len(grp['night'].unique())
+        gaps = [5,10,15,20,30,50,100]
+        
+        for ig in range(len(gaps)-1):
+                gap_min = gaps[ig]
+                gap_max = gaps[ig+1]
+                ddf['gap_{}_{}'.format(gap_min,gap_max)] = -1
+        
         if nnights >= 3:
             rr = grp.groupby(['night'])[self.mjdCol].mean().reset_index()
             rr = rr.sort_values(by=['night'])
-            cad = rr[self.mjdCol].diff().mean()
+            #cad = rr[self.mjdCol].diff().mean()
+            diff = rr[self.mjdCol].diff()
+            cad = diff.mean()
+            for ig in range(len(gaps)-1):
+                gap_min = gaps[ig]
+                gap_max = gaps[ig+1]
+                idg = diff >= gap_min
+                idg &= diff <= gap_max
+                ddf['gap_{}_{}'.format(gap_min,gap_max)] = len(diff[idg])
 
         ddf['cadence'] = cad
 
+        
+        
         # per band
         for b in self.bands:
             idx = grp[self.filterCol] == b
@@ -165,18 +182,63 @@ class SNObsStratPixel:
                     rr = sel.groupby(['night'])[
                         self.mjdCol].mean().reset_index()
                     rr = rr.sort_values(by=['night'])
-                    cad = rr[self.mjdCol].diff().mean()
-
+                    diff = rr[self.mjdCol].diff()
+                    cad = diff.mean()
+                
             ddf['m5_{}'.format(b)] = m5
             ddf['nvisits_{}'.format(b)] = nvisits
             ddf['expTime_{}'.format(b)] = exptime
             ddf['cadence_{}'.format(b)] = cad
+            
+        #grab filter seq per obs night
+        dff = grp.groupby(['night']).apply(lambda x:self.filter_seq(x),include_groups=False).reset_index()
+        
+        #count
+        dc = dff.groupby(['filter_seq']).count()
+        
+        print('ooo',dc)
+        
+        print(test)
 
         """
         print('**************************')
         print(ddf.dtypes)
         """
         return ddf
+
+    def filter_seq(self,grp):
+        """
+        Function to estimate the filter sequence per night
+
+        Parameters
+        ----------
+        grp : pandas df
+            Data to process.
+
+        Returns
+        -------
+        df : pandas df
+            filter sequence.
+
+        """
+        
+        grp = grp.sort_values(by=[self.mjdCol])
+        res = grp[self.filterCol].to_list()
+        
+        ro = []
+        res=sorted(res)
+        for b in 'ugrizy':
+            n = res.count(b)
+            if n > 0:
+                ro.append('{}*{}'.format(n,b))
+        
+        res = '_'.join(ro)
+        
+        print(res)
+        
+        df = pd.DataFrame([res],columns=['filter_seq'])
+
+        return df        
 
     def dump(self):
         """
