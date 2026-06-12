@@ -194,11 +194,26 @@ class SNObsStratPixel:
         #count filter sequences
         dc = dff.groupby(['filter_seq']).size().to_frame('nfilt_seq').reset_index()
         
+        dc['frac_seq'] = dc['nfilt_seq']/dc['nfilt_seq'].sum()
+        dc = dc.sort_values(by=['frac_seq'],ascending=False)
+        #print(dc)
+        
+        idx = dc['frac_seq'] >= 0.05
+        
+        dc = dc[idx]
+        
         dc['nfilt_seq'] = dc['nfilt_seq'].astype(str)
         
         dc['summ_filt_seq'] = dc['nfilt_seq']+'_'+dc['filter_seq']
         fseq = '/'.join(dc['summ_filt_seq'].to_list())
         
+        
+        val = fseq[0:np.min([70,len(fseq)])]
+        ddf['filter_seq']=val
+        ddf['seq_frac'] = dc['frac_seq'].sum()
+        
+        """
+        print(fseq)
         nspl = 150
         
         for i in range(0,6):
@@ -212,7 +227,7 @@ class SNObsStratPixel:
             else:
                 res = fseq[pos_min:pos_max]
             ddf['filter_seq_{}'.format(i+1)]=res
-
+        """
         """
         print('**************************')
         print(ddf.dtypes)
@@ -274,7 +289,9 @@ class SNObsStratPixel:
                 print('waiting', 0.001*vv)
                 sleep(0.001*vv)
                 """
-                self.outdf.to_hdf(self.outName, key='SN', append=True)
+                self.outdf.to_hdf(self.outName, key='SN', 
+                                  append=True, 
+                                  min_itemsize = { 'filter_seq' : 70 })
                 excpt = False
             except (RuntimeError, TypeError, NameError) as err:
                 print('err', err)
