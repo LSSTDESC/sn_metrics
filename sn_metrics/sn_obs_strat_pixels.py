@@ -161,8 +161,6 @@ class SNObsStratPixel:
 
         ddf['cadence'] = cad
 
-        
-        
         # per band
         for b in self.bands:
             idx = grp[self.filterCol] == b
@@ -193,17 +191,33 @@ class SNObsStratPixel:
         #grab filter seq per obs night
         dff = grp.groupby(['night']).apply(lambda x:self.filter_seq(x),include_groups=False).reset_index()
         
-        #count
-        dc = dff.groupby(['filter_seq']).count()
+        #count filter sequences
+        dc = dff.groupby(['filter_seq']).size().to_frame('nfilt_seq').reset_index()
         
-        print('ooo',dc)
+        dc['nfilt_seq'] = dc['nfilt_seq'].astype(str)
         
-        print(test)
+        dc['summ_filt_seq'] = dc['nfilt_seq']+'_'+dc['filter_seq']
+        fseq = '/'.join(dc['summ_filt_seq'].to_list())
+        
+        nspl = 150
+        
+        for i in range(0,6):
+            pos_min=i*nspl
+            pos_max = (i+1)*nspl
+            
+            res = ''
+            if pos_max > len(fseq):
+                if pos_min < len(fseq):
+                    res = fseq[pos_min:pos_max]
+            else:
+                res = fseq[pos_min:pos_max]
+            ddf['filter_seq_{}'.format(i+1)]=res
 
         """
         print('**************************')
         print(ddf.dtypes)
         """
+        
         return ddf
 
     def filter_seq(self,grp):
@@ -230,11 +244,9 @@ class SNObsStratPixel:
         for b in 'ugrizy':
             n = res.count(b)
             if n > 0:
-                ro.append('{}*{}'.format(n,b))
+                ro.append('{}{}'.format(n,b))
         
         res = '_'.join(ro)
-        
-        print(res)
         
         df = pd.DataFrame([res],columns=['filter_seq'])
 
