@@ -139,6 +139,10 @@ class SNObsStratPixel:
         # cadence
         cad = -1.0
         nnights = len(grp['night'].unique())
+        nvisits_night = nvisits/nnights
+        nvisits_night = np.round(nvisits_night)
+        ddf['nvisits_night'] = nvisits_night
+        
         gaps = [5,10,15,20,30,50,100]
         
         for ig in range(len(gaps)-1):
@@ -174,8 +178,9 @@ class SNObsStratPixel:
                 exptime = sel[self.expTimeCol].sum()
                 # coadded m5
                 m5 = 1.25*np.log10(np.sum(10**(0.8*sel[self.m5Col])))
-
                 nnights = len(sel['night'].unique())
+                nvisits_night = nvisits/nnights
+                nvisits_night = np.round(nvisits_night,2)
                 if nnights >= 3:
                     rr = sel.groupby(['night'])[
                         self.mjdCol].mean().reset_index()
@@ -187,6 +192,7 @@ class SNObsStratPixel:
             ddf['nvisits_{}'.format(b)] = nvisits
             ddf['expTime_{}'.format(b)] = exptime
             ddf['cadence_{}'.format(b)] = cad
+            ddf['nvisits_night_{}'.format(b)] = nvisits_night
             
         #grab filter seq per obs night
         dff = grp.groupby(['night']).apply(lambda x:self.filter_seq(x),include_groups=False).reset_index()
